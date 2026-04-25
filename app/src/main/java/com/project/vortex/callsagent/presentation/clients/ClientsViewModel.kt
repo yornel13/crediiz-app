@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -34,6 +35,19 @@ class ClientsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(ClientsUiState())
     val uiState: StateFlow<ClientsUiState> = _uiState.asStateFlow()
+
+    /**
+     * Total count of PENDING assigned clients. Independent of the search
+     * query so the hero counter stays stable while the agent types.
+     */
+    val totalPendingCount: StateFlow<Int> =
+        clientRepository.observeAssigned(ClientStatus.PENDING)
+            .map { it.size }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = 0,
+            )
 
     /**
      * Observes clients, switching between "all pending" and a local search

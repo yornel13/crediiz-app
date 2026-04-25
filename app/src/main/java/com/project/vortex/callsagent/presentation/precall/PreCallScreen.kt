@@ -9,16 +9,24 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Button
@@ -27,7 +35,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,10 +44,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,18 +54,32 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.common.enums.CallOutcome
-import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.Note
+import com.project.vortex.callsagent.ui.components.Avatar
+import com.project.vortex.callsagent.ui.components.SectionHeader
+import com.project.vortex.callsagent.ui.components.StatusPill
+import com.project.vortex.callsagent.ui.theme.PhoneGreen
+import com.project.vortex.callsagent.ui.theme.PillShape
+import com.project.vortex.callsagent.ui.theme.Teal700
+import com.project.vortex.callsagent.ui.theme.Teal900
+import com.project.vortex.callsagent.ui.theme.label
+import com.project.vortex.callsagent.ui.theme.palette
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+
+private val HeroShape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -72,22 +91,11 @@ fun PreCallScreen(
     val notes by viewModel.notes.collectAsState()
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(uiState.client?.name ?: "Client") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                        )
-                    }
-                },
-            )
-        },
         bottomBar = {
             CallActionBar(client = uiState.client)
         },
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
         when {
             uiState.isLoading -> LoadingState(modifier = Modifier
@@ -96,6 +104,7 @@ fun PreCallScreen(
 
             uiState.client == null -> ErrorState(
                 message = uiState.errorMessage ?: "Client not found",
+                onBack = onBack,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
@@ -105,6 +114,7 @@ fun PreCallScreen(
                 client = uiState.client!!,
                 notes = notes,
                 onAddNote = viewModel::openNoteSheet,
+                onBack = onBack,
                 contentPadding = padding,
             )
         }
@@ -116,12 +126,6 @@ fun PreCallScreen(
                 onSave = viewModel::saveManualNote,
             )
         }
-
-        uiState.errorMessage?.let { msg ->
-            // Error message currently surfaced inline only. A snackbar host
-            // could be added here; deferring until we have a global pattern.
-            LaunchedEffect(msg) { /* no-op placeholder */ }
-        }
     }
 }
 
@@ -130,65 +134,285 @@ private fun PreCallContent(
     client: Client,
     notes: List<Note>,
     onAddNote: () -> Unit,
+    onBack: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     LazyColumn(
         contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = contentPadding.calculateTopPadding() + 8.dp,
             bottom = contentPadding.calculateBottomPadding() + 16.dp,
         ),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        item("client_card") { ClientInfoCard(client) }
-        item("history_card") { CallHistorySummary(client) }
-        item("notes_header") {
-            NotesSectionHeader(count = notes.size, onAddNote = onAddNote)
+        item("hero") {
+            Hero(client = client, onBack = onBack)
         }
+
+        if (client.extraData.isNotEmpty()) {
+            item("extra_header") {
+                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                    SectionHeader(title = "Details")
+                }
+            }
+            item("extra") {
+                ExtraDataCard(client = client)
+            }
+        }
+
+        if (!client.lastNote.isNullOrBlank()) {
+            item("lastnote_header") {
+                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                    SectionHeader(title = "Last note")
+                }
+            }
+            item("lastnote") {
+                LastNoteCard(text = client.lastNote)
+            }
+        }
+
+        item("notes_header") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
+            ) {
+                SectionHeader(
+                    title = "Notes",
+                    count = notes.size,
+                    trailing = {
+                        OutlinedButton(
+                            onClick = onAddNote,
+                            shape = PillShape,
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Add note",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    },
+                )
+            }
+        }
+
         if (notes.isEmpty()) {
-            item("notes_empty") { EmptyNotes() }
+            item("notes_empty") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) { EmptyNotes() }
+            }
         } else {
             items(notes, key = { it.mobileSyncId }) { note ->
-                NoteRow(note = note)
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                    TimelineNoteRow(note = note)
+                }
             }
         }
     }
 }
 
+/**
+ * Compact gradient hero containing avatar + identity + status, plus an
+ * embedded stats row at the bottom (3 metrics on a translucent surface).
+ * No floating-card overlap — clean LazyColumn flow, no hit-testing bugs.
+ */
 @Composable
-private fun ClientInfoCard(client: Client) {
+private fun Hero(client: Client, onBack: () -> Unit) {
+    val isDark = MaterialTheme.colorScheme.surface.let {
+        0.2126f * it.red + 0.7152f * it.green + 0.0722f * it.blue < 0.5f
+    }
+    val gradient = Brush.verticalGradient(
+        colors = if (isDark) {
+            listOf(Teal900, Teal900.copy(alpha = 0.7f))
+        } else {
+            listOf(Teal700, Teal900)
+        },
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(HeroShape)
+            .background(gradient),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White,
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+            }
+
+            // Identity block
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Avatar(name = client.name, size = 64.dp)
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = client.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = client.phone,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.85f),
+                )
+                Spacer(Modifier.height(10.dp))
+                Surface(
+                    shape = PillShape,
+                    color = Color.White.copy(alpha = 0.18f),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(Color.White),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = client.status.label(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // Embedded stats row — translucent white surface, sits inside the hero.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color.White.copy(alpha = 0.12f))
+                    .padding(vertical = 14.dp),
+            ) {
+                HeroStatCell(
+                    label = "Attempts",
+                    value = client.callAttempts.toString(),
+                    modifier = Modifier.weight(1f),
+                )
+                HeroDivider()
+                HeroStatCell(
+                    label = "Last call",
+                    value = client.lastCalledAt?.let(::formatRelativeShort) ?: "Never",
+                    modifier = Modifier.weight(1f),
+                )
+                HeroDivider()
+                HeroStatCell(
+                    label = "Outcome",
+                    value = client.lastOutcome?.let(::outcomeLabel) ?: "—",
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun HeroStatCell(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            maxLines = 1,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.75f),
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun HeroDivider() {
+    Box(
+        modifier = Modifier
+            .width(1.dp)
+            .heightIn(min = 32.dp)
+            .background(Color.White.copy(alpha = 0.20f)),
+    )
+}
+
+@Composable
+private fun ExtraDataCard(client: Client) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            containerColor = MaterialTheme.colorScheme.surface,
         ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = client.name,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = client.phone,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-            Spacer(Modifier.height(8.dp))
-            StatusBadge(status = client.status.name)
-
-            if (client.extraData.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f))
-                Spacer(Modifier.height(8.dp))
-                client.extraData.forEach { (key, value) ->
-                    if (value != null) {
-                        ExtraDataRow(key = key, value = value.toString())
-                    }
+            client.extraData.entries.filter { it.value != null }.forEachIndexed { index, entry ->
+                if (index > 0) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant),
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = entry.key.replaceFirstChar { it.uppercase() },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = entry.value.toString(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }
@@ -196,75 +420,88 @@ private fun ClientInfoCard(client: Client) {
 }
 
 @Composable
-private fun StatusBadge(status: String) {
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.3f),
-    ) {
-        Text(
-            text = status,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-        )
-    }
-}
-
-@Composable
-private fun ExtraDataRow(key: String, value: String) {
-    Row(
+private fun LastNoteCard(text: String) {
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Text(
-            text = key.replaceFirstChar { it.uppercase() },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            fontWeight = FontWeight.Medium,
-        )
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.Notes,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
     }
 }
 
 @Composable
-private fun CallHistorySummary(client: Client) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Call history",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(8.dp))
-
-            HistoryRow(label = "Attempts", value = client.callAttempts.toString())
-            HistoryRow(
-                label = "Last call",
-                value = client.lastCalledAt?.let(::formatRelativeTimestamp) ?: "Never",
-            )
-            HistoryRow(
-                label = "Last outcome",
-                value = client.lastOutcome?.let(::outcomeLabel) ?: "—",
-            )
-
-            if (!client.lastNote.isNullOrBlank()) {
+private fun TimelineNoteRow(note: Note) {
+    val palette = note.type.palette()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(modifier = Modifier.padding(16.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(palette.container),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Notes,
+                    contentDescription = null,
+                    tint = palette.onContainer,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Surface(shape = PillShape, color = palette.container) {
+                        Text(
+                            text = note.type.label(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.onContainer,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        )
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = formatTimestamp(note.deviceCreatedAt),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Last note",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = client.lastNote,
+                    text = note.content,
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
@@ -272,60 +509,43 @@ private fun CallHistorySummary(client: Client) {
 }
 
 @Composable
-private fun HistoryRow(label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
-private fun NotesSectionHeader(count: Int, onAddNote: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = if (count == 0) "Notes" else "Notes ($count)",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        OutlinedButton(onClick = onAddNote) {
-            Icon(Icons.Filled.Add, contentDescription = null)
-            Spacer(Modifier.height(0.dp))
-            Text(text = "Add note", modifier = Modifier.padding(start = 4.dp))
-        }
-    }
-}
-
-@Composable
 private fun EmptyNotes() {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Box(
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(24.dp),
-            contentAlignment = Alignment.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Notes,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
             Text(
-                text = "No notes yet for this client.",
-                style = MaterialTheme.typography.bodyMedium,
+                text = "No notes yet",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "Use \"Add note\" to write something about this client.",
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -333,56 +553,18 @@ private fun EmptyNotes() {
 }
 
 @Composable
-private fun NoteRow(note: Note) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                NoteTypeBadge(type = note.type)
-                Text(
-                    text = formatRelativeTimestamp(note.deviceCreatedAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(text = note.content, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-@Composable
-private fun NoteTypeBadge(type: NoteType) {
-    val (label, color) = when (type) {
-        NoteType.CALL -> "During call" to MaterialTheme.colorScheme.tertiaryContainer
-        NoteType.POST_CALL -> "Post-call" to MaterialTheme.colorScheme.secondaryContainer
-        NoteType.MANUAL -> "Manual" to MaterialTheme.colorScheme.surfaceVariant
-        NoteType.FOLLOW_UP -> "Follow-up" to MaterialTheme.colorScheme.primaryContainer
-    }
-    Surface(shape = RoundedCornerShape(50), color = color) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-        )
-    }
-}
-
-@Composable
 private fun CallActionBar(client: Client?) {
     val context = LocalContext.current
     Surface(
-        tonalElevation = 4.dp,
-        shadowElevation = 8.dp,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp,
+        shadowElevation = 16.dp,
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             Button(
                 onClick = {
@@ -392,18 +574,21 @@ private fun CallActionBar(client: Client?) {
                     runCatching { context.startActivity(intent) }
                 },
                 enabled = client != null,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 60.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
+                    containerColor = PhoneGreen,
+                    contentColor = Color.White,
                 ),
             ) {
                 Icon(Icons.Filled.Phone, contentDescription = null)
-                Spacer(Modifier.height(0.dp))
+                Spacer(Modifier.width(10.dp))
                 Text(
-                    text = "Call ${client?.phone ?: ""}".trim(),
+                    text = "Call ${client?.phone.orEmpty()}".trim(),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 8.dp),
                 )
             }
         }
@@ -424,16 +609,17 @@ private fun AddNoteSheet(
     ModalBottomSheet(
         onDismissRequest = { if (!isSubmitting) onDismiss() },
         sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 20.dp, vertical = 8.dp),
         ) {
             Text(
                 text = "Add a note",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(4.dp))
             Text(
@@ -441,7 +627,7 @@ private fun AddNoteSheet(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
@@ -449,27 +635,31 @@ private fun AddNoteSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 140.dp),
+                shape = RoundedCornerShape(16.dp),
                 enabled = !isSubmitting,
             )
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
                 OutlinedButton(
-                    onClick = { scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() } },
+                    onClick = {
+                        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+                    },
                     enabled = !isSubmitting,
+                    shape = RoundedCornerShape(16.dp),
                 ) { Text("Cancel") }
-                Spacer(Modifier.height(0.dp))
+                Spacer(Modifier.width(8.dp))
                 Button(
                     onClick = { onSave(text) },
                     enabled = !isSubmitting && text.isNotBlank(),
-                    modifier = Modifier.padding(start = 8.dp),
+                    shape = RoundedCornerShape(16.dp),
                 ) {
                     Text(if (isSubmitting) "Saving..." else "Save")
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(20.dp))
         }
     }
 }
@@ -482,26 +672,47 @@ private fun LoadingState(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ErrorState(message: String, modifier: Modifier = Modifier) {
+private fun ErrorState(message: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
     Box(modifier = modifier.padding(24.dp), contentAlignment = Alignment.Center) {
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.error,
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = onBack) {
+                Text("Go back")
+            }
+        }
     }
 }
 
 private fun outcomeLabel(outcome: CallOutcome): String = when (outcome) {
     CallOutcome.INTERESTED -> "Interested"
-    CallOutcome.NOT_INTERESTED -> "Not interested"
-    CallOutcome.NO_ANSWER -> "No answer"
+    CallOutcome.NOT_INTERESTED -> "Not int."
+    CallOutcome.NO_ANSWER -> "No ans."
     CallOutcome.BUSY -> "Busy"
-    CallOutcome.INVALID_NUMBER -> "Invalid number"
+    CallOutcome.INVALID_NUMBER -> "Invalid"
 }
 
 private val timestampFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("MMM d, h:mm a")
+    DateTimeFormatter.ofPattern("MMM d · h:mm a")
 
-private fun formatRelativeTimestamp(instant: Instant): String =
+private fun formatTimestamp(instant: Instant): String =
     timestampFormatter.format(instant.atZone(ZoneId.systemDefault()))
+
+private fun formatRelativeShort(instant: Instant): String {
+    val now = Instant.now()
+    val minutes = ChronoUnit.MINUTES.between(instant, now)
+    return when {
+        minutes < 1 -> "Now"
+        minutes < 60 -> "${minutes}m"
+        minutes < 60 * 24 -> "${minutes / 60}h"
+        minutes < 60 * 24 * 7 -> "${minutes / (60 * 24)}d"
+        else -> {
+            val date = instant.atZone(ZoneId.systemDefault()).toLocalDate()
+            "${date.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }} ${date.dayOfMonth}"
+        }
+    }
+}

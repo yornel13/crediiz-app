@@ -3,7 +3,9 @@ package com.project.vortex.callsagent.data.local.preferences
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.project.vortex.callsagent.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -33,8 +35,21 @@ class SettingsPreferences @Inject constructor(
         dataStore.edit { it[KEY_AUTO_ADVANCE] = enabled }
     }
 
+    /**
+     * App theme override. Defaults to SYSTEM so the device's setting wins.
+     */
+    val themeModeFlow: Flow<ThemeMode> = dataStore.data.map { prefs ->
+        ThemeMode.fromKey(prefs[KEY_THEME_MODE])
+    }
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        dataStore.edit { it[KEY_THEME_MODE] = mode.name }
+    }
+
     companion object {
         private val KEY_AUTO_ADVANCE = booleanPreferencesKey("auto_advance")
         private const val DEFAULT_AUTO_ADVANCE = true
+
+        private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
     }
 }

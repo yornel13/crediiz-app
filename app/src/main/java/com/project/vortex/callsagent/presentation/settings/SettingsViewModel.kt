@@ -10,6 +10,7 @@ import com.project.vortex.callsagent.domain.repository.AuthRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
 import com.project.vortex.callsagent.domain.repository.InteractionRepository
 import com.project.vortex.callsagent.domain.repository.NoteRepository
+import com.project.vortex.callsagent.ui.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +30,7 @@ data class SettingsUiState(
     val pendingCount: Int = 0,
     val lastSync: SyncResult = SyncResult.Idle,
     val isSyncing: Boolean = false,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
 )
 
 sealed interface SettingsEvent {
@@ -58,6 +60,7 @@ class SettingsViewModel @Inject constructor(
         syncScheduler.observeIsSyncing(),
         syncManager.lastResult,
         _pendingCount,
+        settingsPreferences.themeModeFlow,
     ) { values ->
         SettingsUiState(
             agentName = (values[0] as String?).orEmpty(),
@@ -66,6 +69,7 @@ class SettingsViewModel @Inject constructor(
             isSyncing = values[3] as Boolean,
             lastSync = values[4] as SyncResult,
             pendingCount = values[5] as Int,
+            themeMode = values[6] as ThemeMode,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -79,6 +83,10 @@ class SettingsViewModel @Inject constructor(
 
     fun onAutoAdvanceToggle(enabled: Boolean) {
         viewModelScope.launch { settingsPreferences.setAutoAdvance(enabled) }
+    }
+
+    fun onThemeModeChange(mode: ThemeMode) {
+        viewModelScope.launch { settingsPreferences.setThemeMode(mode) }
     }
 
     fun forceSync() {
