@@ -19,19 +19,26 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // API base URL — development (localhost via Android emulator loopback)
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000/api/\"")
+        // Default API base URL points to Railway production.
+        // Override per buildType below to hit a local backend instead.
+        buildConfigField(
+            "String",
+            "API_BASE_URL",
+            "\"https://crediiz-core-production.up.railway.app/api/\"",
+        )
     }
 
     buildTypes {
         debug {
             isMinifyEnabled = false
+            // Uncomment to use a local backend via Android emulator loopback.
+            // buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000/api/\"")
         }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
         }
     }

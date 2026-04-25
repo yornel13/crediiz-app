@@ -5,11 +5,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.project.vortex.callsagent.presentation.home.HomeScreen
 import com.project.vortex.callsagent.presentation.login.LoginScreen
+import com.project.vortex.callsagent.presentation.precall.PreCallScreen
 
 /**
  * Root navigation graph. Picks the start destination based on whether
@@ -53,9 +56,15 @@ fun AppNavGraph(
             )
         }
 
-        // Placeholder destinations for phase 5 — added so navigate() compiles today.
-        composable(Routes.PRE_CALL) { /* TODO: Phase 5 */ }
-        composable(Routes.IN_CALL) { /* TODO: Phase 5 */ }
-        composable(Routes.POST_CALL) { /* TODO: Phase 5 */ }
+        composable(
+            route = Routes.PRE_CALL,
+            arguments = listOf(navArgument("clientId") { type = NavType.StringType }),
+        ) {
+            PreCallScreen(onBack = { navController.popBackStack() })
+        }
+
+        // Placeholder destinations for the call flow phases — added so navigate() compiles today.
+        composable(Routes.IN_CALL) { /* TODO: Phase 3 */ }
+        composable(Routes.POST_CALL) { /* TODO: Phase 2 */ }
     }
 }
