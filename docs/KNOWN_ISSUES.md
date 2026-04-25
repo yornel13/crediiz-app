@@ -9,7 +9,7 @@ This file is the parking lot for "we found it, we'll deal with it later."
 Do not start work on these until they are explicitly prioritized into
 [`DEVELOPMENT_PLAN.md`](./DEVELOPMENT_PLAN.md).
 
-Last updated: **2026-04-24** (initial — sync/refresh review)
+Last updated: **2026-04-25** (KI-05 verified and closed; KI-04 reclassified)
 
 ---
 
@@ -20,8 +20,8 @@ Last updated: **2026-04-24** (initial — sync/refresh review)
 | [KI-01](#ki-01--replaceall-is-destructive-and-overwrites-pending-local-changes) | 🔴 High | `replaceAll` is destructive and overwrites pending local changes | Pending review |
 | [KI-02](#ki-02--race-between-two-consecutive-refreshassigned-calls-empties-clients-tab) | 🔴 High | Race between two consecutive `refreshAssigned` calls empties Clients tab | Pending review |
 | [KI-03](#ki-03--no-in-call-guard-for-data-refresh) | 🟡 Medium | No "in-call" guard for data refresh | Pending review |
-| [KI-04](#ki-04--unassigned-client-leaves-orphan-local-records-with-no-reconciliation) | 🔴 High | Unassigned client leaves orphan local records with no reconciliation | Pending review |
-| [KI-05](#ki-05--unverified-cascade-behavior-on-client-fk) | ⚠️ To verify | Unverified CASCADE behavior on Client FK could destroy PENDING interactions | Pending review |
+| [KI-04](#ki-04--unassigned-client-leaves-orphan-local-records-with-no-reconciliation) | 🟠 Medium-High | Unassigned client leaves orphan local records with no reconciliation | Pending review (downgraded from 🔴 after KI-05) |
+| [KI-05](#ki-05--unverified-cascade-behavior-on-client-fk) | ✅ Closed | CASCADE behavior on Client FK — verified: no FK declared | Closed 2026-04-25 |
 
 ---
 
@@ -151,7 +151,8 @@ re-fetch is deferred until they're done.
 
 ## KI-04 — Unassigned client leaves orphan local records with no reconciliation
 
-**Severity:** 🔴 High — silent data loss + permanent unsyncable records.
+**Severity:** 🟠 Medium-High — no silent local data loss (verified by
+KI-05), but permanent unsyncable records and a UI dead-end.
 
 **Where:** Architectural. No single file owns the gap.
 
@@ -159,15 +160,15 @@ re-fetch is deferred until they're done.
 panel:
 
 1. The next `GET /clients/assigned` no longer includes that client.
-2. `replaceAll(...)` deletes the local row.
+2. `replaceAll(...)` deletes the local `ClientEntity` row.
 3. Any `InteractionEntity`, `NoteEntity`, or `FollowUpEntity` the agent
-   created locally for that client and that has not yet synced is
-   either:
-   - Deleted along with the client (if FK CASCADE — see KI-05), causing
-     **silent loss of agent work**, OR
-   - Orphaned, with the server later rejecting the sync push (the agent
-     no longer has the assignment) → records stuck in `PENDING`
-     forever, never visible to the user, never retryable.
+   created locally for that client **survives** in their own tables
+   (no FK CASCADE — see KI-05 closure). They become **logical orphans**:
+   - `clientId` points to a row that no longer exists locally.
+   - Any UI that joins or looks up the client will render empty / break.
+   - When those records try to sync, the server may reject them (403/404)
+     because the agent no longer has the assignment → records stuck in
+     `PENDING` forever, never visible to the user, never retryable.
 
 There is no UI surface for "we couldn't sync these N records — what now?"
 
@@ -196,36 +197,32 @@ There is no UI surface for "we couldn't sync these N records — what now?"
 
 ---
 
-## KI-05 — Unverified CASCADE behavior on Client FK
+## KI-05 — CASCADE behavior on Client FK ✅ CLOSED
 
-**Severity:** ⚠️ To verify — could be 🔴 High or 🟢 None depending on
-configuration.
+**Resolution:** Verified on 2026-04-25 — **no `@ForeignKey` declared
+in any of the four entities**. `InteractionEntity`, `NoteEntity`, and
+`FollowUpEntity` reference `clientId` as a plain `String` column, with
+no Room-level FK enforcement.
 
-**Where:** [`data/local/entity/ClientEntity.kt`](../app/src/main/java/com/project/vortex/callsagent/data/local/entity/ClientEntity.kt)
-and the FK declarations on `InteractionEntity`, `NoteEntity`,
-`FollowUpEntity`.
+**Implication for adjacent issues:**
 
-**Concern:** If any of those entities declare a foreign key to
-`clients(id)` with `onDelete = ForeignKey.CASCADE`, then the destructive
-`deleteAll()` in `replaceAll` (KI-01) silently destroys all child
-records as well — including PENDING interactions and notes that have
-not yet synced. That would be **silent loss of agent work**.
+- **KI-01 stays 🔴 High** but for the original reason only: it
+  overwrites optimistic local changes on the `ClientEntity` row. It
+  does NOT destroy `Interaction`/`Note`/`FollowUp` rows (those live in
+  independent tables).
+- **KI-04 downgraded to 🟠 Medium-High** — no silent local data loss,
+  but logical orphans + permanent unsyncable records remain a real
+  problem.
+- The "third option" (no FK) was the actual reality. Orphans accumulate.
 
-If the FK is `RESTRICT`, the `deleteAll()` would throw on rows with
-children — would break refresh entirely. Neither option is correct
-given the current `replaceAll` strategy.
+**Files inspected:**
 
-**Action:** read the four entity files and document the actual FK
-configuration. Decision flows from there:
+- [`ClientEntity.kt`](../app/src/main/java/com/project/vortex/callsagent/data/local/entity/ClientEntity.kt)
+- [`InteractionEntity.kt`](../app/src/main/java/com/project/vortex/callsagent/data/local/entity/InteractionEntity.kt)
+- [`NoteEntity.kt`](../app/src/main/java/com/project/vortex/callsagent/data/local/entity/NoteEntity.kt)
+- [`FollowUpEntity.kt`](../app/src/main/java/com/project/vortex/callsagent/data/local/entity/FollowUpEntity.kt)
 
-- If CASCADE → fix is mandatory before any production rollout (combine
-  with KI-01 fix).
-- If RESTRICT → confirms KI-01 is broken in a different way (refresh
-  silently fails when there are unsynced children).
-- If no FK → orphans accumulate (KI-04).
-
-**Blocked by:** nothing — this is a 5-minute verification task. Just
-not done yet.
+No code change. Status changed from "Pending review" to "Closed".
 
 ---
 

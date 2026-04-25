@@ -21,7 +21,7 @@ Full definition in [`DEVELOPMENT_PLAN.md` § "MVP scope"](./DEVELOPMENT_PLAN.md#
 | **Product boundary** — agent-only app, admin uses web panel | 🔒 locked rule | See [`OVERVIEW.md` § 0](./OVERVIEW.md#0-product-boundary-locked-rule) |
 | Auth + data hydration | ✅ in v1.0 | Phase 0 |
 | Call flow UI (Pre-Call + client notes panel + Post-Call) | ✅ in v1.0 | Phase 1 (incl. 1.8 add manual note), Phase 2 |
-| Native Telecom | ✅ in v1.0 | Phase 3.1–3.4 |
+| Native Telecom (default dialer) | ✅ in v1.0 | Phase 3.0 onboarding · 3.1 ConnectionService · 3.2 InCallService+UI · 3.3 state machine · 3.4 disconnect mapper · 3.5 missed-call log. See [`TELECOM_ARCHITECTURE.md`](./TELECOM_ARCHITECTURE.md) and [`DIALER_SETUP_GUIDE.md`](./DIALER_SETUP_GUIDE.md). |
 | Auto-call | ✅ in v1.0 | Phase 4 |
 | Sync status indicator | ✅ in v1.0 | Phase 4.5.3 (UX-4) |
 | Tablet touch targets | ✅ in v1.0 | Phase 6.4 |
@@ -67,24 +67,17 @@ pilot could defer both).
 
 ## ⚠️ Partial (started, incomplete)
 
-### Phase 0 — Login-time hydration (4/6 done)
+### Phase 0 — Login-time hydration ✅ DONE (6/6)
 
-**What exists:** The Retrofit APIs (`ClientsApi.getAssigned`,
-`FollowUpsApi.getAgenda`) and the repository refresh methods
-(`ClientRepositoryImpl.refreshAssigned`, `FollowUpRepositoryImpl.refreshAgenda`)
-are fully implemented and correctly wired through Hilt.
+`LoginViewModel.hydrate()` fetches PENDING clients + agenda in parallel
+after a successful auth. Two-stage progress hint in UI ("Signing in..."
+→ "Loading your queue..."). On hydration failure (offline) the user
+still proceeds to Home; `LoginHydrationState` flags the session and
+`HomeScreen` shows a dismissable banner.
 
-**What's missing:**
-
-- Task **0.5** — `LoginViewModel` does NOT invoke the refresh methods after
-  a successful login. Consequence: on fresh install the Clients and Agenda
-  tabs show empty state until the 15-min periodic sync fires.
-- Task **0.6** — no offline login recovery. If `refreshAssigned` throws
-  (no network), the login flow has no fallback logic or stale-data banner.
-
-Implementation hint: the refresh functions already exist; this is
-essentially 10–20 lines in `LoginViewModel` + a `LoadingState` / `StaleBanner`
-composable. See `DEVELOPMENT_PLAN.md` Phase 0 for DoD.
+Files: `presentation/login/LoginViewModel.kt`, `presentation/login/LoginScreen.kt`,
+`presentation/home/HomeScreen.kt`, `presentation/home/HomeViewModel.kt`,
+`data/sync/LoginHydrationState.kt`.
 
 ### Remote API clients — fully implemented now
 

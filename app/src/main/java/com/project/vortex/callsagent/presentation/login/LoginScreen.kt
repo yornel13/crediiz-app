@@ -69,7 +69,7 @@ fun LoginScreen(
                 onValueChange = viewModel::onEmailChange,
                 label = { Text("Email") },
                 singleLine = true,
-                enabled = !state.isSubmitting,
+                enabled = !state.isBusy,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Email,
                     imeAction = ImeAction.Next,
@@ -86,7 +86,7 @@ fun LoginScreen(
                 onValueChange = viewModel::onPasswordChange,
                 label = { Text("Password") },
                 singleLine = true,
-                enabled = !state.isSubmitting,
+                enabled = !state.isBusy,
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Password,
@@ -115,7 +115,7 @@ fun LoginScreen(
                     .fillMaxWidth()
                     .widthIn(max = 400.dp),
             ) {
-                if (state.isSubmitting) {
+                if (state.isBusy) {
                     CircularProgressIndicator(
                         modifier = Modifier.height(20.dp),
                         strokeWidth = 2.dp,
@@ -124,6 +124,16 @@ fun LoginScreen(
                 } else {
                     Text("Sign in")
                 }
+            }
+
+            // Two-stage progress hint — first auth, then data hydration.
+            if (state.isBusy) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = if (state.isHydrating) "Loading your queue..." else "Signing in...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

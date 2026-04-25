@@ -8,6 +8,8 @@ Step-by-step roadmap to ship the MVP. Derived from:
 - [`TARGET_DEVICE.md`](./TARGET_DEVICE.md) — tablet constraints
 - [`AGENT_UX_BACKLOG.md`](./AGENT_UX_BACKLOG.md) — power-user features + Option C hub layout
 - [`KNOWN_ISSUES.md`](./KNOWN_ISSUES.md) — defects + architectural concerns pending review (must triage before v1.0)
+- [`TELECOM_ARCHITECTURE.md`](./TELECOM_ARCHITECTURE.md) — `calls-agends` as default dialer; permissions, services, decisions
+- [`DIALER_SETUP_GUIDE.md`](./DIALER_SETUP_GUIDE.md) — step-by-step implementation playbook for Phase 3
 
 **How to use this file**
 
@@ -17,7 +19,7 @@ Step-by-step roadmap to ship the MVP. Derived from:
    entry in `IMPLEMENTATION_STATUS.md` from Partial/Missing → Done.
 4. Bump the "Last updated" in this file.
 
-Last updated: **2026-04-24** (KNOWN_ISSUES.md added; sync defects pending triage)
+Last updated: **2026-04-25** (Phase 3 reorganized into 6 sub-phases; TELECOM_ARCHITECTURE.md + DIALER_SETUP_GUIDE.md added; mandatory onboarding gate locked; incoming calls switched from Option C to Option B with minimal UI)
 
 ---
 
@@ -51,10 +53,12 @@ Anything not directly enabling that sentence is **out of v1.0**.
 | **1** Pre-Call screen (incl. client notes panel + add manual note) | Entry point to every call + fulfills user requirement for a per-client notes panel. |
 | **2** Post-Call screen | Without this no outcome is captured → no product. |
 | **GATE-A** SKU decision | Hard blocker for Phase 3. |
-| **3.1** Default dialer registration | Required to place calls. |
-| **3.2** `InCallService` + In-Call UI | Required during calls. |
-| **3.3** Call state machine | Required to close the loop (call end → Post-Call). |
+| **3.0** Mandatory onboarding gate | Without dialer role + permissions, `placeCall()` fails. Hard gate, no skip. |
+| **3.1** `ConnectionService` skeleton | Telecom framework integration — required for outgoing calls. |
+| **3.2** `InCallService` + In-Call UI | Custom in-call screen with live notes and speaker. |
+| **3.3** Call state machine | Required to close the loop (call end → Post-Call) and persist `InteractionEntity`. |
 | **3.4** Disconnect-cause → outcome mapping | At 4 agents × ~100 calls/day, manual miscategorization is ~10–15% — unacceptable for CRM data quality. |
+| **3.5** Incoming-call UI + missed-call log (Option B) | Required because we hold `ROLE_DIALER` — incoming calls go to us. Option B: minimal accept/reject UI with caller lookup. Missed/rejected calls logged for return-call. |
 | **4** Auto-call orchestrator | 400+ calls/day across the team with manual tap-to-next = product abandonment. |
 | **4.5.3 / UX-4** Sync status indicator | Field connectivity is intermittent; agents must see pending-sync state. Promoted from Phase 4.5 because it's ~0.5 day of work and a field-ops safety net. |
 | **6.4** Touch targets for Tab A9+ | Hardware is fixed; cramped buttons = unusable. |
@@ -98,10 +102,10 @@ Phase 0 + Phase 1 can run beside early Phase 3.1 scaffolding.
 
 | Phase | Status | Notes |
 |---|---|---|
-| Phase 0 | 🟡 **4/6 done** | API interfaces + repo refresh methods already exist. Missing: login wiring + offline fallback. |
+| Phase 0 | ✅ **6/6 done** | Login-time hydration complete. Stale-data banner live. |
 | Phase 1 | ⚪ 0/7 | Pre-Call — not started. Nav route is a TODO stub. |
 | Phase 2 | ⚪ 0/6 | Post-Call — not started. Nav route is a TODO stub. |
-| Phase 3 | ⚪ 0/13 | Telecom — not started. Gated by GATE-A. |
+| Phase 3 | ⚪ 0/31 | Native dialer — not started. Gated by GATE-A. 6 sub-phases (3.0 onboarding gate · 3.1 ConnectionService · 3.2 InCallService+UI · 3.3 state machine · 3.4 disconnect mapper · 3.5 incoming UI Option B + missed-call log). |
 | Phase 4 | ⚪ 0/6 | Auto-call — not started. |
 | Phase 5 | ⚪ 0/6 | Follow-up notifications — not started. |
 | Phase 6 | ⚪ 0/5 | Tablet polish — not started. |
@@ -161,13 +165,16 @@ manually. Login is the natural point to do a full refresh.
   - ✅ `data/repository/ClientRepositoryImpl.kt:33` — calls API + `dao.replaceAll()`
 - [x] **0.4** Add `FollowUpRepository.refreshFromServer()` (named `refreshAgenda()`).
   - ✅ `data/repository/FollowUpRepositoryImpl.kt:51` — calls API + `dao.replaceAgenda()`
-- [ ] **0.5** Hook both calls into the login success path in
+- [x] **0.5** Hook both calls into the login success path in
   `LoginViewModel` **before** navigating to Home. Show a loading state
   while fetching.
-  - ⚠️ `LoginViewModel` does NOT call `refreshAssigned()` / `refreshAgenda()` after login.
-- [ ] **0.6** Handle offline login: if credentials are valid but the fetch
+  - ✅ `LoginViewModel.hydrate()` runs `refreshAssigned(PENDING)` + `refreshAgenda()` in parallel after auth success.
+  - ✅ Two-stage progress hint in UI: "Signing in..." → "Loading your queue...".
+  - ℹ️ Only PENDING is refreshed (not INTERESTED) to avoid tripping KI-02 on first launch.
+- [x] **0.6** Handle offline login: if credentials are valid but the fetch
   fails, still proceed to Home and surface a "data may be stale" banner.
-  - ⚠️ No offline handling in LoginViewModel. No banner component.
+  - ✅ `LoginHydrationState` singleton flags failed hydration; login still proceeds.
+  - ✅ `HomeScreen` shows a dismissable banner with `WifiOff` icon at the top when stale.
 
 ### Definition of Done
 
@@ -305,75 +312,256 @@ If WiFi-only, replace Phase 3 with a VoIP integration phase (not yet drafted
 
 ---
 
-## Phase 3 — Call Engine (native Telecom)
+## Phase 3 — Call Engine (native Telecom — `calls-agends` IS the dialer)
 
-Broken into 4 independent sub-phases, each has its own DoD.
+> **Architectural reference:** [`TELECOM_ARCHITECTURE.md`](./TELECOM_ARCHITECTURE.md).
+> **Implementation playbook:** [`DIALER_SETUP_GUIDE.md`](./DIALER_SETUP_GUIDE.md).
+>
+> Read both before opening this phase. The sub-phase task lists below
+> assume those documents are the source of truth for *what* and *how*.
 
-### 3.1 Default Dialer Registration
+Broken into 6 sub-phases. Each has its own DoD. Order matters — manifest
+declarations and ConnectionService skeleton must land before testing
+anything visible to the user.
 
-- [ ] **3.1.1** Add a one-time onboarding prompt after login: "To place
-  calls, Panama Calls must be set as the default dialer." Explain why.
-- [ ] **3.1.2** Trigger the system intent on tap:
+### 3.0 Mandatory onboarding gate
+
+**~1.5 days.** New phase — the agent cannot use the app without all
+permissions + the dialer role. Replaces the old 3.1.x onboarding prompt
+with a hard gate.
+
+- [ ] **3.0.1** Manifest declarations (full set per
+  [`DIALER_SETUP_GUIDE.md` § 1](./DIALER_SETUP_GUIDE.md)):
+  - All 5 runtime permissions (CALL_PHONE, READ_PHONE_STATE,
+    MODIFY_AUDIO_SETTINGS, POST_NOTIFICATIONS,
+    REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).
+  - Manifest-only permissions (MANAGE_OWN_CALLS, FOREGROUND_SERVICE,
+    FOREGROUND_SERVICE_PHONE_CALL).
+  - `MainActivity` `ACTION_DIAL` intent-filters (with and without
+    `tel:` scheme).
+  - `OnboardingActivity` declaration with `noHistory`,
+    `excludeFromRecents`, `singleTask`.
+  - `InCallActivity` declaration with `showWhenLocked`, `turnScreenOn`,
+    landscape orientation.
+  - `CallsConnectionService` and `CallsInCallService` declarations
+    with required `meta-data` and `intent-filter`s.
+- [ ] **3.0.2** Create `OnboardingGate` singleton that checks all 5
+  requirements and exposes `allRequirementsMet(): Boolean`.
+- [ ] **3.0.3** Create `OnboardingActivity` (separate from Compose nav
+  graph) with 5 steps. Each step:
+  - Shows status indicator (red / green).
+  - Provides action button (request / open settings if hard-denied).
+  - Re-checks status in `onResume`.
+- [ ] **3.0.4** Hard-deny detection — if a permission was denied with
+  "Don't ask again", swap the action button to open
+  `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`.
+- [ ] **3.0.5** Block back navigation, exclude from recents, hide from
+  task switcher. Only path out is completing all 5 steps.
+- [ ] **3.0.6** `MainActivity.onResume` always re-checks
+  `OnboardingGate.allRequirementsMet()`. If false → redirect to
+  `OnboardingActivity` and `finish()`.
+
+**DoD:** Fresh install → login → 5-step onboarding visible. Each
+permission missing keeps "Continue" disabled. After all 5 are green,
+"Continue" appears, completes onboarding, and `MainActivity` loads
+normally. Revoking the dialer role from system Settings sends the
+agent back to onboarding on next foreground.
+
+### 3.1 `CallsConnectionService` skeleton
+
+**~0.5 days.** Telecom framework integration.
+
+- [ ] **3.1.1** Create `telecom/CallsConnectionService.kt` extending
+  `android.telecom.ConnectionService`. Skeleton per
+  [`DIALER_SETUP_GUIDE.md` § 2](./DIALER_SETUP_GUIDE.md).
+- [ ] **3.1.2** Override `onCreateOutgoingConnection` returning a
+  `Connection` with state-passthrough handlers (`onDisconnect`,
+  `onAbort`, `onHold`, `onUnhold`).
+- [ ] **3.1.3** Override `onCreateIncomingConnection` returning a
+  pre-disconnected `Connection` (`DisconnectCause.REJECTED`). Logging
+  of `MissedCallEntity` happens later (3.5) — for now just reject.
+
+**DoD:** Calling `telecomManager.placeCall("tel:1234", null)` from a
+debug menu produces an active `Connection` visible in
+`adb shell dumpsys telecom`.
+
+### 3.2 `CallsInCallService` + `InCallActivity`
+
+**~3 days — the heaviest sub-phase.** UI wiring + audio routing.
+
+- [ ] **3.2.1** Create `CallsInCallService` per [`DIALER_SETUP_GUIDE.md`
+  § 3](./DIALER_SETUP_GUIDE.md). On `onCallAdded`:
+  - Reject if `callDirection == DIRECTION_INCOMING` (delegated to 3.5).
+  - Otherwise: `callManager.setCall(...)`, `setAudioRoute(SPEAKER)`,
+    launch `InCallActivity`.
+- [ ] **3.2.2** Create `CallManager` `@Singleton` (Hilt) per
+  [`DIALER_SETUP_GUIDE.md` § 4](./DIALER_SETUP_GUIDE.md). Holds:
+  `currentCall`, `currentClient`, `callState` `StateFlow`,
+  `isMuted`, `isSpeakerOn`, `liveNoteContent`.
+- [ ] **3.2.3** Create `InCallActivity` (lock-screen friendly:
+  `setShowWhenLocked(true)`, `setTurnScreenOn(true)`,
+  `SCREEN_ORIENTATION_LANDSCAPE`).
+- [ ] **3.2.4** Create `InCallScreen` (Compose):
+  - Top: client name + phone + status pill (Dialing / Ringing /
+    Active / Disconnected).
+  - Center-left: live timer (ticks every second from `STATE_ACTIVE`).
+  - Center-right: large multi-line `OutlinedTextField` bound to
+    `CallManager.liveNoteContent`. Persistent throughout call.
+  - Bottom: Mute toggle, Speaker toggle, End Call (red circular).
+- [ ] **3.2.5** Replace the `Intent.ACTION_DIAL` shim in
+  `PreCallScreen` with `CallManager.startCall(client)`. Remove the
+  Phase 1 temporary bridge.
+
+**DoD:** Tap Call on PreCallScreen → InCallActivity opens within 1s
+in landscape. Status updates as the call progresses. Speaker is on
+by default. Notes typed during the call appear and persist. End Call
+disconnects and the activity finishes.
+
+### 3.3 Call state machine
+
+**~1.5 days.** Lifecycle + persistence + crash recovery.
+
+- [ ] **3.3.1** Sealed class `CallUiState` with Idle, Dialing, Ringing,
+  Active, Disconnected states. Mapped from `Call.STATE_*`.
+- [ ] **3.3.2** Timer in `InCallScreen` starts only when `callState ==
+  Active`. Counts elapsed seconds since transition.
+- [ ] **3.3.3** On `onCallRemoved`, `CallManager.onCallEnded(call)`:
+  1. Persists `InteractionEntity` (`callStartedAt`, `callEndedAt`,
+     `durationSeconds`, `disconnectCause` raw).
+  2. If `liveNoteContent.isNotBlank()` → persists
+     `NoteEntity(type=CALL, interactionMobileSyncId)`.
+  3. Computes prefilled outcome via `DisconnectCauseMapper` (3.4).
+  4. Emits one-shot navigation event to `PostCallScreen` with
+     `interactionMobileSyncId` and `prefilledOutcome` nav args.
+- [ ] **3.3.4** Crash recovery (also tracked in 7.5): on `MainActivity`
+  cold start, query for an `InteractionEntity` with `callStartedAt`
+  but no `callEndedAt` and > 60s old → show modal "Finish the call
+  with X?" → opens `PostCallScreen` for that orphan.
+
+**DoD:** Place a real call. Logs show all 4 visible state transitions.
+End the call. PostCallScreen opens with correct duration and pre-filled
+outcome. Force-stop the app mid-call → re-launch shows orphan modal.
+
+### 3.4 `DisconnectCauseMapper`
+
+**~0.5 days.** Maps Telecom causes to our enum.
+
+- [ ] **3.4.1** Create `telecom/DisconnectCauseMapper.kt` per
+  [`DIALER_SETUP_GUIDE.md` § 8](./DIALER_SETUP_GUIDE.md).
+- [ ] **3.4.2** Pass the mapped outcome as `prefilledOutcome` nav arg
+  to `PostCallScreen`.
+- [ ] **3.4.3** `InteractionEntity` already has a `disconnectCause:
+  String?` column; persist `cause.toString()` for later analysis.
+
+**DoD:** Hang up locally → PostCall opens with no preselection. Cancel
+the call before answer → `NO_ANSWER` preselected. Busy signal → `BUSY`
+preselected. Agent can override any preselection.
+
+### 3.5 Incoming call UI + missed-call log (Option B)
+
+**~2 days.** Implements [Option B from
+TELECOM_ARCHITECTURE § 6.2](./TELECOM_ARCHITECTURE.md#62-incoming-calls--option-b-locked-for-v10).
+
+> **Why Option B and not C:** the cost of losing client callbacks (and
+> blocking supervisor reachability) outweighs the ~1.5 day delta over
+> silent rejection. Decided 2026-04-25.
+
+- [ ] **3.5.1** Add `ANSWER_PHONE_CALLS` (API 26+) to manifest +
+  runtime permission stack. Update `OnboardingGate` to require it as
+  step 6 of the onboarding flow.
+- [ ] **3.5.2** Schema change: add `direction: CallDirection` enum
+  column to `InteractionEntity` with values `OUTBOUND`, `INBOUND`.
+  Default `OUTBOUND` for backward-compatible reads. Bump Room schema
+  version + migration (or destructive recreate — we are pre-prod, no
+  user data to preserve).
+- [ ] **3.5.3** Create `MissedCallEntity` + `MissedCallDao` +
+  `MissedCallRepository`. Schema:
   ```kotlin
-  Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER).apply {
-      putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME,
-               packageName)
-  }
+  enum class MissedCallReason { REJECTED, NOT_ANSWERED, BUSY_OTHER_CALL }
+  @Entity(tableName = "missed_calls")
+  data class MissedCallEntity(
+      @PrimaryKey val id: String,
+      val phoneNumber: String,
+      val matchedClientId: String?,
+      val reason: MissedCallReason,
+      val occurredAt: Instant,
+      val acknowledged: Boolean = false,
+  )
   ```
-- [ ] **3.1.3** Persist in DataStore whether the user has dismissed the
-  prompt and whether the app is currently the default dialer
-  (`TelecomManager.getDefaultDialerPackage()` check on startup).
-- [ ] **3.1.4** Add the required manifest entries for
-  `ConnectionService` + `InCallService` subclasses (stub subclasses are
-  fine for this task; implementations land in 3.2).
+- [ ] **3.5.4** Add `ClientDao.findByPhone(phone: String): ClientEntity?`
+  with phone-number normalization (strip non-digits, compare last 8
+  digits to handle country-code prefix variations).
+- [ ] **3.5.5** `CallsConnectionService.onCreateIncomingConnection`
+  returns an active `Connection` (no longer auto-rejects). If another
+  call is already active, return a `DisconnectCause(BUSY)` connection
+  and notify `CallManager` to log `BUSY_OTHER_CALL`.
+- [ ] **3.5.6** `CallsInCallService.onCallAdded` for incoming
+  direction:
+  - Look up client via `clientRepository.findByPhone(phone)`.
+  - Set `CallManager.currentClient = client` (may be null if unmatched).
+  - Set `CallManager.callDirection = INBOUND`.
+  - Launch `InCallActivity` — same activity as outbound, but UI state
+    distinguishes via `callState` and `callDirection`.
+- [ ] **3.5.7** `InCallScreen` incoming-call mode (visible when
+  `callState == Ringing && direction == INBOUND`):
+  - Top: "Incoming call" label (badge style, distinguishable from
+    outbound).
+  - Center: avatar + client name + status pill (or "Unknown number"
+    if no match) + phone number.
+  - Bottom: oversized `Accept` (green, calls
+    `CallManager.acceptIncoming()` → `call.answer(0)`) and `Reject`
+    (red, calls `CallManager.rejectIncoming()` → `call.disconnect()`)
+    buttons. No mute/notes/end during ring.
+- [ ] **3.5.8** On Accept → `setAudioRoute(SPEAKER)`, transition to
+  the same active-call UI as outbound, with **persistent "Incoming"
+  badge** in the header so the agent always knows direction.
+- [ ] **3.5.9** On Reject → persist `MissedCallEntity(reason=REJECTED)`,
+  finish activity.
+- [ ] **3.5.10** On caller-disconnect-while-ringing (timeout) →
+  `onCallRemoved` while `callState == Ringing` → persist
+  `MissedCallEntity(reason=NOT_ANSWERED)`, finish activity.
+- [ ] **3.5.11** Answered incoming → `CallManager.onCallEnded`
+  persists `InteractionEntity(direction=INBOUND, ...)` and routes to
+  `PostCallScreen` exactly like outbound.
+- [ ] **3.5.12** Surface unacknowledged missed calls in Clients tab as
+  a banner above the queue. Tap → bottom sheet list with each entry
+  showing matched client (or unknown number), reason badge, time
+  ago, and `Call back` + `Dismiss` actions.
+- [ ] **3.5.13** "Call back" from missed-call list:
+  - If matched client → opens PreCallScreen for that client (regular
+    outbound flow).
+  - If unmatched → confirmation prompt: "Number not in your queue —
+    call anyway?". Confirm → places call directly without going
+    through PreCallScreen.
 
-**DoD:** Fresh install → login → onboarding prompt → system dialog → app
-becomes default dialer. State persists across app restarts.
+**DoD:**
 
-### 3.2 `InCallService` + custom In-Call Screen
+- External phone calls our SIM. Within 1s the InCallActivity opens
+  in landscape showing "Incoming call from <client name or unknown>".
+- Tap Accept → call connects, speaker on, agent can type notes,
+  "Incoming" badge visible. End → PostCallScreen with
+  `direction = INBOUND` persisted.
+- Tap Reject → call drops on caller side, MissedCallEntity logged
+  with `REJECTED`.
+- Caller hangs up while ringing → MissedCallEntity logged with
+  `NOT_ANSWERED`.
+- Incoming arrives while on another call → caller hears busy,
+  MissedCallEntity logged with `BUSY_OTHER_CALL`.
+- Clients tab banner appears with count; tap → list of missed calls;
+  Call back → outbound flow.
 
-- [ ] **3.2.1** Create `telecom/CallsInCallService.kt` extending
-  `android.telecom.InCallService`. Overrides `onCallAdded` / `onCallRemoved`.
-- [ ] **3.2.2** Create a singleton `CallManager` (in `data/call/`) that
-  holds the active `Call` reference and emits state via `StateFlow`.
-- [ ] **3.2.3** Create `presentation/incall/InCallScreen.kt`:
-  - Live timer (ticks 1s, uses `rememberCoroutineScope`).
-  - Client info at top.
-  - Mute / Speaker buttons backed by `AudioState`.
-  - "Notes" button opens a `Notes overlay` Composable.
-  - "End Call" button triggers `Call.disconnect()`.
-- [ ] **3.2.4** `InCallScreen` reads state from `CallManager` via Hilt.
-- [ ] **3.2.5** Lock orientation to landscape on this screen (see
-  [`TARGET_DEVICE.md` § 2](./TARGET_DEVICE.md#2-orientation-policy)).
+---
 
-**DoD:** Placing a real call from Pre-Call opens the custom In-Call UI.
-Timer runs. Mute / speaker change the audio state. "End Call" terminates.
+### Phase 3 — global DoD
 
-### 3.3 Call State Machine
-
-- [ ] **3.3.1** Map `Call.STATE_DIALING / RINGING / ACTIVE / DISCONNECTED`
-  to app-level `CallUiState` (sealed class).
-- [ ] **3.3.2** On `STATE_ACTIVE` start the timer and enable Notes overlay.
-- [ ] **3.3.3** On `STATE_DISCONNECTED` transition to Post-Call with the
-  captured duration and disconnect cause.
-- [ ] **3.3.4** Handle crash-recovery: on app launch, check for an
-  interaction with `callStartedAt` but no `callEndedAt`, surface a
-  "finish incomplete call" modal.
-
-**DoD:** All five call states visible in logs during a real call. Post-Call
-arrives with correct duration.
-
-### 3.4 Disconnect Cause → Outcome Mapping
-
-- [ ] **3.4.1** Create `common/util/DisconnectCauseMapper.kt` with the
-  table from [`MOBILE_APP.md` § 7.3](../../calls-core/docs/MOBILE_APP.md).
-- [ ] **3.4.2** Pass the mapped outcome as `prefilledOutcome` nav arg to
-  Post-Call.
-- [ ] **3.4.3** Store the raw `DisconnectCause` on the InteractionEntity
-  for later analysis.
-
-**DoD:** Reject a call → Post-Call opens with NO_ANSWER pre-selected.
-Busy signal → BUSY pre-selected. Agent can still change it.
+- Fresh install → login → onboarding 5 steps → MainActivity.
+- Tap a client → tap Call → InCallActivity opens → call connects →
+  agent types notes → end call → PostCallScreen with prefilled outcome.
+- App is the default dialer per `RoleManager.isRoleHeld(ROLE_DIALER)`
+  and survives reboot.
+- Incoming calls auto-rejected and logged.
+- Force-stop mid-call → relaunch → orphan modal lets the agent finish
+  the interaction.
 
 ---
 
