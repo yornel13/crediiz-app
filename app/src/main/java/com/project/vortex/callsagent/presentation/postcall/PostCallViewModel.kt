@@ -43,6 +43,13 @@ data class PostCallUiState(
     val followUpTime: LocalTime? = null,
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
+    /**
+     * True when the screen was opened via Phase 7.5 recovery (the
+     * call ended more than ~5 min ago without the agent saving). UI
+     * shows a "Recuperando llamada anterior" banner so the agent
+     * understands why they landed here on app open.
+     */
+    val isRecovering: Boolean = false,
 ) {
     val showFollowUpForm: Boolean
         get() = selectedOutcome == CallOutcome.INTERESTED
@@ -146,6 +153,9 @@ class PostCallViewModel @Inject constructor(
                         syncStatus = SyncStatus.PENDING,
                     ),
                 )
+                // Mark this interaction as confirmed by the agent — the
+                // orphan-recovery flow on next app start will skip it.
+                interactionRepository.markConfirmed(interaction.mobileSyncId)
 
                 // 2. Mirror locally on the client row (status + lastOutcome + counters).
                 clientRepository.applyInteractionLocally(
@@ -245,6 +255,13 @@ class PostCallViewModel @Inject constructor(
                 return@launch
             }
 
+            // If the call ended more than 5 minutes ago and we're
+            // landing on Post-Call, treat it as a recovery flow.
+            val ageMinutes = java.time.Duration
+                .between(interaction.callEndedAt, Instant.now())
+                .toMinutes()
+            val isRecovering = ageMinutes >= RECOVERY_AGE_MINUTES
+
             _uiState.update {
                 it.copy(
                     isLoading = false,
@@ -253,8 +270,13 @@ class PostCallViewModel @Inject constructor(
                     // Prefilled outcome wins over the placeholder stored in the
                     // interaction itself.
                     selectedOutcome = prefilledOutcome ?: interaction.outcome,
+                    isRecovering = isRecovering,
                 )
             }
         }
+    }
+
+    private companion object {
+        const val RECOVERY_AGE_MINUTES = 5L
     }
 }

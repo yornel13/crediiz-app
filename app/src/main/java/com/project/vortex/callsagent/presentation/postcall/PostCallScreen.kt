@@ -188,6 +188,9 @@ private fun PostCallContent(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
+        if (state.isRecovering) {
+            item("recovery_banner") { RecoveryBanner() }
+        }
         item("summary") { CallSummaryCard(client = client, interaction = interaction) }
         item("outcome_header") { SectionLabel("Call outcome") }
         // OutcomeSelector renders the follow-up form INLINE under the
@@ -584,6 +587,43 @@ private fun SaveBar(canSave: Boolean, isSaving: Boolean, onSave: () -> Unit) {
                         fontWeight = FontWeight.Bold,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecoveryBanner() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.Schedule,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Recuperando llamada anterior",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Text(
+                    text = "Esta llamada terminó pero no la cerraste. Confirma el resultado.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f),
+                )
             }
         }
     }

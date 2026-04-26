@@ -1,6 +1,7 @@
 package com.project.vortex.callsagent.domain.repository
 
 import com.project.vortex.callsagent.domain.model.Interaction
+import java.time.Instant
 
 interface InteractionRepository {
 
@@ -25,4 +26,30 @@ interface InteractionRepository {
 
     /** Live count of PENDING-sync interactions — drives the sync indicator. */
     fun observePendingCount(): kotlinx.coroutines.flow.Flow<Int>
+
+    /**
+     * Phase 7.5 — orphan-call recovery.
+     *
+     * Returns the most recent interaction the agent never confirmed
+     * via Post-Call save (within the [since] window). Used at app
+     * start to surface a Post-Call screen for any call that ended
+     * without the agent finishing the wrap-up (app crashed, force
+     * killed, battery died, etc.).
+     */
+    suspend fun findMostRecentUnconfirmed(since: Instant): Interaction?
+
+    /**
+     * Mark the interaction as confirmed by the agent. Called from
+     * `PostCallViewModel.save()` so subsequent app launches stop
+     * surfacing this interaction as a recovery candidate.
+     */
+    suspend fun markConfirmed(mobileSyncId: String)
+
+    /**
+     * Sweep step: auto-confirm interactions whose `callEndedAt` is
+     * older than [before]. Run at app start to prevent eternal
+     * recovery prompts for calls the agent will never wrap up.
+     * Returns the number of rows updated.
+     */
+    suspend fun autoConfirmStale(before: Instant): Int
 }

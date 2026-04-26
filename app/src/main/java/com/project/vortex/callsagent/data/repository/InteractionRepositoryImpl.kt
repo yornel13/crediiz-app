@@ -8,6 +8,7 @@ import com.project.vortex.callsagent.domain.model.Interaction
 import com.project.vortex.callsagent.domain.repository.InteractionRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,6 +18,10 @@ class InteractionRepositoryImpl @Inject constructor(
 ) : InteractionRepository {
 
     override suspend fun save(interaction: Interaction) = withContext(Dispatchers.IO) {
+        // Preserve `confirmedByAgent` if the row already exists — Room's
+        // REPLACE strategy would otherwise reset it to the default `false`
+        // on a Post-Call re-save, defeating the orphan-recovery flag.
+        val existingConfirmed = dao.findById(interaction.mobileSyncId)?.confirmedByAgent ?: false
         dao.insert(
             InteractionEntity(
                 mobileSyncId = interaction.mobileSyncId,
@@ -29,6 +34,7 @@ class InteractionRepositoryImpl @Inject constructor(
                 disconnectCause = interaction.disconnectCause,
                 deviceCreatedAt = interaction.deviceCreatedAt,
                 syncStatus = interaction.syncStatus,
+                confirmedByAgent = existingConfirmed,
             ),
         )
     }
@@ -52,4 +58,17 @@ class InteractionRepositoryImpl @Inject constructor(
 
     override fun observePendingCount(): kotlinx.coroutines.flow.Flow<Int> =
         dao.observeCountBySyncStatus(SyncStatus.PENDING)
+
+    override suspend fun findMostRecentUnconfirmed(since: Instant): Interaction? =
+        withContext(Dispatchers.IO) {
+            dao.findMostRecentUnconfirmed(since)?.toDomain()
+        }
+
+    override suspend fun markConfirmed(mobileSyncId: String) = withContext(Dispatchers.IO) {
+        dao.markConfirmed(mobileSyncId)
+    }
+
+    override suspend fun autoConfirmStale(before: Instant): Int = withContext(Dispatchers.IO) {
+        dao.autoConfirmStale(before)
+    }
 }

@@ -46,6 +46,28 @@ fun AppNavGraph(
         callNavViewModel.consumeEndedCall()
     }
 
+    // Phase 7.5 — orphan-call recovery. If the app was killed between a
+    // call ending and the agent finishing Post-Call, on next launch we
+    // surface the unconfirmed interaction so the agent can wrap up.
+    // We wait until the home destination is in the graph before
+    // navigating, otherwise the splash → home transition would race
+    // with our navigation.
+    val orphanInteraction by callNavViewModel.orphanInteraction.collectAsState()
+    LaunchedEffect(orphanInteraction) {
+        val orphan = orphanInteraction ?: return@LaunchedEffect
+        // Only fire once we're past the splash. Splash → Home navigation
+        // sets popUpTo(SPLASH inclusive), so once Home is the current
+        // destination we know the app is settled.
+        navController.currentBackStackEntry ?: return@LaunchedEffect
+        navController.navigate(
+            Routes.postCall(orphan.clientId, orphan.interactionMobileSyncId),
+        ) {
+            popUpTo(Routes.HOME) { inclusive = false }
+            launchSingleTop = true
+        }
+        callNavViewModel.consumeOrphanInteraction()
+    }
+
     NavHost(
         navController = navController,
         startDestination = Routes.SPLASH,
