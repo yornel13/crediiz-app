@@ -7,4 +7,10 @@ enum class ClientStatus {
     REJECTED,
     INVALID_NUMBER,
     DO_NOT_CALL,
+
+    /**
+     * Agent-initiated dismissal. Soft state — admin can override
+     * (reactivate / reassign). See `docs/CLIENT_DISMISSAL.md`.
+     */
+    DISMISSED,
 }

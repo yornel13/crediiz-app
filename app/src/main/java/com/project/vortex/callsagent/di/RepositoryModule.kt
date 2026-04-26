@@ -1,12 +1,14 @@
 package com.project.vortex.callsagent.di
 
 import com.project.vortex.callsagent.data.repository.AuthRepositoryImpl
+import com.project.vortex.callsagent.data.repository.ClientDismissalRepositoryImpl
 import com.project.vortex.callsagent.data.repository.ClientRepositoryImpl
 import com.project.vortex.callsagent.data.repository.FollowUpRepositoryImpl
 import com.project.vortex.callsagent.data.repository.InteractionRepositoryImpl
 import com.project.vortex.callsagent.data.repository.MissedCallRepositoryImpl
 import com.project.vortex.callsagent.data.repository.NoteRepositoryImpl
 import com.project.vortex.callsagent.domain.repository.AuthRepository
+import com.project.vortex.callsagent.domain.repository.ClientDismissalRepository
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
 import com.project.vortex.callsagent.domain.repository.InteractionRepository
@@ -45,4 +47,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindMissedCallRepository(impl: MissedCallRepositoryImpl): MissedCallRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindClientDismissalRepository(
+        impl: ClientDismissalRepositoryImpl,
+    ): ClientDismissalRepository
 }

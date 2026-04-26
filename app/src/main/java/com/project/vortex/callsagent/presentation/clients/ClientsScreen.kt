@@ -26,12 +26,15 @@ import androidx.compose.material.icons.automirrored.filled.PhoneMissed
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -62,10 +65,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.common.enums.MissedCallReason
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.MissedCall
-import com.project.vortex.callsagent.presentation.clients.components.AddNoteSheet
 import com.project.vortex.callsagent.presentation.clients.components.ClientsViewSelector
-import com.project.vortex.callsagent.presentation.clients.components.InterestedClientCard
+import com.project.vortex.callsagent.presentation.clients.components.DismissClientSheet
 import com.project.vortex.callsagent.presentation.clients.components.RecentClientCard
+import com.project.vortex.callsagent.presentation.clients.components.RecentDismissalCard
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.components.StatusPill
 import com.project.vortex.callsagent.ui.theme.Amber600
@@ -86,25 +89,30 @@ fun ClientsScreen(
     onStartAutoCall: (firstClientId: String) -> Unit,
     viewModel: ClientsViewModel = hiltViewModel(),
 ) {
-    val clients by viewModel.clients.collectAsState()
+    val pendingClients by viewModel.pendingClients.collectAsState()
+    val recentEntries by viewModel.recentEntries.collectAsState()
     val totalPending by viewModel.totalPendingCount.collectAsState()
     val totalRecent by viewModel.totalRecentCount.collectAsState()
-    val totalInterested by viewModel.totalInterestedCount.collectAsState()
     val query by viewModel.searchQuery.collectAsState()
     val viewKind by viewModel.viewKind.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val missedCalls by viewModel.missedCalls.collectAsState()
     val syncIndicator by viewModel.syncIndicator.collectAsState()
     var missedSheetOpen by remember { mutableStateOf(false) }
-    // Holds the clientId currently being annotated via the AddNote sheet.
-    var noteSheetForClient by remember { mutableStateOf<Pair<String, String>?>(null) }
+    // (clientId, clientName) currently being dismissed via the sheet.
+    var dismissTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    val activeListSize = when (viewKind) {
+        ClientsViewKind.PENDIENTES -> pendingClients.size
+        ClientsViewKind.RECIENTES -> recentEntries.size
+    }
 
     Scaffold(
         floatingActionButton = {
             // Auto-call only makes sense over the Pendientes queue. Hiding
-            // the FAB on Recientes / Interesados avoids ambiguity about
-            // what set is being dialed.
-            if (clients.isNotEmpty() && viewKind == ClientsViewKind.PENDIENTES) {
+            // the FAB on Recientes avoids ambiguity about what set is
+            // being dialed.
+            if (pendingClients.isNotEmpty() && viewKind == ClientsViewKind.PENDIENTES) {
                 ExtendedFloatingActionButton(
                     onClick = {
                         val firstClientId = viewModel.startAutoCall()
@@ -136,7 +144,6 @@ fun ClientsScreen(
                     activeView = viewKind,
                     pendingCount = totalPending,
                     recentCount = totalRecent,
-                    interestedCount = totalInterested,
                     syncState = syncIndicator,
                     onForceSync = viewModel::forceSyncNow,
                 )
@@ -160,7 +167,6 @@ fun ClientsScreen(
                     selected = viewKind,
                     pendingCount = totalPending,
                     recentCount = totalRecent,
-                    interestedCount = totalInterested,
                     onSelected = viewModel::onViewKindChange,
                 )
             }
@@ -171,11 +177,10 @@ fun ClientsScreen(
             if (query.isNotBlank()) {
                 item("search_summary") {
                     SearchResultSummary(
-                        matchCount = clients.size,
+                        matchCount = activeListSize,
                         totalCount = when (viewKind) {
                             ClientsViewKind.PENDIENTES -> totalPending
                             ClientsViewKind.RECIENTES -> totalRecent
-                            ClientsViewKind.INTERESADOS -> totalInterested
                         },
                     )
                 }
@@ -185,7 +190,7 @@ fun ClientsScreen(
                 item("error") { ErrorBanner(message = msg) }
             }
 
-            if (clients.isEmpty()) {
+            if (activeListSize == 0) {
                 item("empty") {
                     EmptyState(
                         viewKind = viewKind,
@@ -193,37 +198,42 @@ fun ClientsScreen(
                         isSearching = query.isNotBlank(),
                     )
                 }
-            } else {
-                items(clients, key = { "${viewKind.name}_${it.id}" }) { client ->
-                    when (viewKind) {
-                        ClientsViewKind.PENDIENTES -> ClientCard(
+            } else when (viewKind) {
+                ClientsViewKind.PENDIENTES -> {
+                    items(pendingClients, key = { "p_${it.id}" }) { client ->
+                        ClientCard(
                             client = client,
                             onClick = { onClientSelected(client.id) },
+                            onDismiss = { dismissTarget = client.id to client.name },
                         )
-                        ClientsViewKind.RECIENTES -> RecentClientCard(
-                            client = client,
-                            onOpen = { onClientSelected(client.id) },
-                            onAddNote = { noteSheetForClient = client.id to client.name },
-                            onCallAgain = { onClientSelected(client.id) },
-                        )
-                        ClientsViewKind.INTERESADOS -> InterestedClientCard(
-                            client = client,
-                            onOpen = { onClientSelected(client.id) },
-                            onAddNote = { noteSheetForClient = client.id to client.name },
-                            onCall = { onClientSelected(client.id) },
-                        )
+                    }
+                }
+                ClientsViewKind.RECIENTES -> {
+                    items(recentEntries, key = { it.sortKey }) { entry ->
+                        when (entry) {
+                            is RecentEntry.Called -> RecentClientCard(
+                                client = entry.client,
+                                onOpen = { onClientSelected(entry.client.id) },
+                            )
+                            is RecentEntry.Dismissed -> RecentDismissalCard(
+                                client = entry.client,
+                                dismissal = entry.dismissal,
+                                onOpen = { onClientSelected(entry.client.id) },
+                                onUndo = { viewModel.undoDismissal(entry.client.id) },
+                            )
+                        }
                     }
                 }
             }
         }
 
-        noteSheetForClient?.let { (clientId, clientName) ->
-            AddNoteSheet(
-                clientName = clientName,
-                onDismiss = { noteSheetForClient = null },
-                onSave = { text ->
-                    viewModel.addManualNote(clientId, text)
-                    noteSheetForClient = null
+        dismissTarget?.let { (id, name) ->
+            DismissClientSheet(
+                clientName = name,
+                onDismiss = { dismissTarget = null },
+                onConfirm = { code, free ->
+                    viewModel.dismissClient(id, code, free)
+                    dismissTarget = null
                 },
             )
         }
@@ -259,7 +269,6 @@ private fun Hero(
     activeView: ClientsViewKind,
     pendingCount: Int,
     recentCount: Int,
-    interestedCount: Int,
     syncState: SyncIndicatorState,
     onForceSync: () -> Unit,
 ) {
@@ -268,8 +277,6 @@ private fun Hero(
             pendingCount to (if (pendingCount == 1) "client to call" else "clients to call")
         ClientsViewKind.RECIENTES ->
             recentCount to (if (recentCount == 1) "recent call" else "recent calls")
-        ClientsViewKind.INTERESADOS ->
-            interestedCount to (if (interestedCount == 1) "interested lead" else "interested leads")
     }
 
     Column(
@@ -384,7 +391,12 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
 }
 
 @Composable
-private fun ClientCard(client: Client, onClick: () -> Unit) {
+private fun ClientCard(
+    client: Client,
+    onClick: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -417,11 +429,25 @@ private fun ClientCard(client: Client, onClick: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Icon(
-                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(
+                        Icons.Filled.MoreVert,
+                        contentDescription = "More actions",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Descartar cliente") },
+                            onClick = {
+                                menuOpen = false
+                                onDismiss()
+                            },
+                        )
+                    }
+                }
             }
 
             // Meta row — attempts + last call + status pill
@@ -531,11 +557,6 @@ private fun EmptyState(
                 "No recent calls",
                 "Calls you make in the last 24 h will show up here.",
                 Icons.Filled.Phone,
-            )
-            ClientsViewKind.INTERESADOS -> Triple(
-                "No interested leads yet",
-                "Mark INTERESTED in Post-Call to see leads here.",
-                Icons.Filled.CheckCircle,
             )
         }
     }

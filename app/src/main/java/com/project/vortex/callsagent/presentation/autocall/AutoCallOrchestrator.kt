@@ -186,7 +186,10 @@ class AutoCallOrchestrator @Inject constructor(
      * app gave up on the session.
      */
     private fun shouldAutoAdvanceFor(outcome: CallOutcome): Boolean = when (outcome) {
-        CallOutcome.INTERESTED -> false
+        // INTERESTED earns a stop — the agent just filled the follow-up form.
+        // SOLD earns a stop — sales close deserves to land before the next dial.
+        CallOutcome.INTERESTED,
+        CallOutcome.SOLD -> false
         CallOutcome.NO_ANSWER,
         CallOutcome.BUSY,
         CallOutcome.NOT_INTERESTED,

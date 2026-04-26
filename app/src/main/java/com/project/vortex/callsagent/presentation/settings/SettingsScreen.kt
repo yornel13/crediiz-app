@@ -18,6 +18,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -66,7 +68,9 @@ fun SettingsScreen(
 
             AutoAdvanceCard(
                 enabled = state.autoAdvance,
+                delaySeconds = state.autoCallDelaySeconds,
                 onToggle = viewModel::onAutoAdvanceToggle,
+                onDelayChange = viewModel::onAutoCallDelayChange,
             )
 
             SyncCard(
@@ -152,7 +156,12 @@ private fun themeLabel(mode: ThemeMode): String = when (mode) {
 }
 
 @Composable
-private fun AutoAdvanceCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+private fun AutoAdvanceCard(
+    enabled: Boolean,
+    delaySeconds: Int,
+    onToggle: (Boolean) -> Unit,
+    onDelayChange: (Int) -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -181,6 +190,60 @@ private fun AutoAdvanceCard(enabled: Boolean, onToggle: (Boolean) -> Unit) {
                 }
                 Switch(checked = enabled, onCheckedChange = onToggle)
             }
+
+            // Countdown delay only matters when auto-advance is on. We
+            // keep the row visible-but-disabled instead of hiding so
+            // the agent can preview their setting without flipping the
+            // toggle first.
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Countdown",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (enabled) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+                Text(
+                    text = if (delaySeconds == 0) "Off" else "$delaySeconds s",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (enabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            Text(
+                text = if (delaySeconds == 0) {
+                    "No countdown — the next client is dialed immediately."
+                } else {
+                    "Wait $delaySeconds second${if (delaySeconds == 1) "" else "s"} before dialing the next client."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Slider(
+                value = delaySeconds.toFloat(),
+                onValueChange = { onDelayChange(it.toInt()) },
+                valueRange = 0f..15f,
+                steps = 14, // 16 stops total: 0..15
+                enabled = enabled,
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
         }
     }
 }

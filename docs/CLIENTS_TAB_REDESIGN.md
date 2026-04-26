@@ -1,11 +1,37 @@
 # CLIENTS_TAB_REDESIGN — Re-architecting how the agent sees their queue
 
-**Status:** 📐 Design proposal — pending approval
+**Status:** ✅ Shipped (v1.0) — final shape differs from the original
+three-pill proposal. See § 0 for the diff.
 **Last updated:** 2026-04-26
-**Owner:** mobile (`calls-agends`) with one open item that requires
-`calls-core` alignment (see § 7).
-**Related:** [`CLIENT_DISMISSAL.md`](./CLIENT_DISMISSAL.md) — the
-agent-initiated discard feature also surfaces in Recientes.
+**Owner:** mobile (`calls-agends`).
+**Related:**
+- [`CLIENT_DISMISSAL.md`](./CLIENT_DISMISSAL.md) — agent-initiated
+  discard, surfaces in Recientes.
+- [`MANUAL_USUARIO.md`](./MANUAL_USUARIO.md) § 11 — the user-facing
+  Spanish version of the same redesign (the source of truth for the
+  product owner).
+
+---
+
+## 0. What actually shipped vs. the original proposal
+
+The original proposal in this doc had **three pills**: Pendientes /
+Recientes / Interesados. After implementation we observed ~95% of
+INTERESTED clients also had pending follow-ups → Interesados pill
+duplicated the Agenda. Final shape:
+
+- **Tab Clientes** — only **Pendientes + Recientes** (two pills).
+- **Tab Agenda** — gains a new section **"Sin agendar"** for the 5%
+  of INTERESTED leads without a pending follow-up.
+- **Recientes is dual-source**: combines recent calls + active
+  recent dismissals, deduped by `clientId`.
+- **New 6th outcome `SOLD`** → maps to `ClientStatus.CONVERTED`,
+  surfaces as a "Sold" badge in Recientes.
+
+The design rationale below remains valid for understanding the data
+flows; treat it as historical context with the final shape on top.
+
+---
 
 ---
 

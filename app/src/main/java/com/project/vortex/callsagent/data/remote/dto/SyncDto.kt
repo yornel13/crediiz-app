@@ -12,6 +12,7 @@ data class SyncRequest(
     val notes: List<SyncNoteDto>? = null,
     val followUps: List<SyncFollowUpDto>? = null,
     val completedFollowUps: List<SyncCompletedFollowUpDto>? = null,
+    val dismissals: List<SyncDismissalDto>? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -58,6 +59,19 @@ data class SyncCompletedFollowUpDto(
     val completedAt: String,         // ISO-8601
 )
 
+@JsonClass(generateAdapter = true)
+data class SyncDismissalDto(
+    val mobileSyncId: String,
+    val clientId: String,
+    val previousStatus: String,      // ClientStatus
+    val reason: String?,
+    val reasonCode: String?,
+    val dismissedAt: String,         // ISO-8601
+    val undone: Boolean,
+    val undoneAt: String?,           // ISO-8601 nullable
+    val deviceCreatedAt: String,     // ISO-8601
+)
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Response payloads
 // ──────────────────────────────────────────────────────────────────────────────
@@ -68,6 +82,7 @@ data class SyncResponse(
     val notes: SyncCategoryResult,
     val followUps: SyncCategoryResult,
     val completedFollowUps: SyncCompletedCategoryResult,
+    val dismissals: SyncCategoryResult,
 )
 
 @JsonClass(generateAdapter = true)

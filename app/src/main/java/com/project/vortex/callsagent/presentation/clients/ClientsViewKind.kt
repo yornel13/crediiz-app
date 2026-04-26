@@ -1,17 +1,19 @@
 package com.project.vortex.callsagent.presentation.clients
 
 /**
- * The three top-level views the agent can switch between inside the
- * Clients tab. Each maps to a different data source and a different
- * card style. See `docs/CLIENTS_TAB_REDESIGN.md` for the rationale.
+ * Top-level views inside the Clients tab. Two only:
+ *
+ * - **Pendientes**: cold queue (`status = PENDING`) ordered by
+ *   `queueOrder`.
+ * - **Recientes**: anything the agent touched in the last 24 h —
+ *   calls of any outcome (including `SOLD` → "Sold" badge) and
+ *   dismissals (with a Deshacer button).
+ *
+ * INTERESTED leads live in the Agenda tab (under Próximas if they
+ * have a follow-up scheduled, or under "Sin agendar" if they don't).
+ * See `docs/CLIENTS_TAB_REDESIGN.md` for the rationale.
  */
 enum class ClientsViewKind(val labelEs: String) {
-    /** `status = PENDING`, ordered by `queueOrder`. */
     PENDIENTES(labelEs = "Pendientes"),
-
-    /** Called within the last 24 h, any outcome. */
     RECIENTES(labelEs = "Recientes"),
-
-    /** `status = INTERESTED`, indefinite. */
-    INTERESADOS(labelEs = "Interesados"),
 }

@@ -161,7 +161,6 @@ fun PostCallScreen(
                 onNoteChange = viewModel::onNoteChange,
                 onDateChange = viewModel::onFollowUpDateChange,
                 onTimeChange = viewModel::onFollowUpTimeChange,
-                onReasonChange = viewModel::onFollowUpReasonChange,
                 contentPadding = padding,
             )
         }
@@ -177,7 +176,6 @@ private fun PostCallContent(
     onNoteChange: (String) -> Unit,
     onDateChange: (LocalDate) -> Unit,
     onTimeChange: (LocalTime) -> Unit,
-    onReasonChange: (String) -> Unit,
     contentPadding: PaddingValues,
 ) {
     LazyColumn(
@@ -192,10 +190,15 @@ private fun PostCallContent(
     ) {
         item("summary") { CallSummaryCard(client = client, interaction = interaction) }
         item("outcome_header") { SectionLabel("Call outcome") }
+        // OutcomeSelector renders the follow-up form INLINE under the
+        // INTERESTED row when that outcome is selected — agents see it
+        // immediately without scrolling.
         item("outcomes") {
             OutcomeSelector(
-                selected = state.selectedOutcome,
+                state = state,
                 onSelect = onSelectOutcome,
+                onDateChange = onDateChange,
+                onTimeChange = onTimeChange,
             )
         }
         item("note_header") { SectionLabel("Note") }
@@ -208,18 +211,6 @@ private fun PostCallContent(
                 shape = RoundedCornerShape(16.dp),
                 enabled = !state.isSaving,
             )
-        }
-
-        if (state.showFollowUpForm) {
-            item("followup_header") { SectionLabel("Schedule follow-up") }
-            item("followup") {
-                FollowUpForm(
-                    state = state,
-                    onDateChange = onDateChange,
-                    onTimeChange = onTimeChange,
-                    onReasonChange = onReasonChange,
-                )
-            }
         }
 
         state.errorMessage?.let { msg ->
@@ -283,16 +274,27 @@ private fun CallSummaryCard(client: Client, interaction: Interaction) {
 
 @Composable
 private fun OutcomeSelector(
-    selected: CallOutcome?,
+    state: PostCallUiState,
     onSelect: (CallOutcome) -> Unit,
+    onDateChange: (LocalDate) -> Unit,
+    onTimeChange: (LocalTime) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         CallOutcome.values().forEach { outcome ->
             OutcomeRow(
                 outcome = outcome,
-                selected = selected == outcome,
+                selected = state.selectedOutcome == outcome,
                 onSelect = { onSelect(outcome) },
             )
+            // Follow-up form expands directly under the INTERESTED row
+            // so the agent picks date/time without scrolling around.
+            if (outcome == CallOutcome.INTERESTED && state.showFollowUpForm) {
+                FollowUpForm(
+                    state = state,
+                    onDateChange = onDateChange,
+                    onTimeChange = onTimeChange,
+                )
+            }
         }
     }
 }
@@ -354,7 +356,6 @@ private fun FollowUpForm(
     state: PostCallUiState,
     onDateChange: (LocalDate) -> Unit,
     onTimeChange: (LocalTime) -> Unit,
-    onReasonChange: (String) -> Unit,
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
@@ -370,6 +371,12 @@ private fun FollowUpForm(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Text(
+                text = "Schedule follow-up",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                fontWeight = FontWeight.SemiBold,
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -397,15 +404,6 @@ private fun FollowUpForm(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-
-            OutlinedTextField(
-                value = state.followUpReason,
-                onValueChange = onReasonChange,
-                placeholder = { Text("Why are we calling back?") },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp),
-                shape = RoundedCornerShape(12.dp),
-                enabled = !state.isSaving,
-            )
         }
     }
 

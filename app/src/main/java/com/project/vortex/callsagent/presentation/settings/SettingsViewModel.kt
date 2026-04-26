@@ -27,6 +27,7 @@ data class SettingsUiState(
     val agentName: String = "",
     val agentEmail: String = "",
     val autoAdvance: Boolean = true,
+    val autoCallDelaySeconds: Int = SettingsPreferences.DEFAULT_AUTO_CALL_DELAY,
     val pendingCount: Int = 0,
     val lastSync: SyncResult = SyncResult.Idle,
     val isSyncing: Boolean = false,
@@ -61,6 +62,7 @@ class SettingsViewModel @Inject constructor(
         syncManager.lastResult,
         _pendingCount,
         settingsPreferences.themeModeFlow,
+        settingsPreferences.autoCallDelayFlow,
     ) { values ->
         SettingsUiState(
             agentName = (values[0] as String?).orEmpty(),
@@ -70,6 +72,7 @@ class SettingsViewModel @Inject constructor(
             lastSync = values[4] as SyncResult,
             pendingCount = values[5] as Int,
             themeMode = values[6] as ThemeMode,
+            autoCallDelaySeconds = values[7] as Int,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -83,6 +86,10 @@ class SettingsViewModel @Inject constructor(
 
     fun onAutoAdvanceToggle(enabled: Boolean) {
         viewModelScope.launch { settingsPreferences.setAutoAdvance(enabled) }
+    }
+
+    fun onAutoCallDelayChange(seconds: Int) {
+        viewModelScope.launch { settingsPreferences.setAutoCallDelay(seconds) }
     }
 
     fun onThemeModeChange(mode: ThemeMode) {

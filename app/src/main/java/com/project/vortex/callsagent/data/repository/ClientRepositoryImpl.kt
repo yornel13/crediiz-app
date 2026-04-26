@@ -22,6 +22,7 @@ private val OUTCOME_TO_STATUS: Map<CallOutcome, ClientStatus> = mapOf(
     CallOutcome.NO_ANSWER to ClientStatus.PENDING,
     CallOutcome.BUSY to ClientStatus.PENDING,
     CallOutcome.INVALID_NUMBER to ClientStatus.INVALID_NUMBER,
+    CallOutcome.SOLD to ClientStatus.CONVERTED,
 )
 
 @Singleton
@@ -54,6 +55,9 @@ class ClientRepositoryImpl @Inject constructor(
 
     override fun searchRecent(since: Instant, query: String): Flow<List<Client>> =
         dao.searchRecent(since, query).map { list -> list.map { it.toDomain() } }
+
+    override fun observeUnscheduledInterested(now: Instant): Flow<List<Client>> =
+        dao.observeUnscheduledInterested(now).map { list -> list.map { it.toDomain() } }
 
     override suspend fun findById(id: String): Client? = withContext(Dispatchers.IO) {
         dao.findById(id)?.toDomain()

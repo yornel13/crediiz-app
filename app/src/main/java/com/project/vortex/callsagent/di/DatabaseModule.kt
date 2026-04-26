@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.project.vortex.callsagent.data.local.db.AppDatabase
 import com.project.vortex.callsagent.data.local.db.ClientDao
+import com.project.vortex.callsagent.data.local.db.ClientDismissalDao
 import com.project.vortex.callsagent.data.local.db.FollowUpDao
 import com.project.vortex.callsagent.data.local.db.InteractionDao
 import com.project.vortex.callsagent.data.local.db.MissedCallDao
@@ -36,4 +37,5 @@ object DatabaseModule {
     @Provides fun provideNoteDao(db: AppDatabase): NoteDao = db.noteDao()
     @Provides fun provideFollowUpDao(db: AppDatabase): FollowUpDao = db.followUpDao()
     @Provides fun provideMissedCallDao(db: AppDatabase): MissedCallDao = db.missedCallDao()
+    @Provides fun provideClientDismissalDao(db: AppDatabase): ClientDismissalDao = db.clientDismissalDao()
 }

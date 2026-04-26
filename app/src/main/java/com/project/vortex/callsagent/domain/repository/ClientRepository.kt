@@ -26,6 +26,12 @@ interface ClientRepository {
     /** Local search over the "Recientes" feed. */
     fun searchRecent(since: Instant, query: String): Flow<List<Client>>
 
+    /**
+     * Observe INTERESTED clients without an active future follow-up.
+     * Drives the "Sin agendar" section in Agenda.
+     */
+    fun observeUnscheduledInterested(now: Instant): Flow<List<Client>>
+
     /** Find a single client by id. */
     suspend fun findById(id: String): Client?
 

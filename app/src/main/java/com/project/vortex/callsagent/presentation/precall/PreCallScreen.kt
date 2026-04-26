@@ -97,6 +97,7 @@ fun PreCallScreen(
     val notes by viewModel.notes.collectAsState()
     val autoCallSession by viewModel.autoCallSession.collectAsState()
     val pendingAutoCall by viewModel.pendingAutoCall.collectAsState()
+    val autoCallDelaySeconds by viewModel.autoCallDelaySeconds.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -164,15 +165,25 @@ fun PreCallScreen(
         // Renders only when (a) a pending auto-call exists, (b) the client
         // for it matches the one this PreCall is showing (avoids ghost
         // overlays during navigation), and (c) the session is still active.
+        // When the agent configured the countdown to 0 we skip the overlay
+        // entirely and fire the call immediately — same effect, no flash
+        // of the "0" frame the overlay would otherwise render for 1 s.
         pendingAutoCall?.let { pending ->
             val client = uiState.client
             val sessionActive = autoCallSession != null
             if (sessionActive && client != null && pending.clientId == client.id) {
-                AutoCallCountdownOverlay(
-                    clientName = client.name,
-                    onComplete = viewModel::onAutoCallCountdownComplete,
-                    onCancel = viewModel::cancelAutoCall,
-                )
+                if (autoCallDelaySeconds <= 0) {
+                    LaunchedEffect(pending.clientId) {
+                        viewModel.onAutoCallCountdownComplete()
+                    }
+                } else {
+                    AutoCallCountdownOverlay(
+                        clientName = client.name,
+                        delaySeconds = autoCallDelaySeconds,
+                        onComplete = viewModel::onAutoCallCountdownComplete,
+                        onCancel = viewModel::cancelAutoCall,
+                    )
+                }
             }
         }
     }
@@ -795,6 +806,7 @@ private fun outcomeLabel(outcome: CallOutcome): String = when (outcome) {
     CallOutcome.NO_ANSWER -> "No ans."
     CallOutcome.BUSY -> "Busy"
     CallOutcome.INVALID_NUMBER -> "Invalid"
+    CallOutcome.SOLD -> "Sold"
 }
 
 private val timestampFormatter: DateTimeFormatter =
@@ -893,13 +905,15 @@ private fun HeroProgressBar(position: Int, total: Int) {
 @Composable
 private fun AutoCallCountdownOverlay(
     clientName: String,
+    delaySeconds: Int,
     onComplete: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    var remaining by remember { mutableIntStateOf(5) }
+    val total = delaySeconds.coerceAtLeast(1)
+    var remaining by remember(total) { mutableIntStateOf(total) }
 
-    LaunchedEffect(Unit) {
-        repeat(5) {
+    LaunchedEffect(total) {
+        repeat(total) {
             kotlinx.coroutines.delay(1000)
             remaining -= 1
         }

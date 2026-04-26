@@ -228,14 +228,14 @@ pasa a Post-Call. Si el agente cuelga, igual.
 
 ### 5.3 Post-Call — después de colgar
 
-El agente ve cinco botones grandes correspondientes a los cinco
+El agente ve **seis botones grandes** correspondientes a los seis
 **resultados de llamada** (ver § 6). Toca uno, opcionalmente
 escribe una nota, y toca **Guardar**.
 
 Si marcó "INTERESADO", aparecen **selectores de fecha y hora
-obligatorios** para agendar el próximo seguimiento. Sin agendarlo
-no se puede guardar — interesado sin seguimiento es una fuga de
-oportunidad.
+obligatorios inmediatamente debajo del botón** para agendar el
+próximo seguimiento. Sin agendarlo no se puede guardar —
+interesado sin seguimiento es una fuga de oportunidad.
 
 ---
 
@@ -243,11 +243,12 @@ oportunidad.
 
 | Botón | Qué pasa con el cliente | Vuelve a aparecer en Pendientes? |
 |---|---|---|
-| 🟢 **INTERESADO** | Se mueve a estado `INTERESTED`. Obliga a agendar follow-up. | No (queda como lead activo) |
+| 🟢 **INTERESADO** | Se mueve a estado `INTERESTED`. Obliga a agendar follow-up. | No (queda como lead activo en Agenda) |
 | 🔴 **NO INTERESADO** | Se mueve a estado `REJECTED`. Cliente "cerrado". | No |
 | 🟡 **NO CONTESTÓ** | Se queda en `PENDING`. Suma 1 al contador de intentos. | Sí, para reintentar |
 | 🟠 **OCUPADO** | Se queda en `PENDING`. Suma 1 al contador de intentos. | Sí, para reintentar |
 | ⚪ **NÚMERO INVÁLIDO** | Se mueve a estado `INVALID_NUMBER`. | No |
+| 🔵 **VENDIDO (Sold)** ✨ | Se mueve a estado `CONVERTED`. Venta cerrada. | No |
 
 > **Decisión clave (importante para el owner):** con `NO_ANSWER` y
 > `BUSY` el cliente NO sale de la lista — sigue siendo pendiente
@@ -255,8 +256,13 @@ oportunidad.
 > permite a un cliente estar en la lista varios días si el primer
 > intento fue ocupado.
 >
-> Con `NOT_INTERESTED`, `INTERESTED` e `INVALID_NUMBER` el cliente
-> SÍ sale de la lista de Pendientes — la decisión final ya se tomó.
+> Con `NOT_INTERESTED`, `INTERESTED`, `INVALID_NUMBER` y `SOLD` el
+> cliente SÍ sale de la lista de Pendientes — la decisión final ya
+> se tomó.
+>
+> **Sold + auto-llamado:** una venta detiene la cuenta regresiva
+> del modo auto-llamado igual que INTERESADO. El agente respira
+> antes del próximo cliente.
 
 ---
 
@@ -414,103 +420,142 @@ zona sin red:
 
 ---
 
-## 11. Re-organización de Clientes (próxima versión)
+## 11. Re-organización de Clientes y Agenda
 
-La pantalla actual con una sola lista nos quedó corta. Tres
-necesidades reales del agente quedaron afuera:
+> Esta sección reemplaza el diseño anterior de "tres pestañas dentro
+> de Clientes" (Pendientes / Recientes / Interesados). Después de
+> probarlo, decidimos eliminar Interesados como pestaña suelta —
+> los leads interesados viven en la **Agenda**, que es el espacio
+> mental natural del agente para "qué tengo que hacer y con quién
+> estoy trabajando".
 
-1. **"Llamé a Maria hace 10 minutos y olvidé apuntar X."** Hoy no
-   tiene cómo volver a ella.
-2. **"Carlos me dijo que estaba interesado el martes pasado, ¿en
-   qué quedamos?"** Hoy solo lo encuentra entrando al follow-up
-   en la Agenda.
-3. **"El admin me reasignó un cliente que ya había sido cerrado, ¿dónde
-   aparece?"** Hoy no aparece en ningún lado.
+### 11.1 Estructura final
 
-El rediseño introduce **tres vistas dentro del tab Clientes**, con
-un selector tipo pill arriba de la búsqueda:
+**Tab Clientes** — dos vistas:
 
 ```
-[ Pendientes 113 ] [ Recientes 8 ] [ Interesados 12 ]
+[ Pendientes 113 ]   [ Recientes 8 ]
 ```
 
-### 11.1 Pendientes
+**Tab Agenda** — secciones (en orden):
 
-Lo que existe hoy. **Sin cambios** en el comportamiento.
+```
+HOY            (5)
+MAÑANA         (8)
+ESTA SEMANA    (12)
+DESPUÉS        (3)
+SIN AGENDAR    (2)   ← novedad
+```
 
-### 11.2 Recientes (NUEVA)
+### 11.2 Pendientes
 
-Muestra los clientes a los que el agente llamó en las **últimas
-24 horas**, sin importar el resultado. Sirve para:
-- Repasar el día.
-- Volver a un cliente específico para agregar una nota tardía.
-- Reintentar a alguien que estaba ocupado y ahora podría contestar.
+El cold queue del agente. `status = PENDING`, ordenados por la
+posición en la cola. Es donde se trabaja la prospección.
 
-Cada tarjeta de Recientes muestra:
-- Nombre + teléfono.
-- Resultado de la llamada (con un círculo de color).
-- "Hace X minutos / horas".
-- Última nota corta (preview).
-- Dos botones: **Agregar nota** y **Llamar de nuevo**.
+Cada tarjeta muestra: nombre, teléfono, intentos previos, resultado
+de la última llamada, y un menú `⋯` para descartar (ver § 12).
 
-> El cliente desaparece de Recientes solo: a las 24 h se va sin
-> intervención manual.
+### 11.3 Recientes (24 h)
 
-### 11.3 Interesados (NUEVA)
+Muestra **todo lo que el agente tocó en las últimas 24 horas**:
 
-Muestra **todos los clientes que el agente marcó como INTERESADO**,
-sin límite de tiempo. Estos son los **leads tibios** que el agente
-está trabajando — pueden tomar días o semanas hasta que se
-convierten o se rechazan definitivamente.
+- **Llamadas** de cualquier resultado: NO_ANSWER, BUSY, INTERESADO,
+  NO INTERESADO, NÚMERO INVÁLIDO, **VENDIDO** ✨ (nuevo).
+- **Descartes** (ver § 12) — con un botón **"Deshacer descarte"**.
 
-Cada tarjeta de Interesados muestra:
-- Nombre + teléfono.
-- Próximo follow-up agendado (si lo hay).
-- Última nota.
-- Hace cuánto se llamó la última vez + cantidad de intentos.
-- Tres botones: **Nota**, **Llamar**, **Re-agendar**.
+Sirve como:
+- Recall del día para agregar una nota tardía (entrando al detalle).
+- Ventana de recuperación para deshacer un descarte equivocado.
+- Visibilidad de las ventas cerradas del día (badge "Sold" celeste).
 
-### 11.4 ¿Por qué tres vistas y no dos?
+> **Sin botones en la lista.** La tarjeta abre el detalle al tocarla;
+> las acciones (agregar nota, volver a llamar) viven dentro del
+> detalle. Eso mantiene la lista compacta.
 
-Probamos primero una sola vista mixta y luego una con dos. Las dos
-fallaron por la misma razón: **mezclan dos conceptos distintos en la
-cabeza del agente** (recall del día vs pipeline de leads). Tres
-vistas dejan cada concepto con su propio espacio:
+> El cliente desaparece solo: a las 24 h se sale, sin intervención.
 
-- **Pendientes** = "a quién no he llamado."
-- **Recientes** = "a quién llamé hoy."
-- **Interesados** = "a quién estoy trabajando como prospecto."
+### 11.4 Vendido (Sold) — nuevo resultado de llamada
 
-### 11.5 Re-asignación por el admin
+Cuando el agente cierra una venta de crédito durante una llamada, en
+Post-Call ahora hay un **6to botón "Sold"** además de los cinco
+anteriores.
+
+| Botón | Estado del cliente | Vuelve a aparecer en Pendientes? |
+|---|---|---|
+| 🟢 INTERESADO | INTERESTED | No (queda como lead tibio) |
+| 🔴 NO INTERESADO | REJECTED | No |
+| 🟡 NO CONTESTÓ | PENDING | Sí |
+| 🟠 OCUPADO | PENDING | Sí |
+| ⚪ NÚMERO INVÁLIDO | INVALID_NUMBER | No |
+| 🔵 **SOLD (Vendido)** ✨ | CONVERTED | No (cerrado, venta exitosa) |
+
+Comportamiento del modo auto-llamado: SOLD detiene la cuenta regresiva
+(igual que INTERESADO) — el agente merece celebrar y respirar antes de
+la siguiente llamada.
+
+### 11.5 Agenda — Próximas + Sin agendar
+
+La Agenda ya existía con las secciones de tiempo (Hoy, Mañana, Esta
+semana, Después). Ahora también tiene una sección nueva:
+
+#### Sin agendar
+
+Captura los **clientes INTERESADOS sin un seguimiento agendado**.
+Tres situaciones reales lo alimentan:
+
+1. **Admin reasignó un INTERESADO** del agente B al agente A. Los
+   seguimientos del agente B se cancelaron automáticamente. Sin
+   esta sección, el lead llegaría al agente A invisible.
+2. **El agente completó un seguimiento** pero olvidó / no pudo
+   agendar el siguiente. El lead sigue siendo INTERESADO pero no
+   tiene fecha futura.
+3. **Un seguimiento venció** sin que el agente lo marcara como
+   completado.
+
+**Orden:** los más viejos arriba (los que tienen más tiempo
+asignados son los más urgentes — están más cerca de enfriarse).
+
+Cada fila tiene un menú `⋯` con la acción **"Descartar cliente"**
+(ver § 12) — útil cuando el agente decide cerrar el lead sin
+re-llamar.
+
+> **Importante:** la Agenda es la lente "qué tengo que hacer / con
+> quién estoy trabajando". Pendientes es el cold queue. Recientes
+> es la ventana de las últimas 24 h. Cada vista responde una
+> pregunta distinta del agente.
+
+### 11.6 Por qué removimos la pestaña Interesados
+
+La idea original era una tercera pestaña "Interesados" mostrando
+todos los leads tibios. La probamos y vimos que **solapaba ~95% con
+la Agenda** (un INTERESADO con seguimiento ya está en Agenda → Hoy
+/ Mañana / etc.). El 5% restante son los huérfanos — esos ahora
+viven en "Sin agendar".
+
+Resultado: una pestaña menos, datos sin duplicar, y la Agenda gana
+identidad como el centro de control del pipeline.
+
+### 11.7 Re-asignación por el admin
 
 Cuando el admin reasigna un cliente al agente desde el panel web:
 
 | Tipo de re-asignación | Dónde aparece en el celular |
 |---|---|
 | Cliente nuevo (PENDING) | En **Pendientes** apenas se sincroniza |
-| Cliente que estaba con otro agente como INTERESADO | En **Interesados** apenas se sincroniza |
-| Cliente que fue rechazado y se reactiva | Requiere que el admin lo "resetee" a PENDING al re-asignarlo. **Decisión pendiente con el equipo de backend.** |
+| Cliente que era INTERESADO con otro agente | En **Agenda** (Próximas o Sin agendar según tenga seguimiento o no) |
+| Cliente RECHAZADO / DESCARTADO / NÚMERO INVÁLIDO / CONVERTIDO | El servidor lo **resetea automáticamente a PENDING** al re-asignar. Aparece en Pendientes |
 
-> **Para el owner — pregunta abierta:** cuando re-asignas un cliente
-> que estaba marcado "RECHAZADO" o "NÚMERO INVÁLIDO", ¿quieres que
-> se re-active automáticamente como PENDING para que el nuevo
-> agente lo llame de cero? Recomendación nuestra: sí, con un
-> checkbox en el panel de re-asignar para casos donde quieras
-> mantener el estado original.
+> El reset automático es nuevo. Si en el futuro queremos re-asignar
+> sin resetear el estado (caso raro), el panel tendría un checkbox
+> "Mantener estado". Por defecto: reset.
 
-### 11.6 ¿Cuándo entra esto a producción?
+### 11.8 ¿Cuándo entra esto a producción?
 
-El plan tiene cuatro fases:
-
-| Fase | Qué incluye | Versión |
-|---|---|---|
-| P1 | Pendientes + Recientes + sheet "Agregar nota" | v1.0 |
-| P2 | Interesados (tercera pestaña) | v1.0 |
-| P3 | Pantalla "Detalle de cliente" (solo lectura) | v1.1 |
-| P4 | Re-agendar follow-up desde Interesados | v1.1 |
-
-P1 y P2 entran en la primera salida con 4 agentes. P3 y P4 son
-mejoras posteriores.
+| Versión | Qué incluye |
+|---|---|
+| **v1.0 (ya en producción)** | Pendientes + Recientes (con calls + descartes + Sold) + Agenda con Sin agendar |
+| **v1.1** | Pantalla "Detalle de cliente" (solo lectura, historial completo de notas e interactions) |
+| **v1.2** | Re-agendar follow-up desde la card de Agenda |
 
 ---
 
@@ -729,6 +774,19 @@ Vista de "Mi actividad" — solo del agente que está logueado:
 
 ## 14. Preguntas frecuentes del owner
 
+**P: ¿Cómo registra el agente una venta cerrada?**
+R: En Post-Call elige el botón **"Sold"**. El cliente pasa al
+estado CONVERTED y aparece en Recientes 24 h con un badge celeste,
+para que el agente vea sus ventas del día. Después desaparece del
+celular (los reportes de venta los maneja el admin en el panel).
+
+**P: ¿Si un agente acumula muchos "Sin agendar", el sistema avisa?**
+R: Por ahora no — la sección crece sin límite. Si vemos que en
+operación real se acumulan demasiados (señal de mala disciplina del
+agente o de admin que no completa follow-ups), sumamos un warning
+en la cabecera de la sección y un reporte para el admin. Está
+documentado para v2 — ver §13.x del backlog interno.
+
 **P: ¿Qué pasa si un agente pierde la tableta?**
 R: La data del cliente está en el servidor. La tableta se reemplaza,
 el agente vuelve a hacer login y carga su estado actual. Nada se
@@ -828,3 +886,6 @@ web. Esa disciplina es la que mantiene la app rápida y enfocada.
 | Reactivar | Acción del admin para devolver un cliente descartado a la lista activa, al mismo agente |
 | Reasignar (post-descarte) | Acción del admin para mover un cliente descartado a otro agente |
 | Deshacer descarte | Acción del agente disponible solo en las primeras 24 h después del descarte |
+| SOLD / Vendido | Resultado de llamada cuando el agente cerró la venta de crédito en la conversación |
+| CONVERTED | Estado del cliente tras un SOLD. Salida exitosa del pipeline |
+| Sin agendar | Sección de la Agenda con clientes INTERESADOS sin un seguimiento futuro programado |

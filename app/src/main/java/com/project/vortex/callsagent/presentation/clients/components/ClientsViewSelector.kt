@@ -38,7 +38,6 @@ fun ClientsViewSelector(
     selected: ClientsViewKind,
     pendingCount: Int,
     recentCount: Int,
-    interestedCount: Int,
     onSelected: (ClientsViewKind) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -50,7 +49,6 @@ fun ClientsViewSelector(
             val count = when (kind) {
                 ClientsViewKind.PENDIENTES -> pendingCount
                 ClientsViewKind.RECIENTES -> recentCount
-                ClientsViewKind.INTERESADOS -> interestedCount
             }
             ViewPill(
                 label = kind.labelEs,

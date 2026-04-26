@@ -3,15 +3,14 @@ package com.project.vortex.callsagent.presentation.clients
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.DismissalReasonCode
 import com.project.vortex.callsagent.data.sync.SyncManager
 import com.project.vortex.callsagent.data.sync.SyncResult
 import com.project.vortex.callsagent.data.sync.SyncScheduler
-import com.project.vortex.callsagent.common.enums.NoteType
-import com.project.vortex.callsagent.common.enums.SyncStatus
 import com.project.vortex.callsagent.domain.model.Client
+import com.project.vortex.callsagent.domain.model.ClientDismissal
 import com.project.vortex.callsagent.domain.model.MissedCall
-import com.project.vortex.callsagent.domain.model.Note
-import java.util.UUID
+import com.project.vortex.callsagent.domain.repository.ClientDismissalRepository
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
 import com.project.vortex.callsagent.domain.repository.InteractionRepository
@@ -44,6 +43,7 @@ data class ClientsUiState(
 @HiltViewModel
 class ClientsViewModel @Inject constructor(
     private val clientRepository: ClientRepository,
+    private val clientDismissalRepository: ClientDismissalRepository,
     private val missedCallRepository: MissedCallRepository,
     private val interactionRepository: InteractionRepository,
     private val noteRepository: NoteRepository,
@@ -118,51 +118,97 @@ class ClientsViewModel @Inject constructor(
                 initialValue = 0,
             )
 
-    val totalRecentCount: StateFlow<Int> =
-        clientRepository.observeRecent(recentSince)
-            .map { it.size }
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(5_000),
-                initialValue = 0,
-            )
-
-    val totalInterestedCount: StateFlow<Int> =
-        clientRepository.observeAssigned(ClientStatus.INTERESTED)
-            .map { it.size }
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(5_000),
-                initialValue = 0,
-            )
-
     /**
-     * Observes clients for the **active view**, switching between
-     * unfiltered and search-filtered Flows whenever the query changes.
-     * Room Flows emit on every underlying change.
+     * Pendientes list: PENDING clients, optionally search-filtered.
+     * Drives the Pendientes view.
      */
-    val clients: StateFlow<List<Client>> = combine(_viewKind, _searchQuery) { kind, q -> kind to q }
-        .flatMapLatest { (kind, query) -> sourceFor(kind, query) }
+    val pendingClients: StateFlow<List<Client>> = _searchQuery
+        .flatMapLatest { query ->
+            val q = query.trim()
+            if (q.isBlank()) clientRepository.observeAssigned(ClientStatus.PENDING)
+            else clientRepository.searchAssigned(ClientStatus.PENDING, q)
+        }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList(),
         )
 
-    private fun sourceFor(kind: ClientsViewKind, query: String): Flow<List<Client>> {
-        val trimmed = query.trim()
-        val isSearch = trimmed.isNotBlank()
-        return when (kind) {
-            ClientsViewKind.PENDIENTES ->
-                if (isSearch) clientRepository.searchAssigned(ClientStatus.PENDING, trimmed)
-                else clientRepository.observeAssigned(ClientStatus.PENDING)
-            ClientsViewKind.RECIENTES ->
-                if (isSearch) clientRepository.searchRecent(recentSince, trimmed)
-                else clientRepository.observeRecent(recentSince)
-            ClientsViewKind.INTERESADOS ->
-                if (isSearch) clientRepository.searchAssigned(ClientStatus.INTERESTED, trimmed)
-                else clientRepository.observeAssigned(ClientStatus.INTERESTED)
+    /**
+     * Recientes feed — unified list of recent calls AND recent
+     * dismissals, deduped by clientId (the most recent intent wins).
+     * Sorted by timestamp desc.
+     */
+    val recentEntries: StateFlow<List<RecentEntry>> = combine(
+        clientRepository.observeRecent(recentSince),
+        clientDismissalRepository.observeActiveSince(recentSince),
+        _searchQuery,
+    ) { calledClients, dismissals, query ->
+        buildRecentEntries(calledClients, dismissals, query.trim())
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = emptyList(),
+    )
+
+    /**
+     * Search-independent count for the pill. Recientes count = unique
+     * client IDs across calls + dismissals.
+     */
+    val totalRecentCount: StateFlow<Int> = combine(
+        clientRepository.observeRecent(recentSince),
+        clientDismissalRepository.observeActiveSince(recentSince),
+    ) { calledClients, dismissals ->
+        val ids = calledClients.map { it.id }.toMutableSet()
+        dismissals.forEach { ids += it.clientId }
+        ids.size
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = 0,
+    )
+
+    private suspend fun buildRecentEntries(
+        calledClients: List<Client>,
+        dismissals: List<ClientDismissal>,
+        query: String,
+    ): List<RecentEntry> {
+        val byClientId = mutableMapOf<String, RecentEntry>()
+        // Start with calls; dismissals will override when more recent.
+        for (client in calledClients) {
+            client.lastCalledAt?.let {
+                byClientId[client.id] = RecentEntry.Called(client, it)
+            }
         }
+        for (dismissal in dismissals) {
+            // Find the client snapshot. Prefer the one in `calledClients`
+            // (already loaded). Fallback: hit the repo. Without a client
+            // we can't render — skip.
+            val existing = byClientId[dismissal.clientId]
+            val client = (existing?.client) ?: clientRepository.findById(dismissal.clientId)
+            if (client == null) continue
+
+            val entry = RecentEntry.Dismissed(
+                client = client,
+                timestamp = dismissal.dismissedAt,
+                dismissal = dismissal,
+            )
+            // Dismissal wins if it's more recent than an existing call entry.
+            val existingTs = existing?.timestamp
+            if (existingTs == null || dismissal.dismissedAt.isAfter(existingTs)) {
+                byClientId[dismissal.clientId] = entry
+            }
+        }
+
+        var entries = byClientId.values.toList()
+        if (query.isNotBlank()) {
+            val needle = query.lowercase()
+            entries = entries.filter {
+                it.client.name.lowercase().contains(needle) ||
+                    it.client.phone.contains(needle)
+            }
+        }
+        return entries.sortedByDescending { it.timestamp }
     }
 
     init {
@@ -185,14 +231,11 @@ class ClientsViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isRefreshing = true, errorMessage = null)
-            // Refresh the status that backs the active view. Recientes
-            // is fed by client rows already kept in sync by the post-call
-            // path; pulling PENDING covers the most common case.
-            val statusToPull = when (_viewKind.value) {
-                ClientsViewKind.PENDIENTES, ClientsViewKind.RECIENTES -> ClientStatus.PENDING
-                ClientsViewKind.INTERESADOS -> ClientStatus.INTERESTED
-            }
-            clientRepository.refreshAssigned(statusToPull)
+            // Both Pendientes and Recientes are backed by the local
+            // PENDING set plus rows that left PENDING via post-call
+            // updates (which stay in the local DB). Pulling PENDING
+            // covers both views.
+            clientRepository.refreshAssigned(ClientStatus.PENDING)
                 .onFailure { err ->
                     _uiState.value = _uiState.value.copy(
                         errorMessage = err.message ?: "Failed to refresh clients",
@@ -205,30 +248,6 @@ class ClientsViewModel @Inject constructor(
     /** Trigger an explicit sync (covers any pending records the user might have offline). */
     fun forceSync() {
         syncScheduler.triggerImmediateSync()
-    }
-
-    /**
-     * Save a manual note for a client without going through the call flow.
-     * Used by the "Add note" sheet on the Recientes / Interesados cards.
-     * Late-recall after a call, lead-management journaling, etc.
-     */
-    fun addManualNote(clientId: String, content: String) {
-        val trimmed = content.trim()
-        if (trimmed.isBlank()) return
-        viewModelScope.launch {
-            val note = Note(
-                mobileSyncId = UUID.randomUUID().toString(),
-                clientId = clientId,
-                interactionMobileSyncId = null,
-                content = trimmed,
-                type = NoteType.MANUAL,
-                deviceCreatedAt = Instant.now(),
-                syncStatus = SyncStatus.PENDING,
-            )
-            noteRepository.save(note)
-            clientRepository.updateLastNoteLocally(clientId, trimmed)
-            syncScheduler.triggerImmediateSync()
-        }
     }
 
     // ─── Missed calls (Phase 3.5) ───────────────────────────────────────────
@@ -255,10 +274,30 @@ class ClientsViewModel @Inject constructor(
      * caller can navigate to PreCall, or null if the queue is empty.
      */
     fun startAutoCall(): String? {
-        val ids = clients.value.map { it.id }
+        // Auto-call always operates on the Pendientes queue regardless
+        // of which view is active when the FAB is tapped.
+        val ids = pendingClients.value.map { it.id }
         return autoCallOrchestrator.startSession(
             clientIds = ids,
             sourceTab = HomeTabs.CLIENTS,
         )
+    }
+
+    // ─── Dismissal actions ─────────────────────────────────────────────────
+
+    fun dismissClient(
+        clientId: String,
+        reasonCode: DismissalReasonCode?,
+        freeFormReason: String?,
+    ) {
+        viewModelScope.launch {
+            clientDismissalRepository.dismiss(clientId, reasonCode, freeFormReason)
+        }
+    }
+
+    fun undoDismissal(clientId: String) {
+        viewModelScope.launch {
+            clientDismissalRepository.undo(clientId)
+        }
     }
 }

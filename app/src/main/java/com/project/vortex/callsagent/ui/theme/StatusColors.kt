@@ -27,6 +27,7 @@ fun ClientStatus.palette(): StatusPalette = when (this) {
     ClientStatus.INVALID_NUMBER -> errorPalette()
     ClientStatus.CONVERTED -> infoPalette()
     ClientStatus.DO_NOT_CALL -> errorPalette()
+    ClientStatus.DISMISSED -> neutralPalette()
 }
 
 @Composable
@@ -37,6 +38,7 @@ fun CallOutcome.palette(): StatusPalette = when (this) {
     CallOutcome.NO_ANSWER -> warningPalette()
     CallOutcome.BUSY -> warningPalette()
     CallOutcome.INVALID_NUMBER -> errorPalette()
+    CallOutcome.SOLD -> infoPalette()
 }
 
 @Composable
@@ -55,8 +57,9 @@ fun ClientStatus.label(): String = when (this) {
     ClientStatus.INTERESTED -> "Interested"
     ClientStatus.REJECTED -> "Rejected"
     ClientStatus.INVALID_NUMBER -> "Invalid number"
-    ClientStatus.CONVERTED -> "Converted"
+    ClientStatus.CONVERTED -> "Sold"
     ClientStatus.DO_NOT_CALL -> "Do not call"
+    ClientStatus.DISMISSED -> "Dismissed"
 }
 
 @Composable
@@ -67,6 +70,7 @@ fun CallOutcome.label(): String = when (this) {
     CallOutcome.NO_ANSWER -> "No answer"
     CallOutcome.BUSY -> "Busy"
     CallOutcome.INVALID_NUMBER -> "Invalid number"
+    CallOutcome.SOLD -> "Sold"
 }
 
 @Composable

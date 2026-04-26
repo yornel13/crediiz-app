@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
+import com.project.vortex.callsagent.data.local.preferences.SettingsPreferences
 import com.project.vortex.callsagent.data.sync.SyncScheduler
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.Note
@@ -57,6 +58,7 @@ class PreCallViewModel @Inject constructor(
     private val syncScheduler: SyncScheduler,
     private val callManager: CallManager,
     private val autoCallOrchestrator: AutoCallOrchestrator,
+    settingsPreferences: SettingsPreferences,
 ) : ViewModel() {
 
     /** Live auto-call session state — renders the badge + Skip button. */
@@ -64,6 +66,17 @@ class PreCallViewModel @Inject constructor(
 
     /** Live "pending auto-call" — drives the countdown overlay. */
     val pendingAutoCall = autoCallOrchestrator.pendingAutoCall
+
+    /**
+     * Agent-configured countdown delay (seconds). 0 disables the
+     * overlay entirely — the dial fires immediately.
+     */
+    val autoCallDelaySeconds: StateFlow<Int> = settingsPreferences.autoCallDelayFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = SettingsPreferences.DEFAULT_AUTO_CALL_DELAY,
+        )
 
     /**
      * Place the outgoing call via the native Telecom path. The

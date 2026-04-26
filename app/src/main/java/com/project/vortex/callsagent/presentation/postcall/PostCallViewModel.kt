@@ -41,7 +41,6 @@ data class PostCallUiState(
     val noteText: String = "",
     val followUpDate: LocalDate? = null,
     val followUpTime: LocalTime? = null,
-    val followUpReason: String = "",
     val isSaving: Boolean = false,
     val errorMessage: String? = null,
 ) {
@@ -55,7 +54,6 @@ data class PostCallUiState(
             return if (selectedOutcome == CallOutcome.INTERESTED) {
                 followUpDate != null &&
                     followUpTime != null &&
-                    followUpReason.isNotBlank() &&
                     isFollowUpInFuture()
             } else true
         }
@@ -130,9 +128,6 @@ class PostCallViewModel @Inject constructor(
     fun onFollowUpTimeChange(time: LocalTime) =
         _uiState.update { it.copy(followUpTime = time) }
 
-    fun onFollowUpReasonChange(text: String) =
-        _uiState.update { it.copy(followUpReason = text) }
-
     fun save() {
         val state = _uiState.value
         if (!state.canSave) return
@@ -179,6 +174,11 @@ class PostCallViewModel @Inject constructor(
                     val date = state.followUpDate ?: error("date required")
                     val time = state.followUpTime ?: error("time required")
                     val scheduledAt = date.atTime(time).atZone(zone).toInstant()
+                    // The optional Note above already covers the "agent
+                    // wants to write context" case — follow-up reason was
+                    // redundant. We send an empty string so the existing
+                    // backend contract (reason: string, non-optional)
+                    // keeps working without a deploy.
                     val followUp = FollowUp(
                         mobileSyncId = UUID.randomUUID().toString(),
                         clientId = clientId,
@@ -186,7 +186,7 @@ class PostCallViewModel @Inject constructor(
                         clientPhone = state.client?.phone,
                         interactionMobileSyncId = interaction.mobileSyncId,
                         scheduledAt = scheduledAt,
-                        reason = state.followUpReason.trim(),
+                        reason = "",
                         status = FollowUpStatus.PENDING,
                         completedAt = null,
                         deviceCreatedAt = Instant.now(),

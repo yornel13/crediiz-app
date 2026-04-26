@@ -81,6 +81,35 @@ interface ClientDao {
     )
     fun searchRecent(since: Instant, query: String): Flow<List<ClientEntity>>
 
+    /**
+     * "Sin agendar" feed for the Agenda tab — INTERESTED leads that
+     * have NO pending follow-up scheduled in the future. Three real
+     * paths land a client here:
+     *
+     *  1. Admin reassigned an INTERESTED client from another agent
+     *     (the previous agent's follow-ups got cancelled server-side).
+     *  2. The agent completed a follow-up but didn't schedule the next.
+     *  3. A follow-up's `scheduledAt` passed without being marked
+     *     completed.
+     *
+     * Sort: oldest `assignedAt` first — the older the orphan, the
+     * more urgent (most likely to go cold).
+     */
+    @Query(
+        """
+        SELECT c.* FROM clients c
+        WHERE c.status = 'INTERESTED'
+          AND NOT EXISTS (
+            SELECT 1 FROM follow_ups f
+            WHERE f.clientId = c.id
+              AND f.status = 'PENDING'
+              AND f.scheduledAt > :now
+          )
+        ORDER BY c.assignedAt ASC
+        """,
+    )
+    fun observeUnscheduledInterested(now: Instant): Flow<List<ClientEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(clients: List<ClientEntity>)
 
@@ -140,4 +169,7 @@ interface ClientDao {
 
     @Query("UPDATE clients SET lastNote = :note, updatedAt = :now WHERE id = :clientId")
     suspend fun updateLastNote(clientId: String, note: String, now: Instant)
+
+    @Query("UPDATE clients SET status = :status, updatedAt = :now WHERE id = :clientId")
+    suspend fun setStatus(clientId: String, status: ClientStatus, now: Instant)
 }

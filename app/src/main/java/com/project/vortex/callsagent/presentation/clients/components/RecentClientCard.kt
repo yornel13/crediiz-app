@@ -2,7 +2,6 @@ package com.project.vortex.callsagent.presentation.clients.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,15 +12,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.NoteAdd
-import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,23 +39,18 @@ import java.time.temporal.ChronoUnit
  * outcome badge, and a one-line note preview. See
  * `docs/CLIENTS_TAB_REDESIGN.md § 4.2.2`.
  *
- * Two actions:
- *  - **Add note** — opens a bottom sheet to journal late thoughts.
- *  - **Call again** — only enabled for transient outcomes (NO_ANSWER /
- *    BUSY). For terminal outcomes (NOT_INTERESTED, INVALID_NUMBER) the
- *    button is hidden — re-dialing those is a UX anti-pattern. For
- *    INTERESTED the canonical entry point is the Interesados view.
+ * The whole card is clickable and opens the client detail (Pre-Call),
+ * where Add-note and Call-again actions live. We deliberately do NOT
+ * surface those actions on the list row — they bloat the card and
+ * the agent already gets them inside the detail.
  */
 @Composable
 fun RecentClientCard(
     client: Client,
     onOpen: () -> Unit,
-    onAddNote: () -> Unit,
-    onCallAgain: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val outcome = client.lastOutcome
-    val showCallAgain = outcome == CallOutcome.NO_ANSWER || outcome == CallOutcome.BUSY
 
     Card(
         modifier = modifier
@@ -137,30 +126,6 @@ fun RecentClientCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                }
-
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = onAddNote) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.NoteAdd,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text("Add note", style = MaterialTheme.typography.labelMedium)
-                    }
-                    if (showCallAgain) {
-                        TextButton(onClick = onCallAgain) {
-                            Icon(
-                                Icons.Filled.Phone,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text("Call again", style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
                 }
             }
         }
