@@ -42,6 +42,9 @@ interface FollowUpDao {
     @Query("SELECT COUNT(*) FROM follow_ups WHERE syncStatus = :status OR completionSyncStatus = :status")
     suspend fun countPending(status: SyncStatus): Int
 
+    @Query("SELECT COUNT(*) FROM follow_ups WHERE syncStatus = :status OR completionSyncStatus = :status")
+    fun observeCountPending(status: SyncStatus): Flow<Int>
+
     @Query("UPDATE follow_ups SET syncStatus = :status WHERE mobileSyncId IN (:ids)")
     suspend fun markSyncStatus(ids: List<String>, status: SyncStatus)
 

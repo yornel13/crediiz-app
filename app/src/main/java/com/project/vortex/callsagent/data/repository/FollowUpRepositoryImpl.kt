@@ -87,4 +87,7 @@ class FollowUpRepositoryImpl @Inject constructor(
     override suspend fun countPending(): Int = withContext(Dispatchers.IO) {
         dao.countPending(SyncStatus.PENDING)
     }
+
+    override fun observePendingCount(): Flow<Int> =
+        dao.observeCountPending(SyncStatus.PENDING)
 }

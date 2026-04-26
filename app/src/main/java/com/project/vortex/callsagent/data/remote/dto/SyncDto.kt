@@ -18,6 +18,12 @@ data class SyncRequest(
 data class SyncInteractionDto(
     val mobileSyncId: String,
     val clientId: String,
+    /**
+     * Direction of the call. `"OUTBOUND"` (agent dialed) or `"INBOUND"`
+     * (agent answered an incoming call — Phase 3.5 Option B). Backend
+     * defaults to OUTBOUND if absent so older clients still work.
+     */
+    val direction: String,
     val callStartedAt: String,       // ISO-8601
     val callEndedAt: String,         // ISO-8601
     val durationSeconds: Int,

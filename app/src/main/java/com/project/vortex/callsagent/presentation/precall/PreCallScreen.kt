@@ -1,7 +1,5 @@
 package com.project.vortex.callsagent.presentation.precall
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -44,10 +43,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -57,13 +59,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.Note
+import com.project.vortex.callsagent.presentation.autocall.AutoCallSession
+import com.project.vortex.callsagent.presentation.autocall.PendingAutoCall
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.components.SectionHeader
 import com.project.vortex.callsagent.ui.components.StatusPill
@@ -85,14 +88,42 @@ private val HeroShape = RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.d
 @Composable
 fun PreCallScreen(
     onBack: () -> Unit,
+    onSkipToNext: (clientId: String) -> Unit,
+    onSkipToSummary: () -> Unit,
+    onExitAutoCall: () -> Unit,
     viewModel: PreCallViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val notes by viewModel.notes.collectAsState()
+    val autoCallSession by viewModel.autoCallSession.collectAsState()
+    val pendingAutoCall by viewModel.pendingAutoCall.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is PreCallEvent.SkipToNext -> onSkipToNext(event.clientId)
+                PreCallEvent.SkipToSummary -> onSkipToSummary()
+                PreCallEvent.ExitAutoCall -> onExitAutoCall()
+            }
+        }
+    }
+
+    // Back during an auto-call session also clears the session — keeps the
+    // orchestrator state honest (no ghost session badge if the agent
+    // navigates back to a non-queue client later).
+    val effectiveOnBack: () -> Unit = {
+        if (autoCallSession != null) viewModel.exitAutoCall()
+        else onBack()
+    }
 
     Scaffold(
         bottomBar = {
-            CallActionBar(client = uiState.client)
+            CallActionBar(
+                client = uiState.client,
+                inAutoCall = autoCallSession != null,
+                onCall = viewModel::startCall,
+                onSkip = viewModel::skipCurrent,
+            )
         },
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -104,7 +135,7 @@ fun PreCallScreen(
 
             uiState.client == null -> ErrorState(
                 message = uiState.errorMessage ?: "Client not found",
-                onBack = onBack,
+                onBack = effectiveOnBack,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
@@ -113,8 +144,10 @@ fun PreCallScreen(
             else -> PreCallContent(
                 client = uiState.client!!,
                 notes = notes,
+                autoCallSession = autoCallSession,
                 onAddNote = viewModel::openNoteSheet,
-                onBack = onBack,
+                onBack = effectiveOnBack,
+                onExitAutoCall = viewModel::exitAutoCall,
                 contentPadding = padding,
             )
         }
@@ -126,6 +159,22 @@ fun PreCallScreen(
                 onSave = viewModel::saveManualNote,
             )
         }
+
+        // Auto-call countdown — full-screen overlay above everything else.
+        // Renders only when (a) a pending auto-call exists, (b) the client
+        // for it matches the one this PreCall is showing (avoids ghost
+        // overlays during navigation), and (c) the session is still active.
+        pendingAutoCall?.let { pending ->
+            val client = uiState.client
+            val sessionActive = autoCallSession != null
+            if (sessionActive && client != null && pending.clientId == client.id) {
+                AutoCallCountdownOverlay(
+                    clientName = client.name,
+                    onComplete = viewModel::onAutoCallCountdownComplete,
+                    onCancel = viewModel::cancelAutoCall,
+                )
+            }
+        }
     }
 }
 
@@ -133,8 +182,10 @@ fun PreCallScreen(
 private fun PreCallContent(
     client: Client,
     notes: List<Note>,
+    autoCallSession: AutoCallSession?,
     onAddNote: () -> Unit,
     onBack: () -> Unit,
+    onExitAutoCall: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     LazyColumn(
@@ -144,7 +195,12 @@ private fun PreCallContent(
         modifier = Modifier.fillMaxSize(),
     ) {
         item("hero") {
-            Hero(client = client, onBack = onBack)
+            Hero(
+                client = client,
+                autoCallSession = autoCallSession,
+                onBack = onBack,
+                onExitAutoCall = onExitAutoCall,
+            )
         }
 
         if (client.extraData.isNotEmpty()) {
@@ -225,7 +281,12 @@ private fun PreCallContent(
  * No floating-card overlap — clean LazyColumn flow, no hit-testing bugs.
  */
 @Composable
-private fun Hero(client: Client, onBack: () -> Unit) {
+private fun Hero(
+    client: Client,
+    autoCallSession: AutoCallSession?,
+    onBack: () -> Unit,
+    onExitAutoCall: () -> Unit,
+) {
     val isDark = MaterialTheme.colorScheme.surface.let {
         0.2126f * it.red + 0.7152f * it.green + 0.0722f * it.blue < 0.5f
     }
@@ -258,7 +319,23 @@ private fun Hero(client: Client, onBack: () -> Unit) {
                         tint = Color.White,
                     )
                 }
+                if (autoCallSession != null) {
+                    AutoCallTopChip(
+                        position = autoCallSession.displayPosition,
+                        total = autoCallSession.total,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
                 Spacer(Modifier.weight(1f))
+                if (autoCallSession != null) {
+                    IconButton(onClick = onExitAutoCall) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Exit auto-call",
+                            tint = Color.White,
+                        )
+                    }
+                }
             }
 
             // Identity block
@@ -338,7 +415,16 @@ private fun Hero(client: Client, onBack: () -> Unit) {
                 )
             }
 
-            Spacer(Modifier.height(20.dp))
+            if (autoCallSession != null) {
+                Spacer(Modifier.height(20.dp))
+                HeroProgressBar(
+                    position = autoCallSession.displayPosition,
+                    total = autoCallSession.total,
+                )
+                Spacer(Modifier.height(12.dp))
+            } else {
+                Spacer(Modifier.height(20.dp))
+            }
         }
     }
 }
@@ -553,29 +639,44 @@ private fun EmptyNotes() {
 }
 
 @Composable
-private fun CallActionBar(client: Client?) {
-    val context = LocalContext.current
+private fun CallActionBar(
+    client: Client?,
+    inAutoCall: Boolean,
+    onCall: () -> Unit,
+    onSkip: () -> Unit,
+) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 6.dp,
         shadowElevation = 16.dp,
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            if (inAutoCall) {
+                OutlinedButton(
+                    onClick = onSkip,
+                    enabled = client != null,
+                    modifier = Modifier.heightIn(min = 60.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                ) {
+                    Text(
+                        text = "Skip",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
             Button(
-                onClick = {
-                    val phone = client?.phone ?: return@Button
-                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
-                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                    runCatching { context.startActivity(intent) }
-                },
+                onClick = onCall,
                 enabled = client != null,
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .weight(1f)
                     .heightIn(min = 60.dp),
                 shape = RoundedCornerShape(20.dp),
                 colors = ButtonDefaults.buttonColors(
@@ -713,6 +814,148 @@ private fun formatRelativeShort(instant: Instant): String {
         else -> {
             val date = instant.atZone(ZoneId.systemDefault()).toLocalDate()
             "${date.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }} ${date.dayOfMonth}"
+        }
+    }
+}
+
+// ─── Auto-call hero chip + progress + countdown overlay (Phase 4) ────────
+
+/**
+ * The "Auto-call · 3 / 116" pill that sits in the hero's top bar next to
+ * the back arrow. White-translucent on the gradient — same vocabulary as
+ * the status pill below the avatar.
+ */
+@Composable
+private fun AutoCallTopChip(
+    position: Int,
+    total: Int,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = PillShape,
+        color = Color.White.copy(alpha = 0.18f),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Phone,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(14.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = "Auto-call",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.85f),
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "$position / $total",
+                style = MaterialTheme.typography.labelMedium,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+/**
+ * Thin progress track sitting at the bottom of the hero, just inside the
+ * rounded corners. Visualizes how far the agent has advanced through the
+ * auto-call queue. Pure decoration — does NOT itself accept input.
+ */
+@Composable
+private fun HeroProgressBar(position: Int, total: Int) {
+    val fraction = if (total <= 0) 0f else (position.toFloat() / total).coerceIn(0f, 1f)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .height(4.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(Color.White.copy(alpha = 0.18f)),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(fraction)
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(Color.White),
+        )
+    }
+}
+
+@Composable
+private fun AutoCallCountdownOverlay(
+    clientName: String,
+    onComplete: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    var remaining by remember { mutableIntStateOf(5) }
+
+    LaunchedEffect(Unit) {
+        repeat(5) {
+            kotlinx.coroutines.delay(1000)
+            remaining -= 1
+        }
+        onComplete()
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.92f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(32.dp),
+        ) {
+            Text(
+                text = "Calling next in",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Spacer(Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(140.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = remaining.coerceAtLeast(0).toString(),
+                    style = MaterialTheme.typography.displayLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = clientName.ifBlank { "Next client" },
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+            Spacer(Modifier.height(28.dp))
+            OutlinedButton(
+                onClick = onCancel,
+                shape = RoundedCornerShape(20.dp),
+                contentPadding = PaddingValues(horizontal = 28.dp, vertical = 12.dp),
+            ) {
+                Text(
+                    text = "Cancel",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
     }
 }

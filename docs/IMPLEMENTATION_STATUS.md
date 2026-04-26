@@ -10,6 +10,13 @@ Last updated: **2026-04-24** (sync/refresh defects logged in KNOWN_ISSUES.md)
 > (KI-01 through KI-05). Three are 🔴 High severity. None are blocking
 > Phase 0 or Phase 1, but they must be triaged before v1.0 release.
 
+> 🔗 **Backend coordination (calls-core):** the `direction` field on
+> `InteractionEntity` (Phase 3.5 Option B) is now wired end-to-end —
+> `Interaction` schema accepts the field, `SyncInteractionDto` (NestJS
+> + Kotlin) carries it, sync.service maps it through. Backend defaults
+> missing values to `OUTBOUND` so older mobile clients keep working.
+> Verified 2026-04-25: 11/11 NestJS test suites pass, Android compiles.
+
 ---
 
 ## 🎯 MVP (v1.0) scope — quick reference
@@ -50,6 +57,7 @@ pilot could defer both).
 | App entry + DI bootstrap | `CallsAgentApp.kt`, `MainActivity.kt`, `di/*` | Hilt + WorkManager config wired. |
 | Home hub with bottom nav | `presentation/home/HomeScreen.kt` | 3 tabs: Clients / Agenda / Settings. |
 | Clients tab (list + search) | `presentation/clients/` | Reads PENDING clients from Room. Local filter. FAB present but auto-call logic stubbed. |
+| **Clients tab redesign — P1+P2 (Pendientes / Recientes / Interesados)** | `presentation/clients/`, `presentation/clients/components/`, `data/local/db/ClientDao.kt`, `data/repository/ClientRepositoryImpl.kt` | Segmented pill selector, three view-aware flows + counts, dedicated cards for Recientes (outcome badge + add-note action) and Interesados (lead-management metadata). Add-note bottom sheet creates `NoteType.MANUAL` notes for late recall. View-aware Hero + EmptyState. Auto-call FAB scoped to Pendientes only. Spec: `docs/CLIENTS_TAB_REDESIGN.md`. **Blocked from full release by KI-06 (BE-01)** — see `docs/PENDING_BACKEND_WORK.md`. |
 | Agenda tab (follow-ups grouped by date) | `presentation/agenda/` | Today / Tomorrow / This Week / Later groupings from Room. |
 | Settings tab (account info + toggles + sync status) | `presentation/settings/` | Auto-advance toggle, force-sync button, sync status dashboard. |
 | Room database (4 entities + DAOs) | `data/local/db/`, `data/local/entity/` | Client, Interaction, Note, FollowUp. |

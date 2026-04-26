@@ -20,6 +20,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -85,6 +86,14 @@ fun HomeScreen(
                         },
                         icon = { Icon(tab.icon, contentDescription = tab.label) },
                         label = { Text(tab.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            // Default `secondaryContainer` collides with `surfaceContainer`
+                            // in the light scheme (both Slate100), making the selected pill
+                            // invisible. Use the brand teal container instead.
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                        ),
                     )
                 }
             }
@@ -107,9 +116,11 @@ fun HomeScreen(
                 composable(HomeTabs.CLIENTS) {
                     ClientsScreen(
                         onClientSelected = onClientSelected,
-                        onStartAutoCall = {
-                            // Phase 5: auto-call uses the same destination + a flag.
-                            // For now jump to the first client's pre-call.
+                        onStartAutoCall = { firstClientId ->
+                            // Auto-call is just a normal PreCall navigation —
+                            // PreCallScreen reads the orchestrator state to
+                            // know it's in a session.
+                            onClientSelected(firstClientId)
                         },
                     )
                 }

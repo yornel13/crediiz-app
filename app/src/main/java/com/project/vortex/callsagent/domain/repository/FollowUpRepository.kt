@@ -25,4 +25,7 @@ interface FollowUpRepository {
     suspend fun markCompletionSynced(mobileSyncIds: List<String>)
 
     suspend fun countPending(): Int
+
+    /** Live count of follow-ups whose creation OR completion is pending sync. */
+    fun observePendingCount(): Flow<Int>
 }

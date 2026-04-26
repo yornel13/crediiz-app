@@ -1,9 +1,11 @@
 package com.project.vortex.callsagent.data.local.db
 
 import androidx.room.TypeConverter
+import com.project.vortex.callsagent.common.enums.CallDirection
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.common.enums.FollowUpStatus
+import com.project.vortex.callsagent.common.enums.MissedCallReason
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
 import com.squareup.moshi.Moshi
@@ -51,6 +53,14 @@ class Converters {
     // ─── SyncStatus ↔ String ──────────────────────────────────────────────────
     @TypeConverter fun syncStatusToString(v: SyncStatus): String = v.name
     @TypeConverter fun stringToSyncStatus(v: String): SyncStatus = SyncStatus.valueOf(v)
+
+    // ─── CallDirection ↔ String ───────────────────────────────────────────────
+    @TypeConverter fun callDirectionToString(v: CallDirection): String = v.name
+    @TypeConverter fun stringToCallDirection(v: String): CallDirection = CallDirection.valueOf(v)
+
+    // ─── MissedCallReason ↔ String ────────────────────────────────────────────
+    @TypeConverter fun missedCallReasonToString(v: MissedCallReason): String = v.name
+    @TypeConverter fun stringToMissedCallReason(v: String): MissedCallReason = MissedCallReason.valueOf(v)
 
     // ─── Map<String, Any?> ↔ JSON String ──────────────────────────────────────
     @TypeConverter

@@ -10,6 +10,8 @@ Step-by-step roadmap to ship the MVP. Derived from:
 - [`KNOWN_ISSUES.md`](./KNOWN_ISSUES.md) — defects + architectural concerns pending review (must triage before v1.0)
 - [`TELECOM_ARCHITECTURE.md`](./TELECOM_ARCHITECTURE.md) — `calls-agends` as default dialer; permissions, services, decisions
 - [`DIALER_SETUP_GUIDE.md`](./DIALER_SETUP_GUIDE.md) — step-by-step implementation playbook for Phase 3
+- [`UI_GUIDELINES.md`](./UI_GUIDELINES.md) — non-negotiable rules for new screens (insets, orientation, finalize flows)
+- [`BACKEND_COORDINATION.md`](./BACKEND_COORDINATION.md) — endpoints, shared schema, run/deploy/seed checklist
 
 **How to use this file**
 
@@ -105,8 +107,8 @@ Phase 0 + Phase 1 can run beside early Phase 3.1 scaffolding.
 | Phase 0 | ✅ **6/6 done** | Login-time hydration complete. Stale-data banner live. |
 | Phase 1 | ⚪ 0/7 | Pre-Call — not started. Nav route is a TODO stub. |
 | Phase 2 | ⚪ 0/6 | Post-Call — not started. Nav route is a TODO stub. |
-| Phase 3 | ⚪ 0/31 | Native dialer — not started. Gated by GATE-A. 6 sub-phases (3.0 onboarding gate · 3.1 ConnectionService · 3.2 InCallService+UI · 3.3 state machine · 3.4 disconnect mapper · 3.5 incoming UI Option B + missed-call log). |
-| Phase 4 | ⚪ 0/6 | Auto-call — not started. |
+| Phase 3 | ✅ 31/31 | All sub-phases complete. Real outgoing + incoming calls (Option B), persisted as Interactions with `direction` flag, missed-calls log + banner. Crash recovery (3.3.4) deferred — no schema for "in-flight" calls in v1.0. |
+| Phase 4 | ✅ 6/7 | Auto-call orchestrator + Skip + 5s countdown overlay + session summary. Agenda FAB entry point (4.2 partial) deferred until Phase 5. |
 | Phase 5 | ⚪ 0/6 | Follow-up notifications — not started. |
 | Phase 6 | ⚪ 0/5 | Tablet polish — not started. |
 | Phase 7 | ⚪ 0/7 | Hardening — not started. |
@@ -330,36 +332,34 @@ anything visible to the user.
 permissions + the dialer role. Replaces the old 3.1.x onboarding prompt
 with a hard gate.
 
-- [ ] **3.0.1** Manifest declarations (full set per
+- [x] **3.0.1** Manifest declarations (full set per
   [`DIALER_SETUP_GUIDE.md` § 1](./DIALER_SETUP_GUIDE.md)):
-  - All 5 runtime permissions (CALL_PHONE, READ_PHONE_STATE,
-    MODIFY_AUDIO_SETTINGS, POST_NOTIFICATIONS,
+  - ✅ Runtime permissions (CALL_PHONE, ANSWER_PHONE_CALLS,
+    READ_PHONE_STATE, MODIFY_AUDIO_SETTINGS, POST_NOTIFICATIONS,
     REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).
-  - Manifest-only permissions (MANAGE_OWN_CALLS, FOREGROUND_SERVICE,
+  - ✅ Manifest-only permissions (MANAGE_OWN_CALLS, FOREGROUND_SERVICE,
     FOREGROUND_SERVICE_PHONE_CALL).
-  - `MainActivity` `ACTION_DIAL` intent-filters (with and without
-    `tel:` scheme).
-  - `OnboardingActivity` declaration with `noHistory`,
-    `excludeFromRecents`, `singleTask`.
-  - `InCallActivity` declaration with `showWhenLocked`, `turnScreenOn`,
-    landscape orientation.
-  - `CallsConnectionService` and `CallsInCallService` declarations
-    with required `meta-data` and `intent-filter`s.
-- [ ] **3.0.2** Create `OnboardingGate` singleton that checks all 5
-  requirements and exposes `allRequirementsMet(): Boolean`.
-- [ ] **3.0.3** Create `OnboardingActivity` (separate from Compose nav
-  graph) with 5 steps. Each step:
-  - Shows status indicator (red / green).
-  - Provides action button (request / open settings if hard-denied).
-  - Re-checks status in `onResume`.
-- [ ] **3.0.4** Hard-deny detection — if a permission was denied with
-  "Don't ask again", swap the action button to open
-  `Settings.ACTION_APPLICATION_DETAILS_SETTINGS`.
-- [ ] **3.0.5** Block back navigation, exclude from recents, hide from
-  task switcher. Only path out is completing all 5 steps.
-- [ ] **3.0.6** `MainActivity.onResume` always re-checks
-  `OnboardingGate.allRequirementsMet()`. If false → redirect to
-  `OnboardingActivity` and `finish()`.
+  - ✅ `MainActivity` `ACTION_DIAL` intent-filters.
+  - ✅ `OnboardingActivity` declaration.
+  - ✅ `InCallActivity` declaration.
+  - ✅ `CallsConnectionService` + `CallsInCallService` declarations.
+- [x] **3.0.2** `OnboardingGate` singleton implemented with
+  `allMet()` + `isStepMet(step)`. 6 steps via `OnboardingStep` enum.
+- [x] **3.0.3** `OnboardingActivity` + `OnboardingScreen` with 6
+  status cards (one per step). Each card shows icon, title, description,
+  status, and action button. `onResume` re-checks status.
+- [x] **3.0.4** Hard-deny detection via `shouldShowRequestPermissionRationale`.
+  Hard-denied steps swap to "Settings" button → opens
+  `ACTION_APPLICATION_DETAILS_SETTINGS`.
+- [x] **3.0.5** Back blocked via `OnBackPressedCallback`,
+  `excludeFromRecents`, `noHistory`, `singleTask`.
+- [x] **3.0.6** `MainActivity.onResume` checks
+  `OnboardingGate.allMet()` and redirects with `finish()` if false.
+
+**Skeletons of `CallsConnectionService`, `CallsInCallService`,
+`CallManager`, and `InCallActivity` were also added** (manifest needs
+real classes for the OS to bind during role assignment). Their full
+implementations land in Phases 3.1, 3.2 and 3.3.
 
 **DoD:** Fresh install → login → 5-step onboarding visible. Each
 permission missing keeps "Continue" disabled. After all 5 are green,

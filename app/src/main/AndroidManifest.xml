@@ -6,16 +6,20 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Telecom / Calling -->
+    <!-- Default-dialer required permissions -->
     <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+
+    <!-- Battery optimization (Samsung One UI is aggressive about killing services) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Boot receiver (re-schedule WorkManager + alarms after reboot) -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
-    <!-- Notifications (follow-up reminders + sync status) -->
+    <!-- Notifications (follow-up reminders + sync status + foreground service) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Foreground service (keep call tracking alive during active calls) -->
@@ -25,10 +29,6 @@
     <!-- Exact alarms for follow-up reminders -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
-
-    <!-- Required to query telecom capabilities on API 30+ -->
-    <uses-permission android:name="android.permission.READ_CONTACTS"
-        tools:ignore="ScopedStorage" />
 
     <application
         android:name=".CallsAgentApp"
@@ -52,7 +52,88 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Dialer-role eligibility — required so RoleManager.ROLE_DIALER lists us. -->
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="tel" />
+            </intent-filter>
         </activity>
+
+        <!-- Mandatory onboarding gate — non-skippable while requirements are missing. -->
+        <activity
+            android:name=".presentation.onboarding.OnboardingActivity"
+            android:exported="false"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.CallsAgends" />
+
+        <!-- Custom in-call UI launched by CallsInCallService. Lock-screen
+             friendly so it surfaces over a locked device. Honors the
+             system orientation — no lock. -->
+        <activity
+            android:name=".presentation.incall.InCallActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.CallsAgends" />
+
+        <!-- Telecom ConnectionService — bound by the OS when our role is held
+             and the app places or receives calls. -->
+        <service
+            android:name=".telecom.CallsConnectionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
+
+        <!-- Telecom InCallService — bound by the OS to surface in-call UI. -->
+        <service
+            android:name=".telecom.CallsInCallService"
+            android:exported="true"
+            android:permission="android.permission.BIND_INCALL_SERVICE">
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_UI"
+                android:value="true" />
+            <meta-data
+                android:name="android.telecom.IN_CALL_SERVICE_RINGING"
+                android:value="false" />
+            <intent-filter>
+                <action android:name="android.telecom.InCallService" />
+            </intent-filter>
+        </service>
+
+        <!--
+          Disable WorkManager's eager auto-initialization via androidx.startup.
+          Reason: our SyncWorker is a @HiltWorker built by HiltWorkerFactory,
+          but the startup ContentProvider runs BEFORE the Application.onCreate
+          finishes injecting Hilt deps — WorkManager would init with the
+          default factory and fail to instantiate SyncWorker (NoSuchMethodException
+          on the 2-arg constructor).
+
+          With this removed, WorkManager initializes lazily on first
+          getInstance() call and picks up our Configuration.Provider from
+          CallsAgentApp.
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
     </application>
 
 </manifest>

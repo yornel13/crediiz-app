@@ -22,6 +22,9 @@ interface InteractionDao {
     @Query("SELECT COUNT(*) FROM interactions WHERE syncStatus = :status")
     suspend fun countBySyncStatus(status: SyncStatus): Int
 
+    @Query("SELECT COUNT(*) FROM interactions WHERE syncStatus = :status")
+    fun observeCountBySyncStatus(status: SyncStatus): kotlinx.coroutines.flow.Flow<Int>
+
     @Query("UPDATE interactions SET syncStatus = :status WHERE mobileSyncId IN (:ids)")
     suspend fun markSyncStatus(ids: List<String>, status: SyncStatus)
 }

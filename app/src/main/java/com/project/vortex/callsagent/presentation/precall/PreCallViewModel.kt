@@ -10,11 +10,16 @@ import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.Note
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.NoteRepository
+import com.project.vortex.callsagent.presentation.autocall.AutoCallNavTarget
+import com.project.vortex.callsagent.presentation.autocall.AutoCallOrchestrator
+import com.project.vortex.callsagent.telecom.CallManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -30,13 +35,78 @@ data class PreCallUiState(
     val isNoteSheetOpen: Boolean = false,
 )
 
+/**
+ * One-shot events emitted by the ViewModel that the screen relays to nav.
+ */
+sealed interface PreCallEvent {
+    /** Auto-call: skip this client, go to the next one's PreCall. */
+    data class SkipToNext(val clientId: String) : PreCallEvent
+
+    /** Auto-call: skip exhausted the queue → land on session summary. */
+    data object SkipToSummary : PreCallEvent
+
+    /** Auto-call: agent tapped "Exit Auto-Call" or back button. */
+    data object ExitAutoCall : PreCallEvent
+}
+
 @HiltViewModel
 class PreCallViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val clientRepository: ClientRepository,
     private val noteRepository: NoteRepository,
     private val syncScheduler: SyncScheduler,
+    private val callManager: CallManager,
+    private val autoCallOrchestrator: AutoCallOrchestrator,
 ) : ViewModel() {
+
+    /** Live auto-call session state — renders the badge + Skip button. */
+    val autoCallSession = autoCallOrchestrator.session
+
+    /** Live "pending auto-call" — drives the countdown overlay. */
+    val pendingAutoCall = autoCallOrchestrator.pendingAutoCall
+
+    /**
+     * Place the outgoing call via the native Telecom path. The
+     * `CallsInCallService` picks it up and launches `InCallActivity`.
+     */
+    fun startCall() {
+        val client = _uiState.value.client ?: return
+        // Manual Call cancels any pending auto-call countdown — the agent
+        // explicitly took control.
+        autoCallOrchestrator.cancelAutoCall()
+        callManager.startCall(client)
+    }
+
+    /** Auto-call countdown finished — fire the next call. */
+    fun onAutoCallCountdownComplete() {
+        viewModelScope.launch {
+            autoCallOrchestrator.fireAutoCall()
+        }
+    }
+
+    fun cancelAutoCall() = autoCallOrchestrator.cancelAutoCall()
+
+    /** Skip the current client (auto-call only). Navigates to next PreCall
+     * or to the session summary if the queue is exhausted. */
+    fun skipCurrent() {
+        viewModelScope.launch {
+            when (val target = autoCallOrchestrator.skipCurrent()) {
+                is AutoCallNavTarget.NextClient ->
+                    _events.send(PreCallEvent.SkipToNext(target.clientId))
+                AutoCallNavTarget.SessionSummary ->
+                    _events.send(PreCallEvent.SkipToSummary)
+                null -> { /* no session — nothing to skip */ }
+            }
+        }
+    }
+
+    /** Exit the active auto-call session (Back button or explicit Exit). */
+    fun exitAutoCall() {
+        autoCallOrchestrator.exit()
+        viewModelScope.launch {
+            _events.send(PreCallEvent.ExitAutoCall)
+        }
+    }
 
     private val clientId: String = checkNotNull(savedStateHandle["clientId"]) {
         "PreCallViewModel requires a clientId argument"
@@ -44,6 +114,9 @@ class PreCallViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(PreCallUiState())
     val uiState: StateFlow<PreCallUiState> = _uiState.asStateFlow()
+
+    private val _events = Channel<PreCallEvent>(Channel.BUFFERED)
+    val events = _events.receiveAsFlow()
 
     val notes: StateFlow<List<Note>> = noteRepository.observeByClient(clientId)
         .stateIn(

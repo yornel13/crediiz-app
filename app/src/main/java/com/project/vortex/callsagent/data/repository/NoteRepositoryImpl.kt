@@ -48,4 +48,7 @@ class NoteRepositoryImpl @Inject constructor(
     override suspend fun countPending(): Int = withContext(Dispatchers.IO) {
         dao.countBySyncStatus(SyncStatus.PENDING)
     }
+
+    override fun observePendingCount(): Flow<Int> =
+        dao.observeCountBySyncStatus(SyncStatus.PENDING)
 }

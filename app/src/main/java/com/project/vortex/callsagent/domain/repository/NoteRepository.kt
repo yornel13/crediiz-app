@@ -14,4 +14,7 @@ interface NoteRepository {
     suspend fun pendingSync(): List<Note>
     suspend fun markSynced(mobileSyncIds: List<String>)
     suspend fun countPending(): Int
+
+    /** Live count of PENDING-sync notes — drives the sync indicator. */
+    fun observePendingCount(): Flow<Int>
 }

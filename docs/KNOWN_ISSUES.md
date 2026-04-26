@@ -18,7 +18,7 @@ Last updated: **2026-04-25** (KI-05 verified and closed; KI-04 reclassified)
 | # | Severity | Title | Status |
 |---|---|---|---|
 | [KI-01](#ki-01--replaceall-is-destructive-and-overwrites-pending-local-changes) | 🔴 High | `replaceAll` is destructive and overwrites pending local changes | Pending review |
-| [KI-02](#ki-02--race-between-two-consecutive-refreshassigned-calls-empties-clients-tab) | 🔴 High | Race between two consecutive `refreshAssigned` calls empties Clients tab | Pending review |
+| [KI-02](#ki-02--race-between-two-consecutive-refreshassigned-calls-empties-clients-tab) | ✅ Closed | Race between two consecutive `refreshAssigned` calls empties Clients tab | Fixed 2026-04-26 — replaceAllByStatus is status-scoped now |
 | [KI-03](#ki-03--no-in-call-guard-for-data-refresh) | 🟡 Medium | No "in-call" guard for data refresh | Pending review |
 | [KI-04](#ki-04--unassigned-client-leaves-orphan-local-records-with-no-reconciliation) | 🟠 Medium-High | Unassigned client leaves orphan local records with no reconciliation | Pending review (downgraded from 🔴 after KI-05) |
 | [KI-05](#ki-05--unverified-cascade-behavior-on-client-fk) | ✅ Closed | CASCADE behavior on Client FK — verified: no FK declared | Closed 2026-04-25 |
@@ -68,9 +68,21 @@ timestamp we can compare against.
 
 ---
 
-## KI-02 — Race between two consecutive `refreshAssigned` calls empties Clients tab
+## KI-02 — Race between two consecutive `refreshAssigned` calls empties Clients tab ✅ FIXED
 
-**Severity:** 🔴 High — manifest UX bug after the first post-call sync.
+**Resolution (2026-04-26):** `ClientDao` got a new `replaceAllByStatus`
+that scopes the delete to a single status. `ClientRepositoryImpl.refreshAssigned`
+now calls it instead of the destructive `replaceAll`. Calling
+`refreshAssigned(PENDING)` then `refreshAssigned(INTERESTED)` no longer
+clobbers the PENDING set. Confirmed against the production sync log
+that triggered the report: agent had 113 PENDING + 0 INTERESTED →
+without the fix the table ended at 0; with the fix it stays at 113.
+
+The original report follows for historical context.
+
+---
+
+**Severity (original):** 🔴 High — manifest UX bug after the first post-call sync.
 
 **Where:** [`data/sync/SyncManager.kt:131-138`](../app/src/main/java/com/project/vortex/callsagent/data/sync/SyncManager.kt#L131)
 

@@ -21,6 +21,7 @@ class InteractionRepositoryImpl @Inject constructor(
             InteractionEntity(
                 mobileSyncId = interaction.mobileSyncId,
                 clientId = interaction.clientId,
+                direction = interaction.direction,
                 callStartedAt = interaction.callStartedAt,
                 callEndedAt = interaction.callEndedAt,
                 durationSeconds = interaction.durationSeconds,
@@ -31,6 +32,9 @@ class InteractionRepositoryImpl @Inject constructor(
             ),
         )
     }
+
+    override suspend fun findById(mobileSyncId: String): Interaction? =
+        withContext(Dispatchers.IO) { dao.findById(mobileSyncId)?.toDomain() }
 
     override suspend fun pendingSync(): List<Interaction> = withContext(Dispatchers.IO) {
         dao.findBySyncStatus(SyncStatus.PENDING).map { it.toDomain() }
@@ -45,4 +49,7 @@ class InteractionRepositoryImpl @Inject constructor(
     override suspend fun countPending(): Int = withContext(Dispatchers.IO) {
         dao.countBySyncStatus(SyncStatus.PENDING)
     }
+
+    override fun observePendingCount(): kotlinx.coroutines.flow.Flow<Int> =
+        dao.observeCountBySyncStatus(SyncStatus.PENDING)
 }

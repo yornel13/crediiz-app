@@ -35,7 +35,11 @@ class ClientRepositoryImpl @Inject constructor(
             runCatching {
                 val envelope = api.getAssigned(status.name)
                 val entities = envelope.data.map { it.toEntity() }
-                dao.replaceAll(entities)
+                // Status-scoped replace — calling this for PENDING then
+                // INTERESTED used to wipe the PENDING set with `replaceAll`
+                // (KI-02). The scoped variant only touches rows of the
+                // status we just fetched.
+                dao.replaceAllByStatus(status, entities)
             }
         }
 
@@ -45,8 +49,18 @@ class ClientRepositoryImpl @Inject constructor(
     override fun searchAssigned(status: ClientStatus, query: String): Flow<List<Client>> =
         dao.searchByStatus(status, query).map { list -> list.map { it.toDomain() } }
 
+    override fun observeRecent(since: Instant): Flow<List<Client>> =
+        dao.observeRecent(since).map { list -> list.map { it.toDomain() } }
+
+    override fun searchRecent(since: Instant, query: String): Flow<List<Client>> =
+        dao.searchRecent(since, query).map { list -> list.map { it.toDomain() } }
+
     override suspend fun findById(id: String): Client? = withContext(Dispatchers.IO) {
         dao.findById(id)?.toDomain()
+    }
+
+    override suspend fun findByPhone(phone: String): Client? = withContext(Dispatchers.IO) {
+        dao.findByNormalizedPhone(phone)?.toDomain()
     }
 
     override suspend fun applyInteractionLocally(

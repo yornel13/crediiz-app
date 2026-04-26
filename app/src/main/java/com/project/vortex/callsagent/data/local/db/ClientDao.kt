@@ -20,6 +20,27 @@ interface ClientDao {
     @Query("SELECT * FROM clients WHERE id = :id")
     suspend fun findById(id: String): ClientEntity?
 
+    /**
+     * Match by the last 8 digits of the (digits-only) phone number, so a
+     * call from `+507 6680-1776` matches an assigned `66801776`,
+     * `+5076680-1776`, etc. Returns the first match — KI / UX-12 covers
+     * the duplicate-phone case if it ever surfaces.
+     */
+    @Query(
+        """
+        SELECT * FROM clients
+        WHERE substr(
+            replace(replace(replace(replace(phone, ' ', ''), '-', ''), '+', ''), '(', ''),
+            -8
+        ) = substr(
+            replace(replace(replace(replace(:phone, ' ', ''), '-', ''), '+', ''), '(', ''),
+            -8
+        )
+        LIMIT 1
+        """,
+    )
+    suspend fun findByNormalizedPhone(phone: String): ClientEntity?
+
     @Query(
         """
         SELECT * FROM clients
@@ -30,9 +51,62 @@ interface ClientDao {
     )
     fun searchByStatus(status: ClientStatus, query: String): Flow<List<ClientEntity>>
 
+    /**
+     * Recent calls feed for the "Recientes" view. Includes any client
+     * whose `lastCalledAt` falls inside the rolling window (24 h is the
+     * v1.0 default — caller passes the cutoff). Ordered newest first.
+     *
+     * Outcome-agnostic: NO_ANSWER, BUSY, INTERESTED, NOT_INTERESTED and
+     * INVALID_NUMBER all show up. The card variant in the UI picks
+     * different visuals based on `lastOutcome`.
+     */
+    @Query(
+        """
+        SELECT * FROM clients
+        WHERE lastCalledAt IS NOT NULL
+          AND lastCalledAt >= :since
+        ORDER BY lastCalledAt DESC
+        """,
+    )
+    fun observeRecent(since: Instant): Flow<List<ClientEntity>>
+
+    @Query(
+        """
+        SELECT * FROM clients
+        WHERE lastCalledAt IS NOT NULL
+          AND lastCalledAt >= :since
+          AND (name LIKE '%' || :query || '%' OR phone LIKE '%' || :query || '%')
+        ORDER BY lastCalledAt DESC
+        """,
+    )
+    fun searchRecent(since: Instant, query: String): Flow<List<ClientEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(clients: List<ClientEntity>)
 
+    /**
+     * Status-scoped replace. Deletes only the rows currently sitting in
+     * [status] and inserts the new server snapshot. This is the path
+     * Sync uses — calling [replaceAll] consecutively for PENDING and
+     * INTERESTED would clobber the first set on the second call (KI-02).
+     *
+     * Note: a client that moved from PENDING → INTERESTED on the server
+     * is correctly removed from the PENDING set on the PENDING refresh,
+     * then re-inserted with status=INTERESTED on the INTERESTED refresh.
+     */
+    @Transaction
+    suspend fun replaceAllByStatus(status: ClientStatus, clients: List<ClientEntity>) {
+        deleteByStatus(status)
+        upsert(clients)
+    }
+
+    @Query("DELETE FROM clients WHERE status = :status")
+    suspend fun deleteByStatus(status: ClientStatus)
+
+    /**
+     * Wipe the whole table — used by logout / fresh-install paths only.
+     * Do NOT call from sync; use [replaceAllByStatus] there.
+     */
     @Transaction
     suspend fun replaceAll(clients: List<ClientEntity>) {
         deleteAll()
