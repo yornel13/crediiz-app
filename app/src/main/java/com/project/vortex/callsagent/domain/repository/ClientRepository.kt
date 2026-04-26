@@ -18,6 +18,26 @@ interface ClientRepository {
     fun searchAssigned(status: ClientStatus, query: String): Flow<List<Client>>
 
     /**
+     * Pendientes — "Sin llamar" sub-feed: assigned PENDING clients
+     * the agent has never called yet (`lastCalledAt IS NULL`).
+     */
+    fun observePendingNeverCalled(): Flow<List<Client>>
+
+    /** Local search over the "Sin llamar" sub-feed. */
+    fun searchPendingNeverCalled(query: String): Flow<List<Client>>
+
+    /**
+     * Pendientes — "Para reintentar" sub-feed: assigned PENDING
+     * clients with at least one call attempt (`lastCalledAt
+     * IS NOT NULL`). Sorted oldest call first so the most "ready
+     * to retry" leads bubble up.
+     */
+    fun observePendingForRetry(): Flow<List<Client>>
+
+    /** Local search over the "Para reintentar" sub-feed. */
+    fun searchPendingForRetry(query: String): Flow<List<Client>>
+
+    /**
      * Observe clients called inside the given time window, regardless of
      * status/outcome. Drives the "Recientes" view (24 h window for v1.0).
      */

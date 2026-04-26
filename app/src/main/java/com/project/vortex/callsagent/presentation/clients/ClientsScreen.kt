@@ -89,7 +89,8 @@ fun ClientsScreen(
     onStartAutoCall: (firstClientId: String) -> Unit,
     viewModel: ClientsViewModel = hiltViewModel(),
 ) {
-    val pendingClients by viewModel.pendingClients.collectAsState()
+    val pendingNeverCalled by viewModel.pendingNeverCalled.collectAsState()
+    val pendingForRetry by viewModel.pendingForRetry.collectAsState()
     val recentEntries by viewModel.recentEntries.collectAsState()
     val totalPending by viewModel.totalPendingCount.collectAsState()
     val totalRecent by viewModel.totalRecentCount.collectAsState()
@@ -102,8 +103,9 @@ fun ClientsScreen(
     // (clientId, clientName) currently being dismissed via the sheet.
     var dismissTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
 
+    val pendingListSize = pendingNeverCalled.size + pendingForRetry.size
     val activeListSize = when (viewKind) {
-        ClientsViewKind.PENDIENTES -> pendingClients.size
+        ClientsViewKind.PENDIENTES -> pendingListSize
         ClientsViewKind.RECIENTES -> recentEntries.size
     }
 
@@ -112,7 +114,7 @@ fun ClientsScreen(
             // Auto-call only makes sense over the Pendientes queue. Hiding
             // the FAB on Recientes avoids ambiguity about what set is
             // being dialed.
-            if (pendingClients.isNotEmpty() && viewKind == ClientsViewKind.PENDIENTES) {
+            if (pendingListSize > 0 && viewKind == ClientsViewKind.PENDIENTES) {
                 ExtendedFloatingActionButton(
                     onClick = {
                         val firstClientId = viewModel.startAutoCall()
@@ -200,12 +202,36 @@ fun ClientsScreen(
                 }
             } else when (viewKind) {
                 ClientsViewKind.PENDIENTES -> {
-                    items(pendingClients, key = { "p_${it.id}" }) { client ->
-                        ClientCard(
-                            client = client,
-                            onClick = { onClientSelected(client.id) },
-                            onDismiss = { dismissTarget = client.id to client.name },
-                        )
+                    if (pendingNeverCalled.isNotEmpty()) {
+                        item("pending_subheader_never") {
+                            PendingSubHeader(
+                                label = "Sin llamar",
+                                count = pendingNeverCalled.size,
+                            )
+                        }
+                        items(pendingNeverCalled, key = { "pn_${it.id}" }) { client ->
+                            ClientCard(
+                                client = client,
+                                onClick = { onClientSelected(client.id) },
+                                onDismiss = { dismissTarget = client.id to client.name },
+                            )
+                        }
+                    }
+                    if (pendingForRetry.isNotEmpty()) {
+                        item("pending_subheader_retry") {
+                            PendingSubHeader(
+                                label = "Para reintentar",
+                                count = pendingForRetry.size,
+                                hint = "Llamados antes; siguen pendientes hasta cerrarlos.",
+                            )
+                        }
+                        items(pendingForRetry, key = { "pr_${it.id}" }) { client ->
+                            ClientCard(
+                                client = client,
+                                onClick = { onClientSelected(client.id) },
+                                onDismiss = { dismissTarget = client.id to client.name },
+                            )
+                        }
                     }
                 }
                 ClientsViewKind.RECIENTES -> {
@@ -470,11 +496,57 @@ private fun ClientCard(
                         )
                     }
                 }
-                StatusPill(
-                    label = client.status.label(),
-                    palette = client.status.palette(),
-                )
+                // If the client already has a recorded last outcome
+                // (NO_ANSWER / BUSY for the retry sub-section), surface
+                // it on the pill — it carries more information than the
+                // generic "Pending" status.
+                val outcome = client.lastOutcome
+                if (outcome != null) {
+                    StatusPill(
+                        label = outcome.label(),
+                        palette = outcome.palette(),
+                    )
+                } else {
+                    StatusPill(
+                        label = client.status.label(),
+                        palette = client.status.palette(),
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun PendingSubHeader(
+    label: String,
+    count: Int,
+    hint: String? = null,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 2.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label.uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "$count",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (hint != null) {
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

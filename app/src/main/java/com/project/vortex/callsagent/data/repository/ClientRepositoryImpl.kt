@@ -50,6 +50,18 @@ class ClientRepositoryImpl @Inject constructor(
     override fun searchAssigned(status: ClientStatus, query: String): Flow<List<Client>> =
         dao.searchByStatus(status, query).map { list -> list.map { it.toDomain() } }
 
+    override fun observePendingNeverCalled(): Flow<List<Client>> =
+        dao.observePendingNeverCalled().map { list -> list.map { it.toDomain() } }
+
+    override fun searchPendingNeverCalled(query: String): Flow<List<Client>> =
+        dao.searchPendingNeverCalled(query).map { list -> list.map { it.toDomain() } }
+
+    override fun observePendingForRetry(): Flow<List<Client>> =
+        dao.observePendingForRetry().map { list -> list.map { it.toDomain() } }
+
+    override fun searchPendingForRetry(query: String): Flow<List<Client>> =
+        dao.searchPendingForRetry(query).map { list -> list.map { it.toDomain() } }
+
     override fun observeRecent(since: Instant): Flow<List<Client>> =
         dao.observeRecent(since).map { list -> list.map { it.toDomain() } }
 

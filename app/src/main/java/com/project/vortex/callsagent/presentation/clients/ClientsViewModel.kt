@@ -106,32 +106,50 @@ class ClientsViewModel @Inject constructor(
     // ─── Per-view counters (search-independent so the pills stay stable) ────
 
     /**
-     * Total count of PENDING assigned clients. Independent of the search
-     * query so the hero counter stays stable while the agent types.
+     * "Sin llamar" sub-feed — never-called PENDING clients, ordered
+     * by `queueOrder` ASC. Search-aware.
      */
-    val totalPendingCount: StateFlow<Int> =
-        clientRepository.observeAssigned(ClientStatus.PENDING)
-            .map { it.size }
-            .stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(5_000),
-                initialValue = 0,
-            )
-
-    /**
-     * Pendientes list: PENDING clients, optionally search-filtered.
-     * Drives the Pendientes view.
-     */
-    val pendingClients: StateFlow<List<Client>> = _searchQuery
+    val pendingNeverCalled: StateFlow<List<Client>> = _searchQuery
         .flatMapLatest { query ->
             val q = query.trim()
-            if (q.isBlank()) clientRepository.observeAssigned(ClientStatus.PENDING)
-            else clientRepository.searchAssigned(ClientStatus.PENDING, q)
+            if (q.isBlank()) clientRepository.observePendingNeverCalled()
+            else clientRepository.searchPendingNeverCalled(q)
         }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList(),
+        )
+
+    /**
+     * "Para reintentar" sub-feed — PENDING clients with at least one
+     * past call attempt (NO_ANSWER / BUSY). Sorted oldest-call-first
+     * so the most ready-to-retry leads bubble up. Search-aware.
+     */
+    val pendingForRetry: StateFlow<List<Client>> = _searchQuery
+        .flatMapLatest { query ->
+            val q = query.trim()
+            if (q.isBlank()) clientRepository.observePendingForRetry()
+            else clientRepository.searchPendingForRetry(q)
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList(),
+        )
+
+    /**
+     * Hero counter — sum of "Sin llamar" + "Para reintentar".
+     * Search-independent so the count stays stable while typing.
+     */
+    val totalPendingCount: StateFlow<Int> = combine(
+        clientRepository.observePendingNeverCalled(),
+        clientRepository.observePendingForRetry(),
+    ) { neverCalled, forRetry -> neverCalled.size + forRetry.size }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = 0,
         )
 
     /**
@@ -274,9 +292,11 @@ class ClientsViewModel @Inject constructor(
      * caller can navigate to PreCall, or null if the queue is empty.
      */
     fun startAutoCall(): String? {
-        // Auto-call always operates on the Pendientes queue regardless
-        // of which view is active when the FAB is tapped.
-        val ids = pendingClients.value.map { it.id }
+        // Auto-call queue: never-called first, then retry leads after.
+        // Same order the agent sees in the Pendientes list, so there
+        // are no surprises about which client comes next.
+        val ids = pendingNeverCalled.value.map { it.id } +
+            pendingForRetry.value.map { it.id }
         return autoCallOrchestrator.startSession(
             clientIds = ids,
             sourceTab = HomeTabs.CLIENTS,

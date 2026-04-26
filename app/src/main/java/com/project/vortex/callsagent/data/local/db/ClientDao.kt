@@ -17,6 +17,61 @@ interface ClientDao {
     @Query("SELECT * FROM clients WHERE status = :status ORDER BY queueOrder ASC")
     fun observeByStatus(status: ClientStatus): Flow<List<ClientEntity>>
 
+    /**
+     * Pendientes feed — clients the agent has **never** called yet.
+     *
+     * Why filter on `lastCalledAt IS NULL`: an outcome of `NO_ANSWER`
+     * or `BUSY` keeps the client at `status = PENDING` (so it can be
+     * retried later), but mixing already-tried rows with cold ones
+     * makes it impossible at a glance for the agent to tell what's
+     * still untouched. Once a row has `lastCalledAt`, it lives in
+     * Recientes for the next 24 h with its outcome badge — the agent
+     * goes there to retry, not to Pendientes.
+     */
+    @Query(
+        """
+        SELECT * FROM clients
+        WHERE status = 'PENDING' AND lastCalledAt IS NULL
+        ORDER BY queueOrder ASC
+        """,
+    )
+    fun observePendingNeverCalled(): Flow<List<ClientEntity>>
+
+    @Query(
+        """
+        SELECT * FROM clients
+        WHERE status = 'PENDING' AND lastCalledAt IS NULL
+          AND (name LIKE '%' || :query || '%' OR phone LIKE '%' || :query || '%')
+        ORDER BY queueOrder ASC
+        """,
+    )
+    fun searchPendingNeverCalled(query: String): Flow<List<ClientEntity>>
+
+    /**
+     * "Para reintentar" feed — clients that already got at least one
+     * call attempt but stayed at `status = PENDING` (NO_ANSWER, BUSY).
+     * Sort by `lastCalledAt` ascending (oldest call first) so the
+     * client most "ready" to retry is at the top of the section.
+     */
+    @Query(
+        """
+        SELECT * FROM clients
+        WHERE status = 'PENDING' AND lastCalledAt IS NOT NULL
+        ORDER BY lastCalledAt ASC
+        """,
+    )
+    fun observePendingForRetry(): Flow<List<ClientEntity>>
+
+    @Query(
+        """
+        SELECT * FROM clients
+        WHERE status = 'PENDING' AND lastCalledAt IS NOT NULL
+          AND (name LIKE '%' || :query || '%' OR phone LIKE '%' || :query || '%')
+        ORDER BY lastCalledAt ASC
+        """,
+    )
+    fun searchPendingForRetry(query: String): Flow<List<ClientEntity>>
+
     @Query("SELECT * FROM clients WHERE id = :id")
     suspend fun findById(id: String): ClientEntity?
 

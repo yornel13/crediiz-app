@@ -447,13 +447,51 @@ DESPUÉS        (3)
 SIN AGENDAR    (2)   ← novedad
 ```
 
-### 11.2 Pendientes
+### 11.2 Pendientes — dos sub-secciones
 
-El cold queue del agente. `status = PENDING`, ordenados por la
-posición en la cola. Es donde se trabaja la prospección.
+La pestaña Pendientes ahora se divide en dos grupos:
 
-Cada tarjeta muestra: nombre, teléfono, intentos previos, resultado
-de la última llamada, y un menú `⋯` para descartar (ver § 12).
+```
+PENDIENTES (113)
+
+  SIN LLAMAR (95)
+  ─────────────────
+  Maria López          ▸
+  Carlos Pérez         ▸
+  ...
+
+  PARA REINTENTAR (18)
+  ────────────────────
+  Pedro Gómez   · ocupado · hace 2h
+  Lucia Mora    · sin respuesta · hace 4h
+  ...
+```
+
+**Sin llamar:** clientes que aún no se han marcado nunca. Es la cola
+fría. Ordenados por `queueOrder` (la posición que asignó el admin).
+Cada tarjeta tiene un menú `⋯` con la acción "Descartar cliente".
+
+**Para reintentar:** clientes que ya se llamaron una o más veces y el
+resultado fue **NO CONTESTÓ** u **OCUPADO** — es decir, la
+conversación nunca llegó a darse. Ordenados por la **fecha de la
+última llamada más antigua arriba** (los más "listos" para reintentar
+suben primero). Muestran:
+- Cantidad de intentos.
+- Resultado de la última llamada (badge "Ocupado" / "No contestó").
+- Hace cuánto fue la última llamada.
+
+> **¿Por qué dos secciones?** Antes se mezclaban en una sola lista y
+> el agente no podía distinguir a primera vista entre quién aún no
+> había intentado y quién ya había llamado. Con la separación queda
+> claro: la cola fría arriba, los reintentos abajo.
+
+> **Cuándo sale un cliente de "Para reintentar":** cuando se le
+> vuelve a llamar y se marca un resultado decisivo (INTERESADO,
+> NO INTERESADO, NÚMERO INVÁLIDO, VENDIDO) o se descarta. Mientras
+> sigan saliendo NO_ANSWER/BUSY, se quedan en esa sección.
+
+> **Auto-llamado:** la cola del modo auto-llamado primero pasa por
+> "Sin llamar" y, cuando se acaba, sigue con "Para reintentar".
 
 ### 11.3 Recientes (24 h)
 
