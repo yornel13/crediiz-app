@@ -46,6 +46,7 @@ class SyncManager @Inject constructor(
     private val followUpRepo: FollowUpRepository,
     private val clientRepo: ClientRepository,
     private val dismissalDao: ClientDismissalDao,
+    private val inCallGate: InCallGate,
 ) {
     private val mutex = Mutex()
 
@@ -137,8 +138,18 @@ class SyncManager @Inject constructor(
      * Re-fetch server-owned state so local DB mirrors the latest truth.
      * Keeps the failure isolated — if refresh fails, the push part already
      * succeeded and we don't want to report the whole sync as failed.
+     *
+     * **In-call gate (KI-03):** if the agent is mid-call when this
+     * runs, we skip the pull entirely. The push half already
+     * happened, so the agent's data made it to the server; the
+     * Room flow re-emission that would shuffle the visible list
+     * is deferred until the next sync tick after the call ends.
      */
     private suspend fun refreshServerState() {
+        if (inCallGate.isInCall()) {
+            Log.d(TAG, "refreshServerState skipped — agent is in a call")
+            return
+        }
         runCatching { clientRepo.refreshAssigned(ClientStatus.PENDING) }
             .onFailure { Log.w(TAG, "refreshAssigned PENDING failed", it) }
         runCatching { clientRepo.refreshAssigned(ClientStatus.INTERESTED) }

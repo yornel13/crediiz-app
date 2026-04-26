@@ -19,7 +19,7 @@ Last updated: **2026-04-25** (KI-05 verified and closed; KI-04 reclassified)
 |---|---|---|---|
 | [KI-01](#ki-01--replaceall-is-destructive-and-overwrites-pending-local-changes) | 🔴 High | `replaceAll` is destructive and overwrites pending local changes | Pending review |
 | [KI-02](#ki-02--race-between-two-consecutive-refreshassigned-calls-empties-clients-tab) | ✅ Closed | Race between two consecutive `refreshAssigned` calls empties Clients tab | Fixed 2026-04-26 — replaceAllByStatus is status-scoped now |
-| [KI-03](#ki-03--no-in-call-guard-for-data-refresh) | 🟡 Medium | No "in-call" guard for data refresh | Pending review |
+| [KI-03](#ki-03--no-in-call-guard-for-data-refresh) | ✅ Closed | No "in-call" guard for data refresh | Fixed — `InCallGate` gates the pull half of every sync |
 | [KI-04](#ki-04--unassigned-client-leaves-orphan-local-records-with-no-reconciliation) | 🟠 Medium-High | Unassigned client leaves orphan local records with no reconciliation | Pending review (downgraded from 🔴 after KI-05) |
 | [KI-05](#ki-05--unverified-cascade-behavior-on-client-fk) | ✅ Closed | CASCADE behavior on Client FK — verified: no FK declared | Closed 2026-04-25 |
 
@@ -124,40 +124,44 @@ one envelope.
 
 ---
 
-## KI-03 — No "in-call" guard for data refresh
+## KI-03 — No "in-call" guard for data refresh ✅ CLOSED
 
-**Severity:** 🟡 Medium — UX flicker; potentially confusing during a live call.
+**Resolution:** New `InCallGate` (`data/sync/InCallGate.kt`) reads
+the live `CallManager.callState` and reports whether the agent is
+mid-call (Dialing, Ringing, or Active).
 
-**Where:** Not in any single file — it's a missing concept across
-`SyncManager`, `ConnectivityObserver`, and the (yet-to-build) Telecom
-layer.
+**Where the gate is enforced:**
+- `SyncManager.refreshServerState()` checks the gate on entry. If
+  the agent is in a call, the **pull half** (refreshAssigned PENDING
+  + INTERESTED + refreshAgenda) is **skipped entirely**.
 
-**Symptom:** A WorkManager periodic tick or a connectivity-restored
-event can fire `syncAll()` while the agent is mid-call (Pre-Call,
-In-Call, or Post-Call). The Room flow then emits an updated client
-list under the agent — counters change, status badges flip, the row
-they were looking at may move or disappear.
+**What still runs during a call:**
+- The **push half** (`POST /sync/interactions`). Sending the agent's
+  locally-committed data to the server doesn't touch the UI; it
+  just keeps the server up-to-date.
+- `markSynced` writes against the local DB but only touch
+  `syncStatus` columns the agent doesn't see.
 
-**Reproduction:**
+**Recovery after the call ends:**
+- `PostCallViewModel.save()` triggers an immediate sync via
+  `syncScheduler.triggerImmediateSync()`, which re-runs
+  `refreshServerState()` with the gate now open.
+- Worst case (agent ends the call without going through Post-Call,
+  e.g. network drop during dial): the deferred refresh waits up to
+  20 min for the next periodic tick. Acceptable — no data loss,
+  just brief staleness.
 
-1. Agent navigates Clients → Pre-Call for client X.
-2. Periodic sync fires (~20 min mark) or connectivity is restored.
-3. `SyncManager.syncAll()` runs in `Dispatchers.IO`, no awareness of
-   the foreground UI state.
-4. Pre-Call's observed flow re-emits — if X was reassigned or its
-   server-side status changed, the visible card updates underneath
-   the agent's hands.
+**Why the original spec changed:** the original "block during
+Pre-Call too" was overkill. Pre-Call has no live audio so a
+silent refresh during it is harmless. Gating only on
+`Dialing/Ringing/Active` avoids unnecessary deferrals while still
+protecting the moments where the agent is actively talking and
+shouldn't see the row shift under their fingers.
 
-**Proposed direction (not committed):** introduce a lightweight
-`InCallGate` (singleton `StateFlow<Boolean>`) flipped to `true` from
-the entry of Pre-Call until the exit of Post-Call. `SyncManager.syncAll()`
-checks the gate on entry and either (a) waits for the gate to close,
-or (b) only does the **push** half (no `refreshServerState()`) while the
-gate is open. The agent's outcome and notes are still pushed; the
-re-fetch is deferred until they're done.
-
-**Blocked by:** Phase 3 (Telecom). The gate hooks naturally into
-`CallManager` once that exists.
+**Files:**
+- New: `data/sync/InCallGate.kt`
+- Modified: `data/sync/SyncManager.kt`
+  (`refreshServerState` short-circuits when gate is closed).
 
 ---
 
