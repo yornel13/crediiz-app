@@ -614,13 +614,13 @@ private fun RecoveryBanner() {
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Recuperando llamada anterior",
+                    text = "Recovering previous call",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
                 Text(
-                    text = "Esta llamada terminó pero no la cerraste. Confirma el resultado.",
+                    text = "This call ended but you didn't wrap it up. Confirm the outcome.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f),
                 )

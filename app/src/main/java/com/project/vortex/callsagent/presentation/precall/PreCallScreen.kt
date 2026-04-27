@@ -27,12 +27,15 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -66,6 +69,7 @@ import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.Note
 import com.project.vortex.callsagent.presentation.autocall.AutoCallSession
+import com.project.vortex.callsagent.presentation.clients.components.DismissClientSheet
 import com.project.vortex.callsagent.presentation.autocall.PendingAutoCall
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.components.SectionHeader
@@ -99,12 +103,15 @@ fun PreCallScreen(
     val pendingAutoCall by viewModel.pendingAutoCall.collectAsState()
     val autoCallDelaySeconds by viewModel.autoCallDelaySeconds.collectAsState()
 
+    var dismissSheetOpen by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
                 is PreCallEvent.SkipToNext -> onSkipToNext(event.clientId)
                 PreCallEvent.SkipToSummary -> onSkipToSummary()
                 PreCallEvent.ExitAutoCall -> onExitAutoCall()
+                PreCallEvent.Dismissed -> onBack()
             }
         }
     }
@@ -149,6 +156,7 @@ fun PreCallScreen(
                 onAddNote = viewModel::openNoteSheet,
                 onBack = effectiveOnBack,
                 onExitAutoCall = viewModel::exitAutoCall,
+                onRequestDismiss = { dismissSheetOpen = true },
                 contentPadding = padding,
             )
         }
@@ -158,6 +166,17 @@ fun PreCallScreen(
                 isSubmitting = uiState.isSubmittingNote,
                 onDismiss = viewModel::dismissNoteSheet,
                 onSave = viewModel::saveManualNote,
+            )
+        }
+
+        if (dismissSheetOpen) {
+            DismissClientSheet(
+                clientName = uiState.client?.name.orEmpty(),
+                onDismiss = { dismissSheetOpen = false },
+                onConfirm = { code, free ->
+                    viewModel.dismissClient(code, free)
+                    dismissSheetOpen = false
+                },
             )
         }
 
@@ -197,6 +216,7 @@ private fun PreCallContent(
     onAddNote: () -> Unit,
     onBack: () -> Unit,
     onExitAutoCall: () -> Unit,
+    onRequestDismiss: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     LazyColumn(
@@ -211,6 +231,7 @@ private fun PreCallContent(
                 autoCallSession = autoCallSession,
                 onBack = onBack,
                 onExitAutoCall = onExitAutoCall,
+                onRequestDismiss = onRequestDismiss,
             )
         }
 
@@ -297,7 +318,9 @@ private fun Hero(
     autoCallSession: AutoCallSession?,
     onBack: () -> Unit,
     onExitAutoCall: () -> Unit,
+    onRequestDismiss: () -> Unit,
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
     val isDark = MaterialTheme.colorScheme.surface.let {
         0.2126f * it.red + 0.7152f * it.green + 0.0722f * it.blue < 0.5f
     }
@@ -338,12 +361,26 @@ private fun Hero(
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                if (autoCallSession != null) {
-                    IconButton(onClick = onExitAutoCall) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "Exit auto-call",
-                            tint = Color.White,
+                // Auto-call exit lives only on the Back button now
+                // (it auto-exits the session on Back). This slot is
+                // now the per-client overflow menu — only "Dismiss
+                // client" today, can grow in the future.
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = "More actions",
+                        tint = Color.White,
+                    )
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Dismiss client") },
+                            onClick = {
+                                menuOpen = false
+                                onRequestDismiss()
+                            },
                         )
                     }
                 }
@@ -806,7 +843,6 @@ private fun outcomeLabel(outcome: CallOutcome): String = when (outcome) {
     CallOutcome.NO_ANSWER -> "No ans."
     CallOutcome.BUSY -> "Busy"
     CallOutcome.INVALID_NUMBER -> "Invalid"
-    CallOutcome.SOLD -> "Sold"
 }
 
 private val timestampFormatter: DateTimeFormatter =

@@ -10,6 +10,14 @@
 > que estás viendo. Está pensado para que cualquier persona del equipo
 > de operaciones pueda entender el flujo sin necesidad de mirar código.
 
+> ⚠️ **Nota sobre el idioma de la UI:** la build actual del APK muestra
+> los textos de pantalla en **inglés** ("Pending", "Recent", "Untouched",
+> "Retry", "Dismiss client", etc.). En este manual usamos la versión
+> en español de cada nombre porque es la traducción objetivo. La
+> traducción real se aplicará en una pasada de i18n posterior con
+> archivos `strings.xml` (`values-es/`). Hasta entonces el agente
+> verá los nombres en inglés en la pantalla.
+
 ---
 
 ## Índice
@@ -228,7 +236,7 @@ pasa a Post-Call. Si el agente cuelga, igual.
 
 ### 5.3 Post-Call — después de colgar
 
-El agente ve **seis botones grandes** correspondientes a los seis
+El agente ve **cinco botones grandes** correspondientes a los cinco
 **resultados de llamada** (ver § 6). Toca uno, opcionalmente
 escribe una nota, y toca **Guardar**.
 
@@ -245,24 +253,24 @@ interesado sin seguimiento es una fuga de oportunidad.
 |---|---|---|
 | 🟢 **INTERESADO** | Se mueve a estado `INTERESTED`. Obliga a agendar follow-up. | No (queda como lead activo en Agenda) |
 | 🔴 **NO INTERESADO** | Se mueve a estado `REJECTED`. Cliente "cerrado". | No |
-| 🟡 **NO CONTESTÓ** | Se queda en `PENDING`. Suma 1 al contador de intentos. | Sí, para reintentar |
-| 🟠 **OCUPADO** | Se queda en `PENDING`. Suma 1 al contador de intentos. | Sí, para reintentar |
+| 🟡 **NO CONTESTÓ** | Se queda en `PENDING`. Va a la sub-sección "Para reintentar". | Sí, en la sub-sección de reintentos |
+| 🟠 **OCUPADO** | Se queda en `PENDING`. Va a la sub-sección "Para reintentar". | Sí, en la sub-sección de reintentos |
 | ⚪ **NÚMERO INVÁLIDO** | Se mueve a estado `INVALID_NUMBER`. | No |
-| 🔵 **VENDIDO (Sold)** ✨ | Se mueve a estado `CONVERTED`. Venta cerrada. | No |
 
-> **Decisión clave (importante para el owner):** con `NO_ANSWER` y
-> `BUSY` el cliente NO sale de la lista — sigue siendo pendiente
-> porque la conversación con el agente nunca pasó. Esto es lo que
-> permite a un cliente estar en la lista varios días si el primer
-> intento fue ocupado.
+> **Decisión clave:** con `NO_ANSWER` y `BUSY` el cliente sigue
+> siendo PENDING pero pasa a la sub-sección "Para reintentar" de
+> Pendientes. No se mezcla con los nunca llamados.
 >
-> Con `NOT_INTERESTED`, `INTERESTED`, `INVALID_NUMBER` y `SOLD` el
-> cliente SÍ sale de la lista de Pendientes — la decisión final ya
-> se tomó.
->
-> **Sold + auto-llamado:** una venta detiene la cuenta regresiva
-> del modo auto-llamado igual que INTERESADO. El agente respira
-> antes del próximo cliente.
+> Con `NOT_INTERESTED`, `INTERESTED` e `INVALID_NUMBER` el cliente
+> sale de Pendientes completamente — la decisión final ya se tomó.
+
+> **Pendiente para v2:** un 6to resultado para registrar **ventas
+> cerradas** (cuando el cliente acepta el crédito). El backend
+> ya tiene el valor `SOLD` reservado pero no lo expusimos en
+> mobile todavía — discutimos primero dónde tiene más sentido
+> ubicarlo (en Post-Call vs. en una acción separada del lead
+> INTERESADO en Agenda) y cómo lo nombramos. Ver
+> `docs/PHASE_2_BACKLOG.md § P2-05` para el contexto completo.
 
 ---
 
@@ -498,13 +506,12 @@ suben primero). Muestran:
 Muestra **todo lo que el agente tocó en las últimas 24 horas**:
 
 - **Llamadas** de cualquier resultado: NO_ANSWER, BUSY, INTERESADO,
-  NO INTERESADO, NÚMERO INVÁLIDO, **VENDIDO** ✨ (nuevo).
+  NO INTERESADO, NÚMERO INVÁLIDO.
 - **Descartes** (ver § 12) — con un botón **"Deshacer descarte"**.
 
 Sirve como:
 - Recall del día para agregar una nota tardía (entrando al detalle).
 - Ventana de recuperación para deshacer un descarte equivocado.
-- Visibilidad de las ventas cerradas del día (badge "Sold" celeste).
 
 > **Sin botones en la lista.** La tarjeta abre el detalle al tocarla;
 > las acciones (agregar nota, volver a llamar) viven dentro del
@@ -512,24 +519,27 @@ Sirve como:
 
 > El cliente desaparece solo: a las 24 h se sale, sin intervención.
 
-### 11.4 Vendido (Sold) — nuevo resultado de llamada
+### 11.4 Resultado "Vendido" — pendiente de definir
 
-Cuando el agente cierra una venta de crédito durante una llamada, en
-Post-Call ahora hay un **6to botón "Sold"** además de los cinco
-anteriores.
+Pensábamos agregar un 6to botón "Sold" en Post-Call para registrar
+ventas cerradas en la misma llamada. Lo armamos, lo probamos, y
+quedó claro que el lugar y el nombre necesitan una decisión de
+producto antes de exponerlo:
 
-| Botón | Estado del cliente | Vuelve a aparecer en Pendientes? |
-|---|---|---|
-| 🟢 INTERESADO | INTERESTED | No (queda como lead tibio) |
-| 🔴 NO INTERESADO | REJECTED | No |
-| 🟡 NO CONTESTÓ | PENDING | Sí |
-| 🟠 OCUPADO | PENDING | Sí |
-| ⚪ NÚMERO INVÁLIDO | INVALID_NUMBER | No |
-| 🔵 **SOLD (Vendido)** ✨ | CONVERTED | No (cerrado, venta exitosa) |
+- **Lugar:** ¿el agente cierra la venta en la misma llamada que
+  marcó INTERESADO? En la práctica los créditos suelen cerrarse
+  después de varios contactos. Quizás el lugar correcto es una
+  acción "Cerrar venta" sobre el lead INTERESADO en Agenda, no
+  un 6to botón en Post-Call.
+- **Nombre:** "Sold" / "Cerrado" / "Convertido" / "Aprobado"
+  significan cosas distintas en distintos productos crediticios.
+- **Metadata:** ¿al cerrar venta queremos capturar monto, plazo,
+  número de contrato? ¿O solo el outcome?
 
-Comportamiento del modo auto-llamado: SOLD detiene la cuenta regresiva
-(igual que INTERESADO) — el agente merece celebrar y respirar antes de
-la siguiente llamada.
+Mientras tanto, el backend ya tiene el valor `SOLD` reservado y
+deployado, pero el celular **no lo expone**. Cuando quieras
+priorizarlo, ver el contexto completo en
+`docs/PHASE_2_BACKLOG.md § P2-05`.
 
 ### 11.5 Agenda — Próximas + Sin agendar
 
@@ -591,7 +601,7 @@ Cuando el admin reasigna un cliente al agente desde el panel web:
 
 | Versión | Qué incluye |
 |---|---|
-| **v1.0 (ya en producción)** | Pendientes + Recientes (con calls + descartes + Sold) + Agenda con Sin agendar |
+| **v1.0 (ya en producción)** | Pendientes (Untouched + Retry) + Recientes (calls + descartes) + Agenda con Sin agendar |
 | **v1.1** | Pantalla "Detalle de cliente" (solo lectura, historial completo de notas e interactions) |
 | **v1.2** | Re-agendar follow-up desde la card de Agenda |
 
@@ -813,10 +823,11 @@ Vista de "Mi actividad" — solo del agente que está logueado:
 ## 14. Preguntas frecuentes del owner
 
 **P: ¿Cómo registra el agente una venta cerrada?**
-R: En Post-Call elige el botón **"Sold"**. El cliente pasa al
-estado CONVERTED y aparece en Recientes 24 h con un badge celeste,
-para que el agente vea sus ventas del día. Después desaparece del
-celular (los reportes de venta los maneja el admin en el panel).
+R: Por ahora **no hay flujo dedicado** para registrar la venta
+desde el celular — la decisión de dónde y cómo poner ese botón
+quedó pendiente para v2 (ver § 11.4 y `PHASE_2_BACKLOG.md`).
+Hasta entonces, el admin marca la venta cerrada desde el panel
+web cuando confirma con el área de crédito.
 
 **P: ¿Si un agente acumula muchos "Sin agendar", el sistema avisa?**
 R: Por ahora no — la sección crece sin límite. Si vemos que en
@@ -924,6 +935,6 @@ web. Esa disciplina es la que mantiene la app rápida y enfocada.
 | Reactivar | Acción del admin para devolver un cliente descartado a la lista activa, al mismo agente |
 | Reasignar (post-descarte) | Acción del admin para mover un cliente descartado a otro agente |
 | Deshacer descarte | Acción del agente disponible solo en las primeras 24 h después del descarte |
-| SOLD / Vendido | Resultado de llamada cuando el agente cerró la venta de crédito en la conversación |
-| CONVERTED | Estado del cliente tras un SOLD. Salida exitosa del pipeline |
+| CONVERTED | Estado del cliente cuando se cerró la venta. Hoy lo marca solo el admin desde el panel web (ver § 11.4) |
 | Sin agendar | Sección de la Agenda con clientes INTERESADOS sin un seguimiento futuro programado |
+| Untouched / Retry | Las dos sub-secciones dentro de Pendientes — nunca llamados vs. ya intentados |

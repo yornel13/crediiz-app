@@ -29,12 +29,11 @@ data class AutoCallSessionStats(
     val noAnswer: Int = 0,
     val busy: Int = 0,
     val invalidNumber: Int = 0,
-    val sold: Int = 0,
     val skipped: Int = 0,
     val startedAt: Instant,
 ) {
     val processed: Int
-        get() = interested + notInterested + noAnswer + busy + invalidNumber + sold + skipped
+        get() = interested + notInterested + noAnswer + busy + invalidNumber + skipped
 
     fun recordOutcome(outcome: CallOutcome): AutoCallSessionStats = when (outcome) {
         CallOutcome.INTERESTED -> copy(interested = interested + 1)
@@ -42,7 +41,6 @@ data class AutoCallSessionStats(
         CallOutcome.NO_ANSWER -> copy(noAnswer = noAnswer + 1)
         CallOutcome.BUSY -> copy(busy = busy + 1)
         CallOutcome.INVALID_NUMBER -> copy(invalidNumber = invalidNumber + 1)
-        CallOutcome.SOLD -> copy(sold = sold + 1)
     }
 
     fun recordSkip(): AutoCallSessionStats = copy(skipped = skipped + 1)

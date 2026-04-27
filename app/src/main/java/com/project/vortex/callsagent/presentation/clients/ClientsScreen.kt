@@ -205,7 +205,7 @@ fun ClientsScreen(
                     if (pendingNeverCalled.isNotEmpty()) {
                         item("pending_subheader_never") {
                             PendingSubHeader(
-                                label = "Sin llamar",
+                                label = "Untouched",
                                 count = pendingNeverCalled.size,
                             )
                         }
@@ -220,9 +220,9 @@ fun ClientsScreen(
                     if (pendingForRetry.isNotEmpty()) {
                         item("pending_subheader_retry") {
                             PendingSubHeader(
-                                label = "Para reintentar",
+                                label = "Retry",
                                 count = pendingForRetry.size,
-                                hint = "Llamados antes; siguen pendientes hasta cerrarlos.",
+                                hint = "Already attempted; still pending until closed.",
                             )
                         }
                         items(pendingForRetry, key = { "pr_${it.id}" }) { client ->
@@ -466,7 +466,7 @@ private fun ClientCard(
                         onDismissRequest = { menuOpen = false },
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Descartar cliente") },
+                            text = { Text("Dismiss client") },
                             onClick = {
                                 menuOpen = false
                                 onDismiss()

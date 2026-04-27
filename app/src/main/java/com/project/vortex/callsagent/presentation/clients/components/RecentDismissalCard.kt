@@ -101,7 +101,7 @@ fun RecentDismissalCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "DESCARTADO",
+                        text = "DISMISSED",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Bold,
@@ -127,7 +127,7 @@ fun RecentDismissalCard(
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text("Deshacer descarte", style = MaterialTheme.typography.labelMedium)
+                    Text("Undo dismissal", style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
@@ -165,7 +165,7 @@ private fun DismissedAvatar(name: String) {
 
 private fun displayReason(dismissal: ClientDismissal): String? {
     val codeLabel = dismissal.reasonCode?.let { code ->
-        runCatching { DismissalReasonCode.valueOf(code).labelEs }.getOrNull()
+        runCatching { DismissalReasonCode.valueOf(code).label }.getOrNull()
     }
     val free = dismissal.reason?.takeIf { it.isNotBlank() }
     return when {
@@ -180,9 +180,9 @@ private fun formatRelative(instant: Instant): String {
     val now = Instant.now()
     val minutes = ChronoUnit.MINUTES.between(instant, now).coerceAtLeast(0)
     return when {
-        minutes < 1 -> "hace un momento"
-        minutes < 60 -> "hace ${minutes}m"
-        minutes < 60 * 24 -> "hace ${minutes / 60}h"
-        else -> "hace ${minutes / (60 * 24)}d"
+        minutes < 1 -> "just now"
+        minutes < 60 -> "${minutes}m ago"
+        minutes < 60 * 24 -> "${minutes / 60}h ago"
+        else -> "${minutes / (60 * 24)}d ago"
     }
 }

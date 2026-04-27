@@ -174,27 +174,21 @@ class AutoCallOrchestrator @Inject constructor(
     }
 
     /**
-     * Auto-advance policy: every outcome triggers the countdown EXCEPT
-     * `INTERESTED` — that one earns a stop so the agent can breathe and
-     * absorb that they captured a lead (and the follow-up form they just
-     * filled out). The other outcomes are decisive enough that we don't
-     * want a follow-up reflection — just dial the next.
+     * Auto-advance policy: **every** outcome triggers the countdown
+     * when the agent is in an auto-call session.
      *
-     * Note: this is a stronger auto-advance than the original MOBILE_APP
-     * spec (which limited countdown to NO_ANSWER/BUSY). Field feedback
-     * was that stopping on NOT_INTERESTED / INVALID_NUMBER felt like the
-     * app gave up on the session.
+     * Earlier iterations stopped on INTERESTED (rationale: agent just
+     * filled the follow-up form, deserves a beat). Field feedback was
+     * the opposite — stopping on INTERESTED feels like the session
+     * "deactivated" mid-flow. The agent already paused naturally
+     * while filling the follow-up date/time, so the post-save moment
+     * doesn't need an extra stop.
+     *
+     * Kept as a function (not a constant `true`) so future tuning
+     * stays a single edit.
      */
-    private fun shouldAutoAdvanceFor(outcome: CallOutcome): Boolean = when (outcome) {
-        // INTERESTED earns a stop — the agent just filled the follow-up form.
-        // SOLD earns a stop — sales close deserves to land before the next dial.
-        CallOutcome.INTERESTED,
-        CallOutcome.SOLD -> false
-        CallOutcome.NO_ANSWER,
-        CallOutcome.BUSY,
-        CallOutcome.NOT_INTERESTED,
-        CallOutcome.INVALID_NUMBER -> true
-    }
+    @Suppress("UNUSED_PARAMETER")
+    private fun shouldAutoAdvanceFor(outcome: CallOutcome): Boolean = true
 
     companion object {
         private const val TAG = "AutoCallOrchestrator"

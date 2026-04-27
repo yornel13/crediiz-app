@@ -51,7 +51,7 @@ fun ClientsViewSelector(
                 ClientsViewKind.RECIENTES -> recentCount
             }
             ViewPill(
-                label = kind.labelEs,
+                label = kind.label,
                 count = count,
                 isSelected = selected == kind,
                 onClick = { onSelected(kind) },

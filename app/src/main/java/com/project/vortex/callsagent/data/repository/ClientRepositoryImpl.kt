@@ -22,7 +22,6 @@ private val OUTCOME_TO_STATUS: Map<CallOutcome, ClientStatus> = mapOf(
     CallOutcome.NO_ANSWER to ClientStatus.PENDING,
     CallOutcome.BUSY to ClientStatus.PENDING,
     CallOutcome.INVALID_NUMBER to ClientStatus.INVALID_NUMBER,
-    CallOutcome.SOLD to ClientStatus.CONVERTED,
 )
 
 @Singleton

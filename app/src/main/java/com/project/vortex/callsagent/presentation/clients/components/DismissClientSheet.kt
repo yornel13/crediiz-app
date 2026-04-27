@@ -66,20 +66,20 @@ fun DismissClientSheet(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
         ) {
             Text(
-                text = "Descartar a $clientName",
+                text = "Dismiss $clientName",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Saldrá de tu lista. Lo verás en Recientes por 24 h por si quieres deshacer.",
+                text = "Leaves your list. Visible in Recent for 24 h in case you want to undo.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
 
             Text(
-                text = "Razón (opcional)",
+                text = "Reason (optional)",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -94,7 +94,7 @@ fun DismissClientSheet(
                         onClick = {
                             selectedCode = if (selectedCode == code) null else code
                         },
-                        label = { Text(code.labelEs) },
+                        label = { Text(code.label) },
                     )
                 }
             }
@@ -105,7 +105,7 @@ fun DismissClientSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 90.dp),
-                placeholder = { Text("Detalle adicional (opcional)") },
+                placeholder = { Text("Additional detail (optional)") },
                 supportingText = { Text("${freeText.length} / $MAX_REASON_LEN") },
             )
 
@@ -115,7 +115,7 @@ fun DismissClientSheet(
                 horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(onClick = onDismiss) { Text("Cancelar") }
+                TextButton(onClick = onDismiss) { Text("Cancel") }
                 Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = {
@@ -126,7 +126,7 @@ fun DismissClientSheet(
                         contentColor = MaterialTheme.colorScheme.onError,
                     ),
                 ) {
-                    Text("Descartar", fontWeight = FontWeight.SemiBold)
+                    Text("Dismiss", fontWeight = FontWeight.SemiBold)
                 }
             }
             Spacer(Modifier.height(16.dp))

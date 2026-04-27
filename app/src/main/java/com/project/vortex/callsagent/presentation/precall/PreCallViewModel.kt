@@ -3,12 +3,14 @@ package com.project.vortex.callsagent.presentation.precall
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.vortex.callsagent.common.enums.DismissalReasonCode
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
 import com.project.vortex.callsagent.data.local.preferences.SettingsPreferences
 import com.project.vortex.callsagent.data.sync.SyncScheduler
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.Note
+import com.project.vortex.callsagent.domain.repository.ClientDismissalRepository
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.NoteRepository
 import com.project.vortex.callsagent.presentation.autocall.AutoCallNavTarget
@@ -48,12 +50,16 @@ sealed interface PreCallEvent {
 
     /** Auto-call: agent tapped "Exit Auto-Call" or back button. */
     data object ExitAutoCall : PreCallEvent
+
+    /** Agent dismissed the client from the detail; pop back. */
+    data object Dismissed : PreCallEvent
 }
 
 @HiltViewModel
 class PreCallViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val clientRepository: ClientRepository,
+    private val clientDismissalRepository: ClientDismissalRepository,
     private val noteRepository: NoteRepository,
     private val syncScheduler: SyncScheduler,
     private val callManager: CallManager,
@@ -98,6 +104,19 @@ class PreCallViewModel @Inject constructor(
     }
 
     fun cancelAutoCall() = autoCallOrchestrator.cancelAutoCall()
+
+    /**
+     * Dismiss the client currently shown in the detail. Records the
+     * dismissal locally (status mutation + audit event), cancels any
+     * pending auto-call countdown, and signals the screen to pop back.
+     */
+    fun dismissClient(reasonCode: DismissalReasonCode?, freeFormReason: String?) {
+        autoCallOrchestrator.cancelAutoCall()
+        viewModelScope.launch {
+            clientDismissalRepository.dismiss(clientId, reasonCode, freeFormReason)
+            _events.send(PreCallEvent.Dismissed)
+        }
+    }
 
     /** Skip the current client (auto-call only). Navigates to next PreCall
      * or to the session summary if the queue is exhausted. */

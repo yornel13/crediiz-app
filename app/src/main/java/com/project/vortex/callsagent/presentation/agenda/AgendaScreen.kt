@@ -291,7 +291,7 @@ private fun UnscheduledRow(
                     onDismissRequest = { menuOpen = false },
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Descartar cliente") },
+                        text = { Text("Dismiss client") },
                         onClick = {
                             menuOpen = false
                             onDismiss()

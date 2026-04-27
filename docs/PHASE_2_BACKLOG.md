@@ -98,6 +98,69 @@ with the new datetime.
 
 ---
 
+## P2-05 — Where to surface the "Sold" outcome
+
+**Status:** 🟡 Open question — pulled from v1.0 mid-implementation.
+
+**What we tried:** added `CallOutcome.SOLD` as a 6th button in
+Post-Call alongside INTERESTED / NOT_INTERESTED / NO_ANSWER /
+BUSY / INVALID_NUMBER. It mapped to `ClientStatus.CONVERTED` and
+got a "Sold" badge in Recientes.
+
+**Why we rolled it back from mobile (kept on backend):**
+1. The placement felt wrong — Post-Call is the wrap-up of a call,
+   but most credit sales close after multiple touchpoints, not on
+   the same call where the agent first marked INTERESTED.
+2. The naming "Sold" was disputed — the lead funnel has stages
+   between "interested" and "money received", and a single button
+   doesn't capture the difference.
+
+**What's still in place:**
+- Backend: `CallOutcome.SOLD` enum value + `OUTCOME_TO_STATUS`
+  mapping → `CONVERTED`. **Deployed on Railway.** Not removed
+  because it's harmless and re-enabling it just means re-adding
+  the enum on mobile.
+- Mobile: enum value removed, all branches removed, no UI surfaces
+  it. The agent has 5 outcome buttons again.
+
+**Questions to resolve before re-introducing:**
+
+1. **Where does the agent register a sale?**
+   - Inside Post-Call as a 6th outcome (what we tried).
+   - As a separate action on the INTERESTED lead in Agenda
+     (e.g. "Mark as Sold" overflow on an INTERESTED card after the
+     final follow-up).
+   - As a new section/screen "Cerrar venta" with its own form
+     (collect amount, terms, etc.).
+2. **What's the name?** Sold / Cerrado / Convertido / Aprobado.
+   Different verticals call this differently.
+3. **What metadata does the agent need to capture at sale-close
+   time?** Just the outcome, or also amount / product / contract
+   reference?
+4. **Who else uses this signal?**
+   - Admin web panel for reports.
+   - Future CRM integration.
+   - Commission calculation per agent.
+
+**Recommended path when re-prioritized:**
+
+1. Spec the sale-close metadata with the product owner (P2 design
+   doc).
+2. Decide placement — agree on the canonical "where the agent says
+   yes-this-converted".
+3. Re-enable `CallOutcome.SOLD` (or rename to a better name) on
+   mobile with the agreed placement.
+4. Adjust `AutoCallOrchestrator.shouldAutoAdvanceFor` to stop the
+   countdown for the new outcome.
+5. Add the corresponding StatCard to the auto-call session
+   summary.
+6. Update `MANUAL_USUARIO.md` with the chosen flow.
+
+**Effort estimate:** ~1-2 days mobile + product spec time. Backend
+change is zero or trivial.
+
+---
+
 ## P2-04 — "My activity" stats on mobile (UX-1)
 
 **Where:** new tab or new card in Settings → Account.

@@ -47,7 +47,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.ui.theme.Amber600
 import com.project.vortex.callsagent.ui.theme.Emerald600
 import com.project.vortex.callsagent.ui.theme.Rose600
-import com.project.vortex.callsagent.ui.theme.Sky600
 import com.project.vortex.callsagent.ui.theme.Slate600
 import java.time.Duration
 import java.time.Instant
@@ -181,24 +180,12 @@ private fun StatGrid(stats: AutoCallSessionStats) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             StatCard(
-                label = "Sold",
-                value = stats.sold,
-                icon = Icons.Filled.CheckCircle,
-                color = Sky600,
-                modifier = Modifier.weight(1f),
-            )
-            StatCard(
                 label = "Invalid",
                 value = stats.invalidNumber,
                 icon = Icons.Filled.QuestionMark,
                 color = Rose600,
                 modifier = Modifier.weight(1f),
             )
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
             StatCard(
                 label = "Skipped",
                 value = stats.skipped,
@@ -206,8 +193,6 @@ private fun StatGrid(stats: AutoCallSessionStats) {
                 color = Slate600,
                 modifier = Modifier.weight(1f),
             )
-            // Spacer placeholder to keep the grid balanced.
-            Box(modifier = Modifier.weight(1f))
         }
     }
 }
