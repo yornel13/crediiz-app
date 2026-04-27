@@ -235,6 +235,21 @@ private fun PreCallContent(
             )
         }
 
+        // ─── Personal data (cedula / SS / salary) ──────────────────────
+        // Only render the section if at least one of the three is set.
+        // Excel uploads sometimes omit cedula or ssNumber; salary may
+        // be null when the source data is missing it.
+        if (client.cedula != null || client.ssNumber != null || client.salary != null) {
+            item("personal_header") {
+                Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                    SectionHeader(title = "Personal data")
+                }
+            }
+            item("personal") {
+                PersonalDataCard(client = client)
+            }
+        }
+
         if (client.extraData.isNotEmpty()) {
             item("extra_header") {
                 Box(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
@@ -508,6 +523,62 @@ private fun HeroDivider() {
             .heightIn(min = 32.dp)
             .background(Color.White.copy(alpha = 0.20f)),
     )
+}
+
+@Composable
+private fun PersonalDataCard(client: Client) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            val rows = buildList {
+                client.cedula?.takeIf { it.isNotBlank() }?.let { add("Cédula" to it) }
+                client.ssNumber?.takeIf { it.isNotBlank() }?.let { add("Social Security" to it) }
+                client.salary?.let { add("Salary" to formatSalary(it)) }
+            }
+            rows.forEachIndexed { index, (label, value) ->
+                if (index > 0) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(MaterialTheme.colorScheme.outlineVariant),
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun formatSalary(amount: Double): String {
+    // Whole-number USD when possible (most seeded values are integers)
+    // — falls back to two decimals otherwise.
+    val whole = amount.toLong()
+    return if (amount == whole.toDouble()) "$%,d".format(whole)
+    else "$%,.2f".format(amount)
 }
 
 @Composable

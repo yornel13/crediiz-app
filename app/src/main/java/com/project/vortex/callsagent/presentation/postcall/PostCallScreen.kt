@@ -74,6 +74,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 private val dateFormatter: DateTimeFormatter =
@@ -479,8 +480,13 @@ private fun DateDialog(
     onDismiss: () -> Unit,
     onConfirm: (LocalDate) -> Unit,
 ) {
-    val initialMillis = initialDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    val today = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    // Material3 DatePicker treats `selectedDateMillis` as UTC midnight
+    // of the picked day. Mixing system-zone math here shifts the date
+    // by ±1 day in any non-UTC timezone (Panama is UTC-5). Stay in
+    // UTC for both the initial seed AND the confirm extraction so the
+    // round-trip is lossless.
+    val initialMillis = initialDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+    val today = LocalDate.now().atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
     val state = rememberDatePickerState(
         initialSelectedDateMillis = initialMillis,
         selectableDates = object : androidx.compose.material3.SelectableDates {
@@ -494,7 +500,7 @@ private fun DateDialog(
             TextButton(onClick = {
                 state.selectedDateMillis?.let { millis ->
                     val date = Instant.ofEpochMilli(millis)
-                        .atZone(ZoneId.systemDefault())
+                        .atZone(ZoneOffset.UTC)
                         .toLocalDate()
                     onConfirm(date)
                 }

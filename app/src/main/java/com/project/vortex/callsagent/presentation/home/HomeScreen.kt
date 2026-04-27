@@ -27,6 +27,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -66,6 +69,13 @@ fun HomeScreen(
     val currentRoute = backStackEntry?.destination?.route
     val isStaleData by viewModel.isStaleData.collectAsState()
 
+    // Tap-to-scroll-top: each tab gets a counter that increments when
+    // the agent re-taps the bottom-nav item that's already active.
+    // Each screen observes its own tick via LaunchedEffect and scrolls
+    // its list to the top.
+    var clientsScrollToTopTick by remember { mutableIntStateOf(0) }
+    var agendaScrollToTopTick by remember { mutableIntStateOf(0) }
+
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -81,6 +91,14 @@ fun HomeScreen(
                                     restoreState = true
                                     // Pop anything stacked on top of the start destination.
                                     popUpTo(HomeTabs.CLIENTS) { saveState = true }
+                                }
+                            } else {
+                                // Re-tap on the active tab → scroll the
+                                // tab's list to the top. Each screen
+                                // listens for its own tick.
+                                when (tab.route) {
+                                    HomeTabs.CLIENTS -> clientsScrollToTopTick++
+                                    HomeTabs.AGENDA -> agendaScrollToTopTick++
                                 }
                             }
                         },
@@ -122,10 +140,14 @@ fun HomeScreen(
                             // know it's in a session.
                             onClientSelected(firstClientId)
                         },
+                        scrollToTopTick = clientsScrollToTopTick,
                     )
                 }
                 composable(HomeTabs.AGENDA) {
-                    AgendaScreen(onFollowUpSelected = onClientSelected)
+                    AgendaScreen(
+                        onFollowUpSelected = onClientSelected,
+                        scrollToTopTick = agendaScrollToTopTick,
+                    )
                 }
                 composable(HomeTabs.SETTINGS) {
                     SettingsScreen(onLoggedOut = onLogout)

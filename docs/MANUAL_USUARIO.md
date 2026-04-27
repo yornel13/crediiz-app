@@ -154,44 +154,87 @@ Y queda listo para trabajar. El agente entra directo al tab
 
 ## 4. Pantalla principal: Clientes
 
-Es la pantalla que el agente ve la mayor parte del día. En la
-versión actual muestra **una sola lista**: los clientes que tiene
-asignados y aún no ha llamado (estado `PENDING`).
+Es la pantalla que el agente ve la mayor parte del día. La pestaña
+Clientes ahora tiene dos vistas seleccionables con un pill arriba:
+**Pendientes** y **Recientes**. Hay una pestaña separada de
+**Agenda** (ver § 11) para los seguimientos agendados.
 
 ### 4.1 Estructura de la pantalla
 
 ```
-┌─────────────────────────────────────────────┐
-│  Buenas tardes, agente1                     │
-│  113 clientes pendientes        [⟳ sincr.]  │
-│                                             │
-│  🔍 Buscar por nombre o teléfono…           │
-│                                             │
-│  Maria López                          [📞]  │
-│  +507 6680-1776                             │
-│  ─────────────────────────────────────────  │
-│  Carlos Pérez                         [📞]  │
-│  +507 6234-1100                             │
-│  …                                          │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│  Your queue                       [⟳ synced] │
+│  113   clients to call                       │
+│                                              │
+│  🔍 Search by name or phone…                 │
+│                                              │
+│  ╭────────────────╮  ╭────────────────╮      │
+│  │ Pendientes 113 │  │  Recientes 8   │      │
+│  ╰────────────────╯  ╰────────────────╯      │
+│                                              │
+│  UNTOUCHED  · 95                             │
+│    Maria López                       [⋯]    │
+│    +507 6680-1776                            │
+│  ────────────────────────────────────────    │
+│    Carlos Pérez                      [⋯]    │
+│    ...                                       │
+│                                              │
+│  RETRY · 18                                  │
+│  Already attempted; still pending until      │
+│  closed.                                     │
+│    Pedro Gómez · ocupado · hace 2h           │
+│    ...                                       │
+└──────────────────────────────────────────────┘
 ```
 
-- **Saludo + contador**: arriba, en grande. El contador es el número
-  de clientes pendientes y NO cambia cuando el agente busca
-  (decisión deliberada — antes cambiaba y confundía).
-- **Indicador de sincronización**: chip a la derecha del contador,
-  con cuatro estados (ver § 10).
-- **Búsqueda**: filtra por nombre o teléfono mientras se tipea.
-- **Lista**: ordenada por `queueOrder` — el orden que el admin
-  asignó. El agente debería trabajarla de arriba hacia abajo.
+- **Saludo + contador**: arriba, en grande. El contador refleja la
+  vista activa (Pendientes o Recientes).
+- **Indicador de sincronización**: chip a la derecha, con cuatro
+  estados (ver § 10).
+- **Pill de vistas**: dos opciones —
+  **Pendientes** (cola activa de llamadas) y **Recientes**
+  (acciones en las últimas 24 h: llamadas + descartes con Deshacer).
+- **Búsqueda**: filtra por nombre o teléfono dentro de la vista
+  activa.
+- **Auto-call FAB**: sólo aparece en Pendientes — la cola del
+  auto-call concatena Untouched + Retry en ese orden.
 
-### 4.2 ¿Por qué solo PENDING en esta versión?
+### 4.2 Pendientes — dos sub-secciones
 
-El MVP v1.0 prioriza **simpleza extrema**: una lista, un siguiente
-cliente, un objetivo. Sabemos que esto deja afuera dos casos de uso
-reales (recordar a quién llamé hoy, gestionar interesados a
-mediano plazo). Esos los resolvemos en la siguiente iteración con
-las tres vistas Pendientes / Recientes / Interesados (ver § 11).
+Ver detalle en **§ 11.2**. Resumen:
+
+- **Untouched** (Sin llamar): clientes nunca tocados. Cola fría
+  ordenada por `queueOrder`.
+- **Retry** (Para reintentar): ya intentaste y fueron NO_ANSWER /
+  BUSY. Ordenados con el más viejo arriba (más "listo" para
+  reintentar). Muestran badge del último outcome ("Busy" / "No
+  answer") y "hace Xh".
+
+Cada tarjeta tiene un menú `⋯` con la acción **"Dismiss client"**
+(ver § 12).
+
+### 4.3 Recientes — calls + descartes (24 h)
+
+Muestra todo lo que el agente tocó en las últimas 24 h:
+- Llamadas de cualquier resultado (con su badge: No answer / Busy /
+  Interested / Not interested / Invalid number).
+- Descartes (badge ⨯ DISMISSED) con botón **Undo dismissal**
+  durante la ventana de 24 h.
+
+Tap en una tarjeta abre el detalle del cliente (Pre-Call). Es
+también el lugar para **agregar una nota tardía** o **deshacer un
+descarte**.
+
+### 4.4 Sincronización transparente
+
+Cuando el agente está mid-call (Dialing/Ringing/Active), la app
+**suspende la sincronización del lado de bajada** (no descarga
+cambios del server). Sólo sube los datos pendientes. Esto evita que
+la lista del agente "salte" o que un cliente cambie de posición
+mientras está hablando con él. Una vez termina la llamada, la
+sincronización completa corre normal — la próxima vez que el
+agente guarda en Post-Call, se gatilla un sync inmediato. (KI-03
+en docs internas.)
 
 ---
 
@@ -343,26 +386,35 @@ perdida** con timestamp y número.
 ## 9. Auto-llamado (auto-call)
 
 Es una función que automatiza llamadas en serie sobre la lista de
-Pendientes. El agente toca "Iniciar auto-llamado" en la cabecera y
-la app comienza:
+Pendientes (incluye las dos sub-secciones: primero los nunca
+llamados, luego los de reintento). El agente toca "Iniciar
+auto-llamado" en la cabecera y la app comienza:
 
 1. Llama al primer cliente.
-2. Cuando termina, lleva al agente a Post-Call.
-3. Después de guardar, espera 5 segundos (cuenta regresiva visible).
-4. Llama automáticamente al siguiente.
+2. Cuando termina la llamada, lleva al agente a Post-Call.
+3. El agente marca outcome y guarda. Si fue **INTERESADO**, también
+   llena fecha y hora del próximo follow-up dentro del mismo
+   Post-Call.
+4. La app espera unos segundos (cuenta regresiva visible) y llama
+   automáticamente al siguiente cliente.
 
-Esto sigue **hasta que el agente marca INTERESADO** o cancela
-manualmente la sesión.
+> **Política actual:** **todos los outcomes auto-avanzan** mientras
+> el toggle de Auto-advance esté activo (Ajustes → Auto-Call Mode).
+> En iteraciones anteriores INTERESADO detenía la cuenta regresiva,
+> pero eso resultaba en sensación de "auto-call se desactivó" para
+> el agente — y como la pausa real ocurre dentro de Post-Call al
+> llenar fecha/hora, no era necesario un stop adicional.
 
-> **Decisión clave:** solo INTERESADO detiene la cuenta regresiva.
-> Para los otros resultados (no contestó, ocupado, no interesado,
-> número inválido) la sesión sigue automáticamente al siguiente. La
-> idea es maximizar la cantidad de llamadas conectadas por jornada
-> sin que el agente tenga que pelear con la pantalla.
+> **Cuenta regresiva configurable:** en Ajustes, el agente puede
+> ajustar el delay del countdown entre 0 y 15 segundos (slider).
+> Con 0 segundos no hay overlay — el siguiente cliente se llama al
+> instante. El default es 5 segundos.
 
-Cuando hay un INTERESADO, la sesión se "pausa" en Post-Call para
-que el agente agende el follow-up con calma. Después puede reanudar
-o terminar la sesión.
+La sesión auto-call se mantiene activa hasta que:
+- El agente toca el botón **Atrás** desde Pre-Call (sale de la sesión).
+- Se acaba la cola de Pendientes.
+- El agente cancela explícitamente la cuenta regresiva ("Cancel" en
+  el overlay).
 
 Al final, la app muestra un **resumen de sesión**: cuántos
 contactados, cuántos interesados, cuántos no contestaron, etc.

@@ -16,6 +16,12 @@ data class ClientEntity(
     @PrimaryKey val id: String,
     val name: String,
     val phone: String,
+    /** Panama national ID. Optional. */
+    val cedula: String?,
+    /** Social security number. Optional. */
+    val ssNumber: String?,
+    /** Monthly salary in USD. */
+    val salary: Double?,
     val status: ClientStatus,
     val assignedTo: String?,
     val assignedAt: Instant?,

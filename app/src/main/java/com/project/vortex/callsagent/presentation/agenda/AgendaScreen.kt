@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,6 +33,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,11 +61,22 @@ import java.time.temporal.ChronoUnit
 @Composable
 fun AgendaScreen(
     onFollowUpSelected: (String) -> Unit,
+    /**
+     * Increments every time the agent re-taps the Agenda tab on the
+     * bottom nav while already on it. Each new value triggers a
+     * scroll-to-top of the list.
+     */
+    scrollToTopTick: Int = 0,
     viewModel: AgendaViewModel = hiltViewModel(),
 ) {
     val agenda by viewModel.agenda.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     var dismissTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    val listState = rememberLazyListState()
+    LaunchedEffect(scrollToTopTick) {
+        if (scrollToTopTick > 0) listState.animateScrollToItem(0)
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -85,7 +98,10 @@ fun AgendaScreen(
             if (agenda.isEmpty()) {
                 EmptyAgenda(isRefreshing = uiState.isRefreshing)
             } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
                     agenda.forEach { (section, items) ->
                         item(key = "header-${section.name}") {
                             SectionHeader(section, items.size)

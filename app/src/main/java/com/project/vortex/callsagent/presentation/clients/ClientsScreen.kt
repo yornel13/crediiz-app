@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,6 +51,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +89,13 @@ import java.time.temporal.ChronoUnit
 fun ClientsScreen(
     onClientSelected: (String) -> Unit,
     onStartAutoCall: (firstClientId: String) -> Unit,
+    /**
+     * Increments every time the agent re-taps the Clients tab on the
+     * bottom nav while already on it. Each new value triggers a
+     * scroll-to-top of the list. Default 0 — no scroll on first
+     * composition.
+     */
+    scrollToTopTick: Int = 0,
     viewModel: ClientsViewModel = hiltViewModel(),
 ) {
     val pendingNeverCalled by viewModel.pendingNeverCalled.collectAsState()
@@ -107,6 +116,12 @@ fun ClientsScreen(
     val activeListSize = when (viewKind) {
         ClientsViewKind.PENDIENTES -> pendingListSize
         ClientsViewKind.RECIENTES -> recentEntries.size
+    }
+
+    // Tap-to-scroll-top — see HomeScreen `clientsScrollToTopTick`.
+    val listState = rememberLazyListState()
+    LaunchedEffect(scrollToTopTick) {
+        if (scrollToTopTick > 0) listState.animateScrollToItem(0)
     }
 
     Scaffold(
@@ -132,6 +147,7 @@ fun ClientsScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
         LazyColumn(
+            state = listState,
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,

@@ -165,10 +165,10 @@ shouldn't see the row shift under their fingers.
 
 ---
 
-## KI-04.b — Agenda follow-up for client missing from local cache (mitigated)
+## KI-04.b — Agenda follow-up for client missing from local cache ✅ CLOSED
 
-**Severity:** 🟢 Mitigated 2026-04-26 — visible bug fixed; long-term
-recovery still pending.
+**Severity:** ✅ Closed 2026-04-26 — root cause fixed on backend
+(BE-04). Mobile-side JOIN filter remains as belt-and-suspenders.
 
 **Symptom (before mitigation):** the agent saw a follow-up in
 Agenda → tapped it → "Client not found" error on Pre-Call.
@@ -195,22 +195,30 @@ see them: admin reassigns X to another agent's INTERESTED queue
 without cancelling the prior agent's follow-up — that follow-up
 should probably go away anyway, but tooling isn't perfect.
 
-**Long-term fix (deferred):**
+**Root cause fix (BE-04, deployed 2026-04-26):**
 
-- Backend: add `GET /clients/:id` (or expose via `/clients/by-id`)
-  that returns the client regardless of agent assignment, gated to
-  the agent role. Mobile can fall back to that when local lookup
-  fails.
-- Mobile: in `PreCallViewModel.loadClient()`, on null from
-  `findById`, attempt a server fetch. If that also fails, show a
-  cleaner error ("This client is no longer available — ask the
-  admin to verify").
-- Server-side: also consider auto-cancelling pending follow-ups
-  when a client transitions away from INTERESTED (agent marks
-  NOT_INTERESTED on a follow-up call, admin changes status, etc.)
-  via a hook in the sync.service.
+`ClientsService.updateClientOnInteraction` now cancels any pending
+follow-ups for the client+agent **whenever the new status leaves
+INTERESTED** (via `NOT_INTERESTED → REJECTED`,
+`INVALID_NUMBER → INVALID_NUMBER`, etc.). The cancel is sourced
+from inside the sync flow — same agent that took the call, same
+client. So:
 
-**Effort:** ~2-3 hours total (mobile + backend endpoint).
+- Agent calls Maria today (a follow-up call). Marks NOT_INTERESTED.
+- Server: `client.status = REJECTED` AND tomorrow's pending
+  follow-up gets `status = CANCELLED, cancelReason = "Client status
+  changed to REJECTED via NOT_INTERESTED"`.
+- Mobile next refresh: agenda no longer surfaces the orphan.
+
+**Defense in depth that stays:** the mobile-side INNER JOIN filter
+in `FollowUpDao.observePending` still hides any agenda row whose
+client isn't in the local cache. Belt-and-suspenders against an
+admin-side status mutation that bypasses sync.
+
+**Still deferred (lower priority):** a `GET /clients/:id` agent
+endpoint that lets mobile fetch the client on demand if the local
+cache is missing them. Not needed for the bug above; would be nice
+for power-user diagnostics.
 
 ---
 

@@ -12,6 +12,12 @@ data class ClientResponse(
     @Json(name = "_id") val id: String,
     val name: String,
     val phone: String,
+    /** Panama national ID. Optional — some banking partners accept clients without one. */
+    val cedula: String?,
+    /** Social security number. Optional — not all source banks provide it. */
+    val ssNumber: String?,
+    /** Monthly salary in USD. */
+    val salary: Double?,
     val status: String,
     val assignedTo: String?,
     val assignedAt: String?,
