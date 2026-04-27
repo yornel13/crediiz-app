@@ -20,11 +20,28 @@ interface FollowUpDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(followUps: List<FollowUpEntity>)
 
+    /**
+     * Agenda feed. INNER JOIN against `clients` ensures we never
+     * surface a follow-up whose client row has been removed from the
+     * local cache — those rows would crash with "Client not found"
+     * when the agent taps them.
+     *
+     * Follow-up rows can become orphaned when the client moves to a
+     * status mobile doesn't sync (REJECTED / INVALID_NUMBER /
+     * CONVERTED / DISMISSED / DO_NOT_CALL): the next
+     * `replaceAllByStatus(INTERESTED, ...)` deletes the client locally
+     * but `replaceAgenda` keeps the follow-up.
+     *
+     * Tracked as KI-04.b — long-term we want a server-fallback
+     * `GET /clients/:id` so orphan follow-ups can still be opened.
+     * For now the JOIN is the cleanest way to avoid the visible bug.
+     */
     @Query(
         """
-        SELECT * FROM follow_ups
-        WHERE status = :status AND scheduledAt >= :from
-        ORDER BY scheduledAt ASC
+        SELECT f.* FROM follow_ups f
+        INNER JOIN clients c ON c.id = f.clientId
+        WHERE f.status = :status AND f.scheduledAt >= :from
+        ORDER BY f.scheduledAt ASC
         """,
     )
     fun observePending(status: FollowUpStatus, from: Instant): Flow<List<FollowUpEntity>>

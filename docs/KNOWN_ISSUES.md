@@ -165,6 +165,55 @@ shouldn't see the row shift under their fingers.
 
 ---
 
+## KI-04.b — Agenda follow-up for client missing from local cache (mitigated)
+
+**Severity:** 🟢 Mitigated 2026-04-26 — visible bug fixed; long-term
+recovery still pending.
+
+**Symptom (before mitigation):** the agent saw a follow-up in
+Agenda → tapped it → "Client not found" error on Pre-Call.
+
+**Why it happened:**
+
+1. Agent marked client X as INTERESTED with follow-up.
+2. Later, X's status moved off INTERESTED (agent marked
+   NOT_INTERESTED later, admin changed it on the panel, etc.).
+3. `refreshAssigned(INTERESTED)` no longer included X →
+   `replaceAllByStatus(INTERESTED, ...)` deleted X from local DB.
+4. `refreshAgenda()` still returned X's follow-up (server didn't
+   cancel it automatically) → `replaceAgenda` re-inserted it.
+5. Tap on the orphan follow-up → `clientRepository.findById` returns
+   null → Pre-Call shows the error state.
+
+**Mitigation in place:** `FollowUpDao.observePending` now does an
+INNER JOIN against `clients` so orphan follow-ups are filtered out
+of the agenda before they reach the UI. The bug stops surfacing.
+
+**What's still imperfect:** the agent loses visibility of those
+follow-ups entirely. A legitimate scenario where they should still
+see them: admin reassigns X to another agent's INTERESTED queue
+without cancelling the prior agent's follow-up — that follow-up
+should probably go away anyway, but tooling isn't perfect.
+
+**Long-term fix (deferred):**
+
+- Backend: add `GET /clients/:id` (or expose via `/clients/by-id`)
+  that returns the client regardless of agent assignment, gated to
+  the agent role. Mobile can fall back to that when local lookup
+  fails.
+- Mobile: in `PreCallViewModel.loadClient()`, on null from
+  `findById`, attempt a server fetch. If that also fails, show a
+  cleaner error ("This client is no longer available — ask the
+  admin to verify").
+- Server-side: also consider auto-cancelling pending follow-ups
+  when a client transitions away from INTERESTED (agent marks
+  NOT_INTERESTED on a follow-up call, admin changes status, etc.)
+  via a hook in the sync.service.
+
+**Effort:** ~2-3 hours total (mobile + backend endpoint).
+
+---
+
 ## KI-04 — Unassigned client leaves orphan local records with no reconciliation
 
 **Severity:** 🟠 Medium-High — no silent local data loss (verified by
