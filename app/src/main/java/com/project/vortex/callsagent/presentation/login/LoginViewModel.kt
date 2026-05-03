@@ -95,14 +95,17 @@ class LoginViewModel @Inject constructor(
      * lands on Home with data already in Room. Returns true if any of the
      * fetches failed (e.g. offline) — caller surfaces a "stale data" banner.
      *
-     * Note: only PENDING clients are refreshed here. INTERESTED come in via
-     * the regular sync cycle. This avoids tripping KI-02 (consecutive
-     * `refreshAssigned` calls erase each other) on the very first launch.
+     * All three pulls run in parallel — KI-02 is closed (the DAO uses
+     * `replaceAllByStatus` so refreshing PENDING and INTERESTED no
+     * longer clobber each other). INTERESTED has to land here too;
+     * otherwise the Agenda's INNER JOIN against `clients` filters
+     * out every follow-up until the agent triggers another sync.
      */
     private suspend fun hydrate(): Boolean = coroutineScope {
         val pending = async { clientRepository.refreshAssigned(ClientStatus.PENDING) }
+        val interested = async { clientRepository.refreshAssigned(ClientStatus.INTERESTED) }
         val agenda = async { followUpRepository.refreshAgenda() }
-        val results = listOf(pending.await(), agenda.await())
+        val results = listOf(pending.await(), interested.await(), agenda.await())
         results.any { it.isFailure }
     }
 }

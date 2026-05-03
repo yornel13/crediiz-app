@@ -48,6 +48,9 @@ class FollowUpRepositoryImpl @Inject constructor(
         dao.observePending(FollowUpStatus.PENDING, from)
             .map { list -> list.map { it.toDomain() } }
 
+    override fun observeNextPendingForClient(clientId: String, now: Instant): Flow<FollowUp?> =
+        dao.observeNextPendingForClient(clientId, now).map { it?.toDomain() }
+
     override suspend fun refreshAgenda(from: String?, to: String?): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {

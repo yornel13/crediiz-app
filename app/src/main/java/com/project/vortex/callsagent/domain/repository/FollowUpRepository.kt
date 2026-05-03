@@ -12,6 +12,13 @@ interface FollowUpRepository {
     /** Observe pending follow-ups from a given instant forward (the agent's agenda). */
     fun observeAgenda(from: Instant): Flow<List<FollowUp>>
 
+    /**
+     * Observe the next pending follow-up for a client (soonest
+     * `scheduledAt` after [now]). Drives the "Scheduled call" card on
+     * Pre-Call. Emits null while the client has no future follow-up.
+     */
+    fun observeNextPendingForClient(clientId: String, now: Instant): Flow<FollowUp?>
+
     /** Pull the agenda from the server and merge into local DB. */
     suspend fun refreshAgenda(from: String? = null, to: String? = null): Result<Unit>
 

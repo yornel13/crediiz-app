@@ -49,6 +49,24 @@ interface FollowUpDao {
     @Query("SELECT * FROM follow_ups WHERE mobileSyncId = :id")
     suspend fun findById(id: String): FollowUpEntity?
 
+    /**
+     * Next pending follow-up for the given client (the soonest
+     * `scheduledAt` strictly after [now]). Powers the "Llamada
+     * agendada" card on Pre-Call. Returns null when the client has
+     * no future pending follow-up.
+     */
+    @Query(
+        """
+        SELECT * FROM follow_ups
+        WHERE clientId = :clientId
+          AND status = 'PENDING'
+          AND scheduledAt > :now
+        ORDER BY scheduledAt ASC
+        LIMIT 1
+        """,
+    )
+    fun observeNextPendingForClient(clientId: String, now: Instant): Flow<FollowUpEntity?>
+
     @Query("SELECT * FROM follow_ups WHERE syncStatus = :status")
     suspend fun findBySyncStatus(status: SyncStatus): List<FollowUpEntity>
 

@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.domain.model.Client
+import com.project.vortex.callsagent.domain.model.FollowUp
 import com.project.vortex.callsagent.domain.model.Note
 import com.project.vortex.callsagent.presentation.autocall.AutoCallSession
 import com.project.vortex.callsagent.presentation.clients.components.DismissClientSheet
@@ -82,6 +83,7 @@ import com.project.vortex.callsagent.ui.theme.label
 import com.project.vortex.callsagent.ui.theme.palette
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
@@ -99,6 +101,7 @@ fun PreCallScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val notes by viewModel.notes.collectAsState()
+    val nextFollowUp by viewModel.nextFollowUp.collectAsState()
     val autoCallSession by viewModel.autoCallSession.collectAsState()
     val pendingAutoCall by viewModel.pendingAutoCall.collectAsState()
     val autoCallDelaySeconds by viewModel.autoCallDelaySeconds.collectAsState()
@@ -152,6 +155,7 @@ fun PreCallScreen(
             else -> PreCallContent(
                 client = uiState.client!!,
                 notes = notes,
+                nextFollowUp = nextFollowUp,
                 autoCallSession = autoCallSession,
                 onAddNote = viewModel::openNoteSheet,
                 onBack = effectiveOnBack,
@@ -212,6 +216,7 @@ fun PreCallScreen(
 private fun PreCallContent(
     client: Client,
     notes: List<Note>,
+    nextFollowUp: FollowUp?,
     autoCallSession: AutoCallSession?,
     onAddNote: () -> Unit,
     onBack: () -> Unit,
@@ -233,6 +238,18 @@ private fun PreCallContent(
                 onExitAutoCall = onExitAutoCall,
                 onRequestDismiss = onRequestDismiss,
             )
+        }
+
+        // ─── Scheduled follow-up reminder ──────────────────────────────
+        // If this client has a future pending follow-up, surface it
+        // right under the hero so the agent sees the commitment they
+        // (or another agent) made.
+        nextFollowUp?.let { followUp ->
+            item("followup_reminder") {
+                Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    ScheduledCallCard(followUp = followUp)
+                }
+            }
         }
 
         // ─── Personal data (cedula / SS / salary) ──────────────────────
@@ -523,6 +540,104 @@ private fun HeroDivider() {
             .heightIn(min = 32.dp)
             .background(Color.White.copy(alpha = 0.20f)),
     )
+}
+
+@Composable
+private fun ScheduledCallCard(followUp: FollowUp) {
+    val zone = ZoneId.systemDefault()
+    val now = Instant.now()
+    val isOverdue = followUp.scheduledAt.isBefore(now)
+    val scheduledLocal = remember(followUp.scheduledAt) {
+        followUp.scheduledAt.atZone(zone)
+    }
+    val absoluteText = remember(scheduledLocal, isOverdue) {
+        val today = LocalDate.now(zone)
+        val date = scheduledLocal.toLocalDate()
+        val dayLabel = when {
+            date == today -> "Today"
+            date == today.plusDays(1) -> "Tomorrow"
+            date == today.minusDays(1) -> "Yesterday"
+            else -> DateTimeFormatter.ofPattern("EEE, MMM d").format(scheduledLocal)
+        }
+        val timeLabel = DateTimeFormatter.ofPattern("h:mm a").format(scheduledLocal)
+        "$dayLabel · $timeLabel"
+    }
+    val relative = remember(followUp.scheduledAt, now, isOverdue) {
+        if (isOverdue) formatOverdueRelative(followUp.scheduledAt, now)
+        else formatUpcomingRelative(followUp.scheduledAt, now)
+    }
+
+    val container = if (isOverdue) MaterialTheme.colorScheme.errorContainer
+    else MaterialTheme.colorScheme.tertiaryContainer
+    val onContainer = if (isOverdue) MaterialTheme.colorScheme.onErrorContainer
+    else MaterialTheme.colorScheme.onTertiaryContainer
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = container),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(onContainer.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Phone,
+                    contentDescription = null,
+                    tint = onContainer,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (isOverdue) "Scheduled call (overdue)" else "Scheduled call",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onContainer.copy(alpha = 0.85f),
+                )
+                Text(
+                    text = absoluteText,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = onContainer,
+                )
+                Text(
+                    text = relative,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = onContainer.copy(alpha = 0.85f),
+                )
+            }
+        }
+    }
+}
+
+private fun formatUpcomingRelative(target: Instant, now: Instant): String {
+    val minutes = ChronoUnit.MINUTES.between(now, target).coerceAtLeast(0)
+    return when {
+        minutes < 1 -> "starting now"
+        minutes < 60 -> "in ${minutes}m"
+        minutes < 60 * 24 -> "in ${minutes / 60}h"
+        minutes < 60 * 24 * 7 -> "in ${minutes / (60 * 24)}d"
+        else -> "in ${minutes / (60 * 24 * 7)}w"
+    }
+}
+
+private fun formatOverdueRelative(target: Instant, now: Instant): String {
+    val minutes = ChronoUnit.MINUTES.between(target, now).coerceAtLeast(0)
+    return when {
+        minutes < 60 -> "${minutes}m late"
+        minutes < 60 * 24 -> "${minutes / 60}h late"
+        else -> "${minutes / (60 * 24)}d late"
+    }
 }
 
 @Composable

@@ -9,9 +9,11 @@ import com.project.vortex.callsagent.common.enums.SyncStatus
 import com.project.vortex.callsagent.data.local.preferences.SettingsPreferences
 import com.project.vortex.callsagent.data.sync.SyncScheduler
 import com.project.vortex.callsagent.domain.model.Client
+import com.project.vortex.callsagent.domain.model.FollowUp
 import com.project.vortex.callsagent.domain.model.Note
 import com.project.vortex.callsagent.domain.repository.ClientDismissalRepository
 import com.project.vortex.callsagent.domain.repository.ClientRepository
+import com.project.vortex.callsagent.domain.repository.FollowUpRepository
 import com.project.vortex.callsagent.domain.repository.NoteRepository
 import com.project.vortex.callsagent.presentation.autocall.AutoCallNavTarget
 import com.project.vortex.callsagent.presentation.autocall.AutoCallOrchestrator
@@ -61,6 +63,7 @@ class PreCallViewModel @Inject constructor(
     private val clientRepository: ClientRepository,
     private val clientDismissalRepository: ClientDismissalRepository,
     private val noteRepository: NoteRepository,
+    private val followUpRepository: FollowUpRepository,
     private val syncScheduler: SyncScheduler,
     private val callManager: CallManager,
     private val autoCallOrchestrator: AutoCallOrchestrator,
@@ -156,6 +159,20 @@ class PreCallViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList(),
         )
+
+    /**
+     * Next pending follow-up for this client (after now). Drives the
+     * "Scheduled call" card on Pre-Call so the agent sees there's a
+     * commitment lined up. Captured once on ViewModel construction —
+     * a follow-up scheduled today won't go stale during this session.
+     */
+    val nextFollowUp: StateFlow<FollowUp?> =
+        followUpRepository.observeNextPendingForClient(clientId, Instant.now())
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = null,
+            )
 
     init {
         loadClient()
