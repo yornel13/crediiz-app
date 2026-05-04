@@ -3,6 +3,7 @@ package com.project.vortex.callsagent.presentation.agenda
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.common.enums.DismissalReasonCode
+import com.project.vortex.callsagent.data.sync.ConnectivityObserver
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
 import com.project.vortex.callsagent.domain.repository.ClientDismissalRepository
@@ -14,6 +15,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -50,6 +53,7 @@ class AgendaViewModel @Inject constructor(
     private val followUpRepository: FollowUpRepository,
     private val clientRepository: ClientRepository,
     private val clientDismissalRepository: ClientDismissalRepository,
+    private val connectivityObserver: ConnectivityObserver,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AgendaUiState())
@@ -73,6 +77,24 @@ class AgendaViewModel @Inject constructor(
 
     init {
         refresh()
+        observeConnectivityForErrorClear()
+    }
+
+    /**
+     * Watch connectivity transitions: as soon as the device goes from
+     * offline to online, drop any stale "Unable to resolve host…" /
+     * network-error message and re-fetch.
+     */
+    private fun observeConnectivityForErrorClear() {
+        viewModelScope.launch {
+            connectivityObserver.isOnline
+                .drop(1) // skip the initial StateFlow value
+                .filter { it } // only on offline → online transitions
+                .collect {
+                    _uiState.value = _uiState.value.copy(errorMessage = null)
+                    refresh()
+                }
+        }
     }
 
     fun dismissClient(

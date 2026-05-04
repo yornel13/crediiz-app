@@ -6,12 +6,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Default-dialer required permissions -->
-    <uses-permission android:name="android.permission.CALL_PHONE" />
-    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <!-- SIP audio capture (mic) and routing -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
 
     <!-- Battery optimization (Samsung One UI is aggressive about killing services) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
@@ -24,7 +21,7 @@
 
     <!-- Foreground service (keep call tracking alive during active calls) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <!-- Exact alarms for follow-up reminders -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
@@ -52,17 +49,6 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-            <!-- Dialer-role eligibility — required so RoleManager.ROLE_DIALER lists us. -->
-            <intent-filter>
-                <action android:name="android.intent.action.DIAL" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.DIAL" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="tel" />
-            </intent-filter>
         </activity>
 
         <!-- Mandatory onboarding gate — non-skippable while requirements are missing. -->
@@ -85,32 +71,13 @@
             android:turnScreenOn="true"
             android:theme="@style/Theme.CallsAgends" />
 
-        <!-- Telecom ConnectionService — bound by the OS when our role is held
-             and the app places or receives calls. -->
+        <!-- SIP call foreground service. type=microphone keeps the
+             mic alive when the agent backgrounds the app during a
+             call (Android 14+ requirement). -->
         <service
-            android:name=".telecom.CallsConnectionService"
-            android:exported="true"
-            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
-            <intent-filter>
-                <action android:name="android.telecom.ConnectionService" />
-            </intent-filter>
-        </service>
-
-        <!-- Telecom InCallService — bound by the OS to surface in-call UI. -->
-        <service
-            android:name=".telecom.CallsInCallService"
-            android:exported="true"
-            android:permission="android.permission.BIND_INCALL_SERVICE">
-            <meta-data
-                android:name="android.telecom.IN_CALL_SERVICE_UI"
-                android:value="true" />
-            <meta-data
-                android:name="android.telecom.IN_CALL_SERVICE_RINGING"
-                android:value="false" />
-            <intent-filter>
-                <action android:name="android.telecom.InCallService" />
-            </intent-filter>
-        </service>
+            android:name=".service.SipCallForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <!--
           Disable WorkManager's eager auto-initialization via androidx.startup.

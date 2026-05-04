@@ -241,21 +241,11 @@ private data class StepInfo(
 )
 
 private fun OnboardingStep.info(): StepInfo = when (this) {
-    OnboardingStep.DIALER_ROLE -> StepInfo(
-        title = "Set as default Phone app",
-        description = "Calls Agent must be the system phone app to place and " +
-            "receive calls.",
-        icon = Icons.Filled.Star,
-    )
-    OnboardingStep.CALL_PHONE -> StepInfo(
-        title = "Place phone calls",
-        description = "Required to dial assigned clients.",
-        icon = Icons.Filled.Phone,
-    )
-    OnboardingStep.ANSWER_PHONE_CALLS -> StepInfo(
-        title = "Answer phone calls",
-        description = "Lets you accept incoming calls from clients.",
-        icon = Icons.Filled.PhoneInTalk,
+    OnboardingStep.RECORD_AUDIO -> StepInfo(
+        title = "Microphone access",
+        description = "Required so the agent's voice reaches the client during " +
+            "SIP calls.",
+        icon = Icons.Filled.Mic,
     )
     OnboardingStep.MODIFY_AUDIO_SETTINGS -> StepInfo(
         title = "Manage audio",
@@ -265,7 +255,7 @@ private fun OnboardingStep.info(): StepInfo = when (this) {
     )
     OnboardingStep.NOTIFICATIONS -> StepInfo(
         title = "Show notifications",
-        description = "For follow-up reminders and call status.",
+        description = "For follow-up reminders and the in-call notification.",
         icon = Icons.Filled.Notifications,
     )
     OnboardingStep.BATTERY_OPTIMIZATION -> StepInfo(

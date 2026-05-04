@@ -194,6 +194,18 @@ private fun PostCallContent(
         }
         item("summary") { CallSummaryCard(client = client, interaction = interaction) }
         item("outcome_header") { SectionLabel("Call outcome") }
+        state.reasonLabel?.let { reason ->
+            item("outcome_reason") {
+                Text(
+                    text = reason,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 4.dp),
+                )
+            }
+        }
         // OutcomeSelector renders the follow-up form INLINE under the
         // INTERESTED row when that outcome is selected — agents see it
         // immediately without scrolling.
@@ -284,7 +296,9 @@ private fun OutcomeSelector(
     onTimeChange: (LocalTime) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        CallOutcome.values().forEach { outcome ->
+        val outcomesToShow = state.allowedOutcomes.takeIf { it.isNotEmpty() }
+            ?: CallOutcome.values().toList()
+        outcomesToShow.forEach { outcome ->
             OutcomeRow(
                 outcome = outcome,
                 selected = state.selectedOutcome == outcome,

@@ -17,7 +17,7 @@ import com.project.vortex.callsagent.domain.repository.FollowUpRepository
 import com.project.vortex.callsagent.domain.repository.NoteRepository
 import com.project.vortex.callsagent.presentation.autocall.AutoCallNavTarget
 import com.project.vortex.callsagent.presentation.autocall.AutoCallOrchestrator
-import com.project.vortex.callsagent.telecom.CallManager
+import com.project.vortex.callsagent.domain.call.CallController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,7 +65,7 @@ class PreCallViewModel @Inject constructor(
     private val noteRepository: NoteRepository,
     private val followUpRepository: FollowUpRepository,
     private val syncScheduler: SyncScheduler,
-    private val callManager: CallManager,
+    private val callController: CallController,
     private val autoCallOrchestrator: AutoCallOrchestrator,
     settingsPreferences: SettingsPreferences,
 ) : ViewModel() {
@@ -96,7 +96,7 @@ class PreCallViewModel @Inject constructor(
         // Manual Call cancels any pending auto-call countdown — the agent
         // explicitly took control.
         autoCallOrchestrator.cancelAutoCall()
-        callManager.startCall(client)
+        callController.startCall(client)
     }
 
     /** Auto-call countdown finished — fire the next call. */

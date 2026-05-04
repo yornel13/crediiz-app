@@ -38,7 +38,15 @@ fun AppNavGraph(
     val pendingEndedCall by callNavViewModel.endedCall.collectAsState()
     LaunchedEffect(pendingEndedCall) {
         val ended = pendingEndedCall ?: return@LaunchedEffect
-        navController.navigate(Routes.postCall(ended.clientId, ended.interactionMobileSyncId)) {
+        navController.navigate(
+            Routes.postCall(
+                clientId = ended.clientId,
+                interactionId = ended.interactionMobileSyncId,
+                prefilledOutcome = ended.suggestedOutcome,
+                allowedOutcomes = ended.allowedOutcomes,
+                reasonLabel = ended.reasonLabel,
+            ),
+        ) {
             // Replace PreCall in the back stack so back from PostCall returns to Home.
             popUpTo(Routes.HOME) { inclusive = false }
             launchSingleTop = true
@@ -135,6 +143,21 @@ fun AppNavGraph(
             arguments = listOf(
                 navArgument("clientId") { type = NavType.StringType },
                 navArgument("interactionId") { type = NavType.StringType },
+                navArgument("prefilledOutcome") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("allowedOutcomes") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("reasonLabel") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
             ),
         ) {
             PostCallScreen(

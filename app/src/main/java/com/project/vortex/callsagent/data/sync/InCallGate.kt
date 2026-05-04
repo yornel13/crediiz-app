@@ -1,7 +1,7 @@
 package com.project.vortex.callsagent.data.sync
 
-import com.project.vortex.callsagent.telecom.CallManager
-import com.project.vortex.callsagent.telecom.model.CallUiState
+import com.project.vortex.callsagent.domain.call.CallController
+import com.project.vortex.callsagent.domain.call.model.CallUiState
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -25,14 +25,14 @@ import javax.inject.Singleton
  */
 @Singleton
 class InCallGate @Inject constructor(
-    private val callManager: CallManager,
+    private val callController: CallController,
 ) {
     /** True while a call is being placed, ringing, or actively connected. */
-    fun isInCall(): Boolean = callManager.callState.value.isActive()
+    fun isInCall(): Boolean = callController.callState.value.isActive()
 
     /** Reactive form of [isInCall] — useful for UI / observers. */
     fun observeIsInCall(): Flow<Boolean> =
-        callManager.callState.map { it.isActive() }.distinctUntilChanged()
+        callController.callState.map { it.isActive() }.distinctUntilChanged()
 
     /**
      * Suspends until [isInCall] is false. Used by [SyncManager] when
@@ -40,7 +40,7 @@ class InCallGate @Inject constructor(
      * just hung up — the next sync was about to fire anyway).
      */
     suspend fun awaitIdle() {
-        callManager.callState.first { !it.isActive() }
+        callController.callState.first { !it.isActive() }
     }
 
     private fun CallUiState.isActive(): Boolean = when (this) {

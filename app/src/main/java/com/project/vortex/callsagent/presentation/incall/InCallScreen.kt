@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.common.enums.CallDirection
 import com.project.vortex.callsagent.domain.model.Client
-import com.project.vortex.callsagent.telecom.model.CallUiState
+import com.project.vortex.callsagent.domain.call.model.CallUiState
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.theme.PhoneGreen
 import com.project.vortex.callsagent.ui.theme.PillShape
@@ -85,8 +85,6 @@ fun InCallScreen(
     }
 
     val gradient = Brush.verticalGradient(colors = listOf(Teal700, Teal900))
-    val isIncomingRinging = direction == CallDirection.INBOUND &&
-        callState is CallUiState.Ringing
 
     Surface(modifier = Modifier.fillMaxSize().background(gradient)) {
         Column(
@@ -96,28 +94,19 @@ fun InCallScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(horizontal = 20.dp, vertical = 16.dp),
         ) {
-            if (isIncomingRinging) {
-                IncomingRingingContent(
-                    client = client,
-                    fallbackPhone = incomingPhone.orEmpty(),
-                    onAccept = viewModel::acceptIncoming,
-                    onReject = viewModel::rejectIncoming,
-                )
-            } else {
-                ActiveCallContent(
-                    client = client,
-                    fallbackPhone = incomingPhone.orEmpty(),
-                    direction = direction,
-                    callState = callState,
-                    liveNote = liveNote,
-                    isMuted = isMuted,
-                    isSpeakerOn = isSpeaker,
-                    onNoteChange = viewModel::onNoteChange,
-                    onToggleMute = viewModel::toggleMute,
-                    onToggleSpeaker = viewModel::toggleSpeaker,
-                    onEndCall = viewModel::endCall,
-                )
-            }
+            ActiveCallContent(
+                client = client,
+                fallbackPhone = incomingPhone.orEmpty(),
+                direction = direction,
+                callState = callState,
+                liveNote = liveNote,
+                isMuted = isMuted,
+                isSpeakerOn = isSpeaker,
+                onNoteChange = viewModel::onNoteChange,
+                onToggleMute = viewModel::toggleMute,
+                onToggleSpeaker = viewModel::toggleSpeaker,
+                onEndCall = viewModel::endCall,
+            )
         }
     }
 }

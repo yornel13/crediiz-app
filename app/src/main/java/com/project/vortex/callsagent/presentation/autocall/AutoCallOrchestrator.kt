@@ -4,7 +4,7 @@ import android.util.Log
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.data.local.preferences.SettingsPreferences
 import com.project.vortex.callsagent.domain.repository.ClientRepository
-import com.project.vortex.callsagent.telecom.CallManager
+import com.project.vortex.callsagent.domain.call.CallController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,7 +39,7 @@ import javax.inject.Singleton
 @Singleton
 class AutoCallOrchestrator @Inject constructor(
     private val clientRepository: ClientRepository,
-    private val callManager: CallManager,
+    private val callController: CallController,
     private val settingsPreferences: SettingsPreferences,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -151,7 +151,7 @@ class AutoCallOrchestrator @Inject constructor(
                 return
             }
         Log.d(TAG, "fireAutoCall — placing call to ${client.id}")
-        callManager.startCall(client)
+        callController.startCall(client)
     }
 
     /** Called when the agent taps Cancel on the countdown overlay. */

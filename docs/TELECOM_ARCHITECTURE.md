@@ -1,10 +1,69 @@
 # TELECOM_ARCHITECTURE — `calls-agends` as a Native Dialer
 
+> **STATUS: SUPERSEDED — 2026-05-03**
+>
+> This architecture is being **replaced** by a SIP/VoIP-only stack
+> based on the Linphone SDK, registered against Voselia's SBC.
+>
+> **The decision** (Option A — Total Replacement):
+>
+> - Calls migrate from cellular PSTN to **SIP outbound** over the
+>   internet. The SIM card is no longer the call carrier for the
+>   agent workflow.
+> - Once SIP is live, **the app no longer needs `RoleManager.ROLE_DIALER`**.
+>   Default-dialer status only matters for intercepting PSTN traffic;
+>   if there is no PSTN traffic, there is nothing to intercept.
+> - `ConnectionService` and `InCallService` are deleted. The custom
+>   in-call UI (`InCallActivity` + `InCallScreen`) and the persistence
+>   layer (Interaction, Note, MissedCall, Sync) are **kept** — they
+>   are call-engine-agnostic.
+>
+> **Why this doc still exists**: it documents the historical Telecom
+> design and the rationale for incoming-call Option B. Both are
+> useful as reference if the product ever needs PSTN interception
+> again (e.g., a hybrid SIP+PSTN deployment).
+>
+> **For the active migration plan, see**:
+>
+> - [`SIP_MIGRATION_PLAN.md`](./SIP_MIGRATION_PLAN.md) — phased work plan
+> - [`SIP_VOSELIA_CONFIG.md`](./SIP_VOSELIA_CONFIG.md) — SBC parameters
+>
+> **Sections that no longer apply to v1.x and beyond:**
+>
+> - §1.1 "We are the default dialer" — false from the SIP cutover onward.
+> - §3.1 `CallsConnectionService` — file deleted in the migration.
+> - §3.2 `CallsInCallService` — file deleted in the migration.
+> - §3.3 `CallManager` — refactored to wrap `LinphoneCoreManager`
+>   instead of `TelecomManager.placeCall()`. Persistence logic is
+>   preserved.
+> - §3.4 End-to-end call flow — replaced by the SIP flow in the
+>   migration plan.
+> - §4.4–4.5 Dialer-role intent filters and `RoleManager` flow —
+>   removed in the migration.
+> - §5 Audio routing — re-implemented on top of `AudioManager` +
+>   Linphone audio router.
+> - §6.2 Incoming-call Option B — **out of scope** for the SIP MVP.
+>   Inbound calls are explicitly excluded; no SIP REGISTER persistence
+>   between sessions, no PSTN interception.
+>
+> Sections that **remain valid**:
+>
+> - §1.3 Operational context (hands-free, hardware, volume, fleet size).
+> - §6.5 Battery optimization (Samsung One UI is still aggressive — the
+>   foreground service for SIP audio still needs the same grant).
+> - §6.6 Role revocation handling — re-purposed to detect missing SIP
+>   permissions instead of missing dialer role.
+> - §6.7 Crash recovery — the orphan-call detection logic still applies.
+
+---
+
+**Original status (kept for history):**
 **Status:** locked architectural reference for the call-flow side of v1.0.
 Read before touching anything under `app/src/main/java/.../telecom/` or
 related manifest entries.
 
-Last updated: **2026-04-25** (initial; Option B locked for incoming calls)
+Last updated: **2026-04-25** (initial; Option B locked for incoming calls).
+Superseded **2026-05-03** by the SIP/Linphone migration.
 
 ---
 

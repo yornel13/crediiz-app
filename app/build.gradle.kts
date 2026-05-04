@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -5,6 +7,17 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.android)
 }
+
+// Reads SIP credentials (Phase A — hardcoded) from local.properties.
+// Phase B will replace these with backend-issued per-agent credentials,
+// at which point this block disappears.
+val sipProps: Properties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+val sipServer: String = sipProps.getProperty("sip.server", "")
+val sipUser: String = sipProps.getProperty("sip.user", "")
+val sipPassword: String = sipProps.getProperty("sip.password", "")
 
 android {
     namespace = "com.project.vortex.callsagent"
@@ -19,6 +32,13 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // Tab A9+ (SM-X216) ships arm64 only. Stripping other ABIs
+        // shaves the Linphone native payload to a single .so set.
+        ndk {
+            //noinspection ChromeOsAbiSupport
+            abiFilters += listOf("arm64-v8a")
+        }
+
         // Default API base URL points to Railway production.
         // Override per buildType below to hit a local backend instead.
         buildConfigField(
@@ -26,6 +46,11 @@ android {
             "API_BASE_URL",
             "\"https://crediiz-core-production.up.railway.app/api/\"",
         )
+
+        // SIP credentials (Phase A — hardcoded from local.properties).
+        buildConfigField("String", "SIP_SERVER", "\"$sipServer\"")
+        buildConfigField("String", "SIP_USER", "\"$sipUser\"")
+        buildConfigField("String", "SIP_PASSWORD", "\"$sipPassword\"")
     }
 
     buildTypes {
@@ -103,6 +128,9 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+
+    // Linphone SDK (SIP/VoIP outbound calling against Voselia)
+    implementation(libs.linphone.sdk.android)
 
     // Testing
     testImplementation(libs.junit)

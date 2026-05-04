@@ -1,7 +1,6 @@
 package com.project.vortex.callsagent.presentation.onboarding
 
 import android.Manifest
-import android.app.role.RoleManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -107,10 +106,8 @@ class OnboardingActivity : ComponentActivity() {
             return
         }
         when (step) {
-            OnboardingStep.DIALER_ROLE -> requestDialerRole()
-            OnboardingStep.CALL_PHONE -> requestPermission(step, Manifest.permission.CALL_PHONE)
-            OnboardingStep.ANSWER_PHONE_CALLS ->
-                requestPermission(step, Manifest.permission.ANSWER_PHONE_CALLS)
+            OnboardingStep.RECORD_AUDIO ->
+                requestPermission(step, Manifest.permission.RECORD_AUDIO)
             OnboardingStep.MODIFY_AUDIO_SETTINGS ->
                 requestPermission(step, Manifest.permission.MODIFY_AUDIO_SETTINGS)
             OnboardingStep.NOTIFICATIONS -> requestNotifications(step)
@@ -128,16 +125,6 @@ class OnboardingActivity : ComponentActivity() {
             requestPermission(step, Manifest.permission.POST_NOTIFICATIONS)
         } else {
             // Pre-API 33: notifications are granted by default.
-            viewModel.refreshStatuses()
-        }
-    }
-
-    private fun requestDialerRole() {
-        val rm = getSystemService(RoleManager::class.java) ?: return
-        if (rm.isRoleAvailable(RoleManager.ROLE_DIALER) &&
-            !rm.isRoleHeld(RoleManager.ROLE_DIALER)) {
-            genericIntentLauncher.launch(rm.createRequestRoleIntent(RoleManager.ROLE_DIALER))
-        } else {
             viewModel.refreshStatuses()
         }
     }
@@ -165,14 +152,12 @@ class OnboardingActivity : ComponentActivity() {
 
     private fun shouldShowRationale(step: OnboardingStep): Boolean {
         val perm = when (step) {
-            OnboardingStep.CALL_PHONE -> Manifest.permission.CALL_PHONE
-            OnboardingStep.ANSWER_PHONE_CALLS -> Manifest.permission.ANSWER_PHONE_CALLS
+            OnboardingStep.RECORD_AUDIO -> Manifest.permission.RECORD_AUDIO
             OnboardingStep.MODIFY_AUDIO_SETTINGS -> Manifest.permission.MODIFY_AUDIO_SETTINGS
             OnboardingStep.NOTIFICATIONS ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
                     Manifest.permission.POST_NOTIFICATIONS
                 else return true
-            OnboardingStep.DIALER_ROLE,
             OnboardingStep.BATTERY_OPTIMIZATION -> return true
         }
         return ActivityCompat.shouldShowRequestPermissionRationale(this, perm)

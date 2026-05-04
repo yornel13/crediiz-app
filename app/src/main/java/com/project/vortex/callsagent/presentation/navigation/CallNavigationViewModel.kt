@@ -3,8 +3,8 @@ package com.project.vortex.callsagent.presentation.navigation
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.domain.repository.InteractionRepository
-import com.project.vortex.callsagent.telecom.CallManager
-import com.project.vortex.callsagent.telecom.model.EndedCall
+import com.project.vortex.callsagent.domain.call.CallController
+import com.project.vortex.callsagent.domain.call.model.EndedCall
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,13 +31,13 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class CallNavigationViewModel @Inject constructor(
-    private val callManager: CallManager,
+    private val callController: CallController,
     private val interactionRepository: InteractionRepository,
 ) : ViewModel() {
 
-    val endedCall: StateFlow<EndedCall?> = callManager.lastEndedCall
+    val endedCall: StateFlow<EndedCall?> = callController.lastEndedCall
 
-    fun consumeEndedCall() = callManager.consumeLastEndedCall()
+    fun consumeEndedCall() = callController.consumeLastEndedCall()
 
     /** Recovery target — clientId + interactionMobileSyncId. */
     private val _orphanInteraction = MutableStateFlow<EndedCall?>(null)

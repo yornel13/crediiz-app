@@ -11,11 +11,12 @@ import dagger.hilt.android.AndroidEntryPoint
  * Hosts the in-call Compose UI. Lives in its own task so it can be
  * lock-screen friendly and landscape-locked (declared in the manifest).
  *
- * Lifecycle: launched by [com.project.vortex.callsagent.telecom.CallsInCallService.onCallAdded].
- * Closes itself once the call has ended (after a brief "Call ended"
- * confirmation) via [InCallScreen]'s `onCallFinished` callback. Navigation
- * to PostCall happens from `AppNavGraph` observing
- * `CallManager.lastEndedCall`.
+ * Lifecycle: launched by the call-flow code (see
+ * [com.project.vortex.callsagent.domain.call.CallController]). Closes
+ * itself once the call has ended (after a brief "Call ended"
+ * confirmation) via [InCallScreen]'s `onCallFinished` callback.
+ * Navigation to PostCall happens from `AppNavGraph` observing
+ * `CallController.lastEndedCall`.
  */
 @AndroidEntryPoint
 class InCallActivity : ComponentActivity() {

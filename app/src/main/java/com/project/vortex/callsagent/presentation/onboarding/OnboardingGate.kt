@@ -1,7 +1,6 @@
 package com.project.vortex.callsagent.presentation.onboarding
 
 import android.Manifest
-import android.app.role.RoleManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -28,19 +27,12 @@ class OnboardingGate @Inject constructor(
     fun allMet(): Boolean = OnboardingStep.values().all { isStepMet(it) }
 
     fun isStepMet(step: OnboardingStep): Boolean = when (step) {
-        OnboardingStep.DIALER_ROLE -> isDialerRoleHeld()
-        OnboardingStep.CALL_PHONE -> hasPermission(Manifest.permission.CALL_PHONE)
-        OnboardingStep.ANSWER_PHONE_CALLS ->
-            hasPermission(Manifest.permission.ANSWER_PHONE_CALLS)
+        OnboardingStep.RECORD_AUDIO ->
+            hasPermission(Manifest.permission.RECORD_AUDIO)
         OnboardingStep.MODIFY_AUDIO_SETTINGS ->
             hasPermission(Manifest.permission.MODIFY_AUDIO_SETTINGS)
         OnboardingStep.NOTIFICATIONS -> hasNotificationPermission()
         OnboardingStep.BATTERY_OPTIMIZATION -> isBatteryOptimizationIgnored()
-    }
-
-    fun isDialerRoleHeld(): Boolean {
-        val rm = context.getSystemService(RoleManager::class.java) ?: return false
-        return rm.isRoleHeld(RoleManager.ROLE_DIALER)
     }
 
     fun hasPermission(permission: String): Boolean =
@@ -61,13 +53,11 @@ class OnboardingGate @Inject constructor(
 /**
  * One step per requirement. Order = display order in the onboarding screen.
  *
- * Dialer role goes first because the others (especially audio routing in
- * Phase 3.2) won't behave correctly until we hold the role.
+ * RECORD_AUDIO is the new gate for SIP — without it Linphone cannot capture
+ * the agent's voice and the call is one-way.
  */
 enum class OnboardingStep {
-    DIALER_ROLE,
-    CALL_PHONE,
-    ANSWER_PHONE_CALLS,
+    RECORD_AUDIO,
     MODIFY_AUDIO_SETTINGS,
     NOTIFICATIONS,
     BATTERY_OPTIMIZATION,

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.common.enums.DismissalReasonCode
+import com.project.vortex.callsagent.data.sync.ConnectivityObserver
 import com.project.vortex.callsagent.data.sync.SyncManager
 import com.project.vortex.callsagent.data.sync.SyncResult
 import com.project.vortex.callsagent.data.sync.SyncScheduler
@@ -19,6 +20,8 @@ import com.project.vortex.callsagent.domain.repository.NoteRepository
 import com.project.vortex.callsagent.presentation.autocall.AutoCallOrchestrator
 import com.project.vortex.callsagent.presentation.navigation.HomeTabs
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -50,6 +53,7 @@ class ClientsViewModel @Inject constructor(
     private val followUpRepository: FollowUpRepository,
     private val autoCallOrchestrator: AutoCallOrchestrator,
     private val syncScheduler: SyncScheduler,
+    private val connectivityObserver: ConnectivityObserver,
     syncManager: SyncManager,
 ) : ViewModel() {
 
@@ -231,6 +235,26 @@ class ClientsViewModel @Inject constructor(
 
     init {
         refresh()
+        observeConnectivityForErrorClear()
+    }
+
+    /**
+     * Watch connectivity transitions: as soon as the device goes from
+     * offline to online, drop any stale "Unable to resolve host…" /
+     * network-error message and re-fetch. The SyncScheduler also
+     * triggers on reconnect, so the data half is covered; this just
+     * clears the banner the user is staring at.
+     */
+    private fun observeConnectivityForErrorClear() {
+        viewModelScope.launch {
+            connectivityObserver.isOnline
+                .drop(1) // skip the initial StateFlow value
+                .filter { it } // only on offline → online transitions
+                .collect {
+                    _uiState.value = _uiState.value.copy(errorMessage = null)
+                    refresh()
+                }
+        }
     }
 
     fun onSearchQueryChange(value: String) {

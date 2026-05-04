@@ -1,37 +1,37 @@
 package com.project.vortex.callsagent.presentation.incall
 
 import androidx.lifecycle.ViewModel
-import com.project.vortex.callsagent.telecom.CallManager
+import com.project.vortex.callsagent.domain.call.CallController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import javax.inject.Inject
 
 /**
- * Thin pass-through to [CallManager]. Exposes the singleton's state flows
- * to Compose without leaking the manager directly into UI code.
+ * Thin pass-through to [CallController]. Exposes the singleton's state
+ * flows to Compose without leaking the controller directly into UI.
+ *
+ * Outbound only — `acceptIncoming` / `rejectIncoming` were removed
+ * with the Telecom layer (see SIP migration plan).
  */
 @HiltViewModel
 class InCallViewModel @Inject constructor(
-    private val callManager: CallManager,
+    private val callController: CallController,
 ) : ViewModel() {
 
-    val callState = callManager.callState
-    val currentClient = callManager.currentClient
-    val callDirection = callManager.callDirection
-    val incomingPhoneNumber = callManager.incomingPhoneNumber
-    val isMuted = callManager.isMuted
-    val isSpeakerOn = callManager.isSpeakerOn
+    val callState = callController.callState
+    val currentClient = callController.currentClient
+    val callDirection = callController.callDirection
+    val incomingPhoneNumber = callController.incomingPhoneNumber
+    val isMuted = callController.isMuted
+    val isSpeakerOn = callController.isSpeakerOn
 
-    /** Two-way bound to the CallManager's live note content. */
-    val liveNoteContent: MutableStateFlow<String> = callManager.liveNoteContent
+    val liveNoteContent: MutableStateFlow<String> = callController.liveNoteContent
 
     fun onNoteChange(text: String) {
         liveNoteContent.value = text
     }
 
-    fun toggleMute() = callManager.mute(!isMuted.value)
-    fun toggleSpeaker() = callManager.setSpeaker(!isSpeakerOn.value)
-    fun endCall() = callManager.disconnect()
-    fun acceptIncoming() = callManager.acceptIncoming()
-    fun rejectIncoming() = callManager.rejectIncoming()
+    fun toggleMute() = callController.mute(!isMuted.value)
+    fun toggleSpeaker() = callController.setSpeaker(!isSpeakerOn.value)
+    fun endCall() = callController.disconnect()
 }

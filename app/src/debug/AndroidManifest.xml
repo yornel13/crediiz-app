@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+
+        <!--
+          SIP smoke test Activity — debug builds only. Lives under
+          src/debug/ so it never reaches a release APK.
+
+          Launch:
+            adb shell am start -n com.project.vortex.callsagent/.presentation.dev.SipSmokeTestActivity
+        -->
+        <activity
+            android:name=".presentation.dev.SipSmokeTestActivity"
+            android:exported="true"
+            android:label="SIP Smoke Test"
+            tools:ignore="ExportedActivity" />
+
+    </application>
+
+</manifest>

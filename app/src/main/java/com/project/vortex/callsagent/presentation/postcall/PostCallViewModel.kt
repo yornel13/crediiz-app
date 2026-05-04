@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.common.enums.CallOutcome
+import com.project.vortex.callsagent.domain.call.CallEndingInsight
 import com.project.vortex.callsagent.common.enums.FollowUpStatus
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
@@ -50,6 +51,22 @@ data class PostCallUiState(
      * understands why they landed here on app open.
      */
     val isRecovering: Boolean = false,
+
+    /**
+     * Subset of [CallOutcome] values the screen will render as
+     * buttons. When empty, all five outcomes are shown — that's the
+     * fallback for orphan recovery where we don't know what happened
+     * during the call. Populated by the SIP engine via the navigation
+     * route (see `EndedCall.allowedOutcomes`).
+     */
+    val allowedOutcomes: List<CallOutcome> = emptyList(),
+
+    /**
+     * Optional Spanish phrase shown under the "Call outcome" header
+     * explaining why options were filtered (e.g. "Línea ocupada.").
+     * Null on the orphan path or when the call answered.
+     */
+    val reasonLabel: String? = null,
 ) {
     val showFollowUpForm: Boolean
         get() = selectedOutcome == CallOutcome.INTERESTED
@@ -114,7 +131,25 @@ class PostCallViewModel @Inject constructor(
             runCatching { CallOutcome.valueOf(it) }.getOrNull()
         }
 
-    private val _uiState = MutableStateFlow(PostCallUiState())
+    /**
+     * Comma-separated list of CallOutcome names from the nav route
+     * (e.g. "NO_ANSWER,BUSY"). Empty / null → fallback to all five.
+     */
+    private val allowedOutcomes: List<CallOutcome> =
+        savedStateHandle.get<String>("allowedOutcomes")
+            ?.split(',')
+            ?.mapNotNull { runCatching { CallOutcome.valueOf(it.trim()) }.getOrNull() }
+            ?: emptyList()
+
+    private val reasonLabel: String? =
+        savedStateHandle.get<String>("reasonLabel")?.takeIf { it.isNotBlank() }
+
+    private val _uiState = MutableStateFlow(
+        PostCallUiState(
+            allowedOutcomes = allowedOutcomes,
+            reasonLabel = reasonLabel,
+        ),
+    )
     val uiState: StateFlow<PostCallUiState> = _uiState.asStateFlow()
 
     private val _events = Channel<PostCallEvent>(Channel.BUFFERED)
@@ -262,15 +297,30 @@ class PostCallViewModel @Inject constructor(
                 .toMinutes()
             val isRecovering = ageMinutes >= RECOVERY_AGE_MINUTES
 
+            // On the orphan-recovery path the navigation route does not
+            // carry the SIP-engine insight. Reconstruct it from the
+            // `disconnectCause` we persisted on the row so the screen
+            // filters outcomes the same way as the fresh-call path.
+            val recoveredInsight = if (allowedOutcomes.isEmpty() && reasonLabel == null) {
+                CallEndingInsight.fromPersistedCause(interaction.disconnectCause)
+            } else null
+
             _uiState.update {
                 it.copy(
                     isLoading = false,
                     client = client,
                     interaction = interaction,
                     // Prefilled outcome wins over the placeholder stored in the
-                    // interaction itself.
-                    selectedOutcome = prefilledOutcome ?: interaction.outcome,
+                    // interaction itself, which in turn wins over a recovered
+                    // insight.
+                    selectedOutcome = prefilledOutcome
+                        ?: recoveredInsight?.suggestedOutcome
+                        ?: interaction.outcome,
                     isRecovering = isRecovering,
+                    allowedOutcomes = it.allowedOutcomes
+                        .takeIf { existing -> existing.isNotEmpty() }
+                        ?: recoveredInsight?.allowedOutcomes.orEmpty(),
+                    reasonLabel = it.reasonLabel ?: recoveredInsight?.reasonLabel,
                 )
             }
         }
