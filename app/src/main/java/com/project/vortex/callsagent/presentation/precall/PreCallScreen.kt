@@ -1,5 +1,6 @@
 package com.project.vortex.callsagent.presentation.precall
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -66,6 +67,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.common.enums.CallOutcome
+import com.project.vortex.callsagent.domain.call.CallReadiness
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
 import com.project.vortex.callsagent.domain.model.Note
@@ -73,6 +75,7 @@ import com.project.vortex.callsagent.presentation.autocall.AutoCallSession
 import com.project.vortex.callsagent.presentation.clients.components.DismissClientSheet
 import com.project.vortex.callsagent.presentation.autocall.PendingAutoCall
 import com.project.vortex.callsagent.ui.components.Avatar
+import com.project.vortex.callsagent.ui.components.CallReadinessBanner
 import com.project.vortex.callsagent.ui.components.SectionHeader
 import com.project.vortex.callsagent.ui.components.StatusPill
 import com.project.vortex.callsagent.ui.theme.PhoneGreen
@@ -105,6 +108,8 @@ fun PreCallScreen(
     val autoCallSession by viewModel.autoCallSession.collectAsState()
     val pendingAutoCall by viewModel.pendingAutoCall.collectAsState()
     val autoCallDelaySeconds by viewModel.autoCallDelaySeconds.collectAsState()
+    val callReadiness by viewModel.callReadiness.collectAsState()
+    val canCall = callReadiness is CallReadiness.Ready
 
     var dismissSheetOpen by remember { mutableStateOf(false) }
 
@@ -127,13 +132,53 @@ fun PreCallScreen(
         else onBack()
     }
 
+    // Auto-call countdown lives at screen root so the ActionBar stays
+    // dumb. Keys must include EVERY input that countdownActive reads,
+    // otherwise the effect won't restart when uiState.client loads
+    // after pendingAutoCall is already set (race on first composition).
+    val pendingClientId = pendingAutoCall?.clientId
+    val currentClientId = uiState.client?.id
+    val sessionActive = autoCallSession != null
+    val countdownActive = pendingClientId != null &&
+        pendingClientId == currentClientId &&
+        sessionActive &&
+        autoCallDelaySeconds > 0
+    var countdownRemaining by remember(
+        pendingClientId, currentClientId, sessionActive, autoCallDelaySeconds,
+    ) {
+        mutableIntStateOf(if (countdownActive) autoCallDelaySeconds else 0)
+    }
+    LaunchedEffect(pendingClientId, currentClientId, sessionActive, autoCallDelaySeconds) {
+        if (!countdownActive) return@LaunchedEffect
+        val total = autoCallDelaySeconds.coerceAtLeast(1)
+        countdownRemaining = total
+        for (i in total downTo 1) {
+            countdownRemaining = i
+            kotlinx.coroutines.delay(1_000)
+        }
+        viewModel.onAutoCallCountdownComplete()
+    }
+    // Instant fire when the agent configured 0 s delay.
+    LaunchedEffect(pendingClientId, currentClientId, sessionActive, autoCallDelaySeconds) {
+        if (pendingClientId != null &&
+            pendingClientId == currentClientId &&
+            sessionActive &&
+            autoCallDelaySeconds <= 0
+        ) {
+            viewModel.onAutoCallCountdownComplete()
+        }
+    }
+
     Scaffold(
         bottomBar = {
             CallActionBar(
                 client = uiState.client,
                 inAutoCall = autoCallSession != null,
+                countdownSecondsLeft = if (countdownActive) countdownRemaining else null,
                 onCall = viewModel::startCall,
                 onSkip = viewModel::skipCurrent,
+                onPauseAutoCall = viewModel::cancelAutoCall,
+                callEnabled = canCall,
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -157,6 +202,8 @@ fun PreCallScreen(
                 notes = notes,
                 nextFollowUp = nextFollowUp,
                 autoCallSession = autoCallSession,
+                callReadiness = callReadiness,
+                onRetrySip = viewModel::retrySipRegistration,
                 onAddNote = viewModel::openNoteSheet,
                 onBack = effectiveOnBack,
                 onExitAutoCall = viewModel::exitAutoCall,
@@ -184,31 +231,9 @@ fun PreCallScreen(
             )
         }
 
-        // Auto-call countdown — full-screen overlay above everything else.
-        // Renders only when (a) a pending auto-call exists, (b) the client
-        // for it matches the one this PreCall is showing (avoids ghost
-        // overlays during navigation), and (c) the session is still active.
-        // When the agent configured the countdown to 0 we skip the overlay
-        // entirely and fire the call immediately — same effect, no flash
-        // of the "0" frame the overlay would otherwise render for 1 s.
-        pendingAutoCall?.let { pending ->
-            val client = uiState.client
-            val sessionActive = autoCallSession != null
-            if (sessionActive && client != null && pending.clientId == client.id) {
-                if (autoCallDelaySeconds <= 0) {
-                    LaunchedEffect(pending.clientId) {
-                        viewModel.onAutoCallCountdownComplete()
-                    }
-                } else {
-                    AutoCallCountdownOverlay(
-                        clientName = client.name,
-                        delaySeconds = autoCallDelaySeconds,
-                        onComplete = viewModel::onAutoCallCountdownComplete,
-                        onCancel = viewModel::cancelAutoCall,
-                    )
-                }
-            }
-        }
+        // Auto-call countdown moved to the bottom-bar Pausar button.
+        // The two LaunchedEffects above the Scaffold drive both the
+        // tick-down and the instant-fire-on-zero-delay paths.
     }
 }
 
@@ -218,6 +243,8 @@ private fun PreCallContent(
     notes: List<Note>,
     nextFollowUp: FollowUp?,
     autoCallSession: AutoCallSession?,
+    callReadiness: CallReadiness,
+    onRetrySip: () -> Unit,
     onAddNote: () -> Unit,
     onBack: () -> Unit,
     onExitAutoCall: () -> Unit,
@@ -238,6 +265,22 @@ private fun PreCallContent(
                 onExitAutoCall = onExitAutoCall,
                 onRequestDismiss = onRequestDismiss,
             )
+        }
+
+        // Persistent banner — SIP not ready (no VoIP account, REGISTER
+        // failed, or still connecting). Shown right under the hero so
+        // the agent immediately understands why "Llamar" is disabled.
+        // Hidden silently for Ready / Unknown.
+        val showReadiness = callReadiness !is CallReadiness.Ready &&
+            callReadiness !is CallReadiness.Unknown
+        if (showReadiness) {
+            item("call_readiness_banner") {
+                CallReadinessBanner(
+                    state = callReadiness,
+                    onRetry = onRetrySip,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
         }
 
         // ─── Scheduled follow-up reminder ──────────────────────────────
@@ -876,8 +919,11 @@ private fun EmptyNotes() {
 private fun CallActionBar(
     client: Client?,
     inAutoCall: Boolean,
+    countdownSecondsLeft: Int?,
     onCall: () -> Unit,
     onSkip: () -> Unit,
+    onPauseAutoCall: () -> Unit,
+    callEnabled: Boolean = true,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -898,6 +944,10 @@ private fun CallActionBar(
                     modifier = Modifier.heightIn(min = 60.dp),
                     shape = RoundedCornerShape(20.dp),
                     contentPadding = PaddingValues(horizontal = 20.dp),
+                    border = BorderStroke(
+                        width = 1.5.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    ),
                 ) {
                     Text(
                         text = "Skip",
@@ -908,7 +958,7 @@ private fun CallActionBar(
             }
             Button(
                 onClick = onCall,
-                enabled = client != null,
+                enabled = client != null && callEnabled,
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 60.dp),
@@ -920,11 +970,33 @@ private fun CallActionBar(
             ) {
                 Icon(Icons.Filled.Phone, contentDescription = null)
                 Spacer(Modifier.width(10.dp))
+                val callLabel = buildString {
+                    append("Call ${client?.phone.orEmpty()}".trim())
+                    if (countdownSecondsLeft != null) append(" · ${countdownSecondsLeft}s")
+                }
                 Text(
-                    text = "Call ${client?.phone.orEmpty()}".trim(),
+                    text = callLabel,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
+            }
+            if (countdownSecondsLeft != null) {
+                OutlinedButton(
+                    onClick = onPauseAutoCall,
+                    modifier = Modifier.heightIn(min = 60.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    border = BorderStroke(
+                        width = 1.5.dp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                    ),
+                ) {
+                    Text(
+                        text = "Pausar",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
             }
         }
     }
@@ -1124,74 +1196,3 @@ private fun HeroProgressBar(position: Int, total: Int) {
     }
 }
 
-@Composable
-private fun AutoCallCountdownOverlay(
-    clientName: String,
-    delaySeconds: Int,
-    onComplete: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    val total = delaySeconds.coerceAtLeast(1)
-    var remaining by remember(total) { mutableIntStateOf(total) }
-
-    LaunchedEffect(total) {
-        repeat(total) {
-            kotlinx.coroutines.delay(1000)
-            remaining -= 1
-        }
-        onComplete()
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.92f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(32.dp),
-        ) {
-            Text(
-                text = "Calling next in",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .size(140.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = remaining.coerceAtLeast(0).toString(),
-                    style = MaterialTheme.typography.displayLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
-            Spacer(Modifier.height(20.dp))
-            Text(
-                text = clientName.ifBlank { "Next client" },
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Spacer(Modifier.height(28.dp))
-            OutlinedButton(
-                onClick = onCancel,
-                shape = RoundedCornerShape(20.dp),
-                contentPadding = PaddingValues(horizontal = 28.dp, vertical = 12.dp),
-            ) {
-                Text(
-                    text = "Cancel",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
-    }
-}

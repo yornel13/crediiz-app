@@ -18,6 +18,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.runtime.Composable
@@ -32,9 +33,20 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
+/**
+ * Wire-level identifiers for the `reason` query arg. Mirrors
+ * `SessionInvalidationReason` but kept as plain strings here to avoid
+ * dragging a domain enum into Nav arg parsing.
+ */
+object LoginReason {
+    const val INVALIDATED = "INVALIDATED"
+    const val EXPIRED = "EXPIRED"
+}
+
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
+    reason: String? = null,
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -67,7 +79,11 @@ fun LoginScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(24.dp))
+
+            ReasonBanner(reason = reason)
+
+            Spacer(Modifier.height(8.dp))
 
             OutlinedTextField(
                 value = state.email,
@@ -154,5 +170,41 @@ fun LoginScreen(
                 )
             }
         }
+    }
+}
+
+/**
+ * Banner shown above the credentials when the user landed on /login
+ * because the previous session ended unexpectedly. The copy splits the
+ * single-active-session ("another device took over") case from the
+ * generic 401 ("token expired") case so the agent understands what
+ * happened.
+ */
+@Composable
+private fun ReasonBanner(reason: String?) {
+    if (reason.isNullOrBlank()) return
+
+    val message = when (reason) {
+        LoginReason.INVALIDATED ->
+            "Tu sesión se cerró desde otro dispositivo o por el administrador. " +
+                "Vuelve a iniciar sesión."
+        LoginReason.EXPIRED ->
+            "Tu sesión expiró. Por favor inicia sesión nuevamente."
+        else -> return
+    }
+
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .widthIn(max = 400.dp),
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+        )
     }
 }

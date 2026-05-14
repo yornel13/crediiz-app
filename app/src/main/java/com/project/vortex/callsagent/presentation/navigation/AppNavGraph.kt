@@ -11,8 +11,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.project.vortex.callsagent.domain.auth.SessionInvalidationReason
 import com.project.vortex.callsagent.presentation.autocall.SessionSummaryScreen
 import com.project.vortex.callsagent.presentation.home.HomeScreen
+import com.project.vortex.callsagent.presentation.login.LoginReason
 import com.project.vortex.callsagent.presentation.login.LoginScreen
 import com.project.vortex.callsagent.presentation.postcall.PostCallScreen
 import com.project.vortex.callsagent.presentation.precall.PreCallScreen
@@ -27,8 +29,29 @@ import com.project.vortex.callsagent.presentation.splash.SplashScreen
 @Composable
 fun AppNavGraph(
     callNavViewModel: CallNavigationViewModel = hiltViewModel(),
+    sessionWatcher: SessionWatcherViewModel = hiltViewModel(),
 ) {
     val navController: NavHostController = rememberNavController()
+
+    // Server killed the session (single-active-session displaced this
+    // device, admin revoked, agent logged out elsewhere) → bounce to
+    // /login with a copy explaining what happened. The cleanup
+    // (clearing the token + local data) already ran in the watcher
+    // ViewModel before the event reached us.
+    LaunchedEffect(Unit) {
+        sessionWatcher.navigateToLogin.collect { reason ->
+            val wireReason = when (reason) {
+                SessionInvalidationReason.Invalidated -> LoginReason.INVALIDATED
+                SessionInvalidationReason.Expired -> LoginReason.EXPIRED
+            }
+            navController.navigate(Routes.login(wireReason)) {
+                // Clear the back stack so the agent can't go "Back" into
+                // the now-unauthenticated app surfaces.
+                popUpTo(0) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
 
     // After a real call ends, CallManager persists the InteractionEntity and
     // surfaces it via lastEndedCall. Observe and navigate to PostCall —
@@ -83,7 +106,7 @@ fun AppNavGraph(
         composable(Routes.SPLASH) {
             SplashScreen(
                 onResolved = { loggedIn ->
-                    val target = if (loggedIn) Routes.HOME else Routes.LOGIN
+                    val target = if (loggedIn) Routes.HOME else Routes.LOGIN_BASE
                     navController.navigate(target) {
                         popUpTo(Routes.SPLASH) { inclusive = true }
                         launchSingleTop = true
@@ -92,20 +115,30 @@ fun AppNavGraph(
             )
         }
 
-        composable(Routes.LOGIN) {
+        composable(
+            route = Routes.LOGIN,
+            arguments = listOf(
+                navArgument("reason") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) { entry ->
             LoginScreen(
                 onLoginSuccess = {
                     navController.navigate(Routes.HOME) {
-                        popUpTo(Routes.LOGIN) { inclusive = true }
+                        popUpTo(Routes.LOGIN_BASE) { inclusive = true }
                     }
                 },
+                reason = entry.arguments?.getString("reason"),
             )
         }
 
         composable(Routes.HOME) {
             HomeScreen(
                 onLogout = {
-                    navController.navigate(Routes.LOGIN) {
+                    navController.navigate(Routes.LOGIN_BASE) {
                         popUpTo(Routes.HOME) { inclusive = true }
                     }
                 },

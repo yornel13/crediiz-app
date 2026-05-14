@@ -3,8 +3,10 @@ package com.project.vortex.callsagent.presentation.autocall
 import android.util.Log
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.data.local.preferences.SettingsPreferences
-import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.call.CallController
+import com.project.vortex.callsagent.domain.call.CallReadiness
+import com.project.vortex.callsagent.domain.call.CallReadinessProvider
+import com.project.vortex.callsagent.domain.repository.ClientRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,6 +43,7 @@ class AutoCallOrchestrator @Inject constructor(
     private val clientRepository: ClientRepository,
     private val callController: CallController,
     private val settingsPreferences: SettingsPreferences,
+    private val callReadinessProvider: CallReadinessProvider,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -138,10 +141,20 @@ class AutoCallOrchestrator @Inject constructor(
     }
 
     /** Called when the countdown overlay completes. Fires the actual
-     * outgoing call via [CallManager]. */
+     * outgoing call via [CallController]. */
     suspend fun fireAutoCall() {
         val pending = _pendingAutoCall.value ?: run {
             Log.w(TAG, "fireAutoCall — no pendingAutoCall, ignoring")
+            return
+        }
+        // Bail before dialing if SIP is no longer ready (un-assignment
+        // mid-countdown, REGISTER lost, etc.). The CallController has
+        // its own guard; we duplicate it here so the pending state is
+        // cleared and the UI banner/CTA stays consistent.
+        val readiness = callReadinessProvider.readiness.value
+        if (readiness !is CallReadiness.Ready) {
+            Log.w(TAG, "fireAutoCall — SIP not ready ($readiness), dropping pending call")
+            _pendingAutoCall.value = null
             return
         }
         _pendingAutoCall.value = null

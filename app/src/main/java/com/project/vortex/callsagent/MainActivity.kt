@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.project.vortex.callsagent.data.local.preferences.SettingsPreferences
+import com.project.vortex.callsagent.data.voip.VoipRefreshOrchestrator
 import com.project.vortex.callsagent.presentation.navigation.AppNavGraph
 import com.project.vortex.callsagent.presentation.onboarding.OnboardingActivity
 import com.project.vortex.callsagent.presentation.onboarding.OnboardingGate
@@ -21,6 +22,7 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var settingsPreferences: SettingsPreferences
     @Inject lateinit var onboardingGate: OnboardingGate
+    @Inject lateinit var voipRefreshOrchestrator: VoipRefreshOrchestrator
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,6 +45,12 @@ class MainActivity : ComponentActivity() {
         if (!onboardingGate.allMet()) {
             startActivity(Intent(this, OnboardingActivity::class.java))
             finish()
+            return
         }
+        // Trigger a (debounced) VoIP refresh so the agent picks up
+        // admin-side reassignments without restarting the app.
+        // No-op when there's no logged-in session — the call to
+        // `/voip-accounts/me` 401s and the interceptor handles it.
+        voipRefreshOrchestrator.onForeground()
     }
 }

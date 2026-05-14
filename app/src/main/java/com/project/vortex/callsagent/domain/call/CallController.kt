@@ -85,6 +85,7 @@ class CallController @Inject constructor(
     private val interactionRepository: InteractionRepository,
     private val noteRepository: NoteRepository,
     private val syncScheduler: SyncScheduler,
+    private val callReadinessProvider: CallReadinessProvider,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -118,18 +119,26 @@ class CallController @Inject constructor(
     private val _lastEndedCall = MutableStateFlow<EndedCall?>(null)
     val lastEndedCall: StateFlow<EndedCall?> = _lastEndedCall.asStateFlow()
 
-    init {
-        // Kick off SIP registration eagerly so the first tap on Call
-        // does not have to wait for the REGISTER round-trip.
-        // register() is idempotent.
-        scope.launch { coreManager.register() }
-    }
+    // SIP registration is no longer kicked off here. Phase B routes
+    // all REGISTER flows through `VoipRefreshOrchestrator`, which only
+    // calls `coreManager.register()` after a successful credential
+    // fetch — `coreManager.register()` is idempotent, so subsequent
+    // refreshes (foreground, periodic) just re-up the same account.
 
     fun hasActiveCall(): Boolean = session != null
 
     fun startCall(client: Client) {
         if (hasActiveCall()) {
             Log.w(TAG, "startCall ignored — another call is already active")
+            return
+        }
+        // Final, single-source-of-truth gate. UI layers already disable
+        // the button, but a stale recomposition or AutoCall trigger
+        // could slip through. Refuse to dial unless SIP is fully ready
+        // (VoIP assigned + REGISTER successful).
+        val readiness = callReadinessProvider.readiness.value
+        if (readiness !is CallReadiness.Ready) {
+            Log.w(TAG, "startCall ignored — not ready: $readiness")
             return
         }
 

@@ -1,5 +1,3 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -7,17 +5,6 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.android)
 }
-
-// Reads SIP credentials (Phase A — hardcoded) from local.properties.
-// Phase B will replace these with backend-issued per-agent credentials,
-// at which point this block disappears.
-val sipProps: Properties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) file.inputStream().use { load(it) }
-}
-val sipServer: String = sipProps.getProperty("sip.server", "")
-val sipUser: String = sipProps.getProperty("sip.user", "")
-val sipPassword: String = sipProps.getProperty("sip.password", "")
 
 android {
     namespace = "com.project.vortex.callsagent"
@@ -47,10 +34,10 @@ android {
             "\"https://crediiz-core-production.up.railway.app/api/\"",
         )
 
-        // SIP credentials (Phase A — hardcoded from local.properties).
-        buildConfigField("String", "SIP_SERVER", "\"$sipServer\"")
-        buildConfigField("String", "SIP_USER", "\"$sipUser\"")
-        buildConfigField("String", "SIP_PASSWORD", "\"$sipPassword\"")
+        // SIP credentials are no longer baked at build-time. They come
+        // from the backend per-agent (`GET /voip-accounts/me`); see
+        // `data/voip/VoipAccountRepository.kt` and
+        // `docs/SESSION_AND_VOIP_INTEGRATION.md`.
     }
 
     buildTypes {

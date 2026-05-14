@@ -8,6 +8,8 @@ import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
 import com.project.vortex.callsagent.data.local.preferences.SettingsPreferences
 import com.project.vortex.callsagent.data.sync.SyncScheduler
+import com.project.vortex.callsagent.domain.call.CallReadiness
+import com.project.vortex.callsagent.domain.call.CallReadinessProvider
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
 import com.project.vortex.callsagent.domain.model.Note
@@ -68,7 +70,17 @@ class PreCallViewModel @Inject constructor(
     private val callController: CallController,
     private val autoCallOrchestrator: AutoCallOrchestrator,
     settingsPreferences: SettingsPreferences,
+    private val callReadinessProvider: CallReadinessProvider,
 ) : ViewModel() {
+
+    /**
+     * VoIP + SIP readiness — drives the persistent banner above the
+     * hero and disables the "Llamar" CTA when not [CallReadiness.Ready].
+     */
+    val callReadiness: StateFlow<CallReadiness> = callReadinessProvider.readiness
+
+    /** Tap "Reintentar" on the SIP-disconnected banner. */
+    fun retrySipRegistration() = callReadinessProvider.retry()
 
     /** Live auto-call session state — renders the badge + Skip button. */
     val autoCallSession = autoCallOrchestrator.session
@@ -93,6 +105,12 @@ class PreCallViewModel @Inject constructor(
      */
     fun startCall() {
         val client = _uiState.value.client ?: return
+        // Hard gate: refuse to dial when SIP is not ready (no VoIP
+        // account, or registered failed, or still connecting). The
+        // CTA is already disabled in the UI but we re-check here so
+        // a stale recomposition can't fire a SIP INVITE that would
+        // loop on REGISTER timeouts.
+        if (callReadiness.value !is CallReadiness.Ready) return
         // Manual Call cancels any pending auto-call countdown — the agent
         // explicitly took control.
         autoCallOrchestrator.cancelAutoCall()

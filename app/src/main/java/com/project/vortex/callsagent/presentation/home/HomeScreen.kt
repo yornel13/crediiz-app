@@ -41,10 +41,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.project.vortex.callsagent.domain.call.CallReadiness
 import com.project.vortex.callsagent.presentation.agenda.AgendaScreen
 import com.project.vortex.callsagent.presentation.clients.ClientsScreen
 import com.project.vortex.callsagent.presentation.navigation.HomeTabs
 import com.project.vortex.callsagent.presentation.settings.SettingsScreen
+import com.project.vortex.callsagent.ui.components.CallReadinessBanner
 
 private data class TabItem(
     val route: String,
@@ -68,6 +70,9 @@ fun HomeScreen(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val isStaleData by viewModel.isStaleData.collectAsState()
+    val callReadiness by viewModel.callReadiness.collectAsState()
+    val showReadinessBanner = callReadiness !is CallReadiness.Ready &&
+        callReadiness !is CallReadiness.Unknown
 
     // Tap-to-scroll-top: each tab gets a counter that increments when
     // the agent re-taps the bottom-nav item that's already active.
@@ -124,6 +129,16 @@ fun HomeScreen(
         ) {
             AnimatedVisibility(visible = isStaleData) {
                 StaleDataBanner(onDismiss = viewModel::dismissStaleBanner)
+            }
+            // Persistent banner: SIP is not ready (no VoIP account, or
+            // REGISTER failed, or still connecting). Pinned above the
+            // tabs so it shows on Clients, Agenda and Settings without
+            // duplicating the composable.
+            AnimatedVisibility(visible = showReadinessBanner) {
+                CallReadinessBanner(
+                    state = callReadiness,
+                    onRetry = viewModel::retrySipRegistration,
+                )
             }
 
             NavHost(

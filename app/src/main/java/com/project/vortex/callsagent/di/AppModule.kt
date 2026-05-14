@@ -3,6 +3,7 @@ package com.project.vortex.callsagent.di
 import android.content.Context
 import com.project.vortex.callsagent.data.local.preferences.AuthPreferences
 import com.project.vortex.callsagent.data.local.preferences.SettingsPreferences
+import com.project.vortex.callsagent.data.local.preferences.VoipPreferences
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -23,4 +24,9 @@ object AppModule {
     @Singleton
     fun provideSettingsPreferences(@ApplicationContext context: Context): SettingsPreferences =
         SettingsPreferences(context)
+
+    @Provides
+    @Singleton
+    fun provideVoipPreferences(@ApplicationContext context: Context): VoipPreferences =
+        VoipPreferences(context)
 }

@@ -8,7 +8,23 @@ import com.project.vortex.callsagent.common.enums.CallOutcome
  */
 object Routes {
     const val SPLASH = "splash"
-    const val LOGIN = "login"
+
+    /**
+     * Login. Optional query arg `reason` indicates why the user landed
+     * here when the destination was not chosen voluntarily:
+     *
+     *  - `INVALIDATED` — backend killed the session (single-active-session
+     *    displaced this device, admin revoked, agent logged out elsewhere).
+     *  - `EXPIRED` — JWT expired or any other generic 401.
+     *
+     * Absent or blank → user navigated normally (cold start, manual
+     * logout). No banner is shown.
+     */
+    const val LOGIN = "login?reason={reason}"
+    const val LOGIN_BASE = "login"
+    fun login(reason: String? = null): String =
+        if (reason.isNullOrBlank()) LOGIN_BASE else "$LOGIN_BASE?reason=$reason"
+
     const val HOME = "home"
 
     const val PRE_CALL = "pre_call/{clientId}"

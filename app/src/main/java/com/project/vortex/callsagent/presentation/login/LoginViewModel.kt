@@ -3,7 +3,9 @@ package com.project.vortex.callsagent.presentation.login
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.data.device.DeviceInfoProvider
 import com.project.vortex.callsagent.data.sync.LoginHydrationState
+import com.project.vortex.callsagent.data.voip.VoipRefreshOrchestrator
 import com.project.vortex.callsagent.domain.repository.AuthRepository
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
@@ -45,6 +47,8 @@ class LoginViewModel @Inject constructor(
     private val clientRepository: ClientRepository,
     private val followUpRepository: FollowUpRepository,
     private val loginHydrationState: LoginHydrationState,
+    private val deviceInfoProvider: DeviceInfoProvider,
+    private val voipRefreshOrchestrator: VoipRefreshOrchestrator,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
@@ -66,7 +70,7 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSubmitting = true, errorMessage = null) }
 
-            authRepository.login(state.email, state.password)
+            authRepository.login(state.email, state.password, deviceInfoProvider.current())
                 .onSuccess {
                     // Auth succeeded — proceed to hydrate Room from the server.
                     _uiState.update { it.copy(isSubmitting = false, isHydrating = true) }
@@ -74,6 +78,12 @@ class LoginViewModel @Inject constructor(
                     val isStale = hydrate()
                     if (isStale) loginHydrationState.markStale()
                     else loginHydrationState.markFresh()
+
+                    // Phase B: pull VoIP credentials and kick SIP
+                    // REGISTER. Fire-and-forget — the orchestrator
+                    // owns its own scope and the UI gates outbound
+                    // calls behind `voipAvailability` anyway.
+                    voipRefreshOrchestrator.onLoginSuccess()
 
                     _uiState.update { it.copy(isHydrating = false) }
                     _events.send(LoginEvent.Success)

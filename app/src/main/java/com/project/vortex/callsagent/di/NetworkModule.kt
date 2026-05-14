@@ -5,7 +5,9 @@ import com.project.vortex.callsagent.data.remote.api.AuthApi
 import com.project.vortex.callsagent.data.remote.api.ClientsApi
 import com.project.vortex.callsagent.data.remote.api.FollowUpsApi
 import com.project.vortex.callsagent.data.remote.api.SyncApi
+import com.project.vortex.callsagent.data.remote.api.VoipAccountsApi
 import com.project.vortex.callsagent.data.remote.interceptor.AuthInterceptor
+import com.project.vortex.callsagent.data.remote.interceptor.SessionInvalidationInterceptor
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
@@ -34,7 +36,10 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
+    fun provideOkHttpClient(
+        authInterceptor: AuthInterceptor,
+        sessionInvalidationInterceptor: SessionInvalidationInterceptor,
+    ): OkHttpClient {
         val logger = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) {
                 HttpLoggingInterceptor.Level.BODY
@@ -44,7 +49,12 @@ object NetworkModule {
         }
 
         return OkHttpClient.Builder()
+            // Order matters: AuthInterceptor adds the Bearer token BEFORE
+            // the request goes out; SessionInvalidationInterceptor inspects
+            // the response AFTER it comes back. Both run on the application
+            // chain so they see the final request/response pair.
             .addInterceptor(authInterceptor)
+            .addInterceptor(sessionInvalidationInterceptor)
             .addInterceptor(logger)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -72,4 +82,8 @@ object NetworkModule {
 
     @Provides @Singleton
     fun provideSyncApi(retrofit: Retrofit): SyncApi = retrofit.create(SyncApi::class.java)
+
+    @Provides @Singleton
+    fun provideVoipAccountsApi(retrofit: Retrofit): VoipAccountsApi =
+        retrofit.create(VoipAccountsApi::class.java)
 }
