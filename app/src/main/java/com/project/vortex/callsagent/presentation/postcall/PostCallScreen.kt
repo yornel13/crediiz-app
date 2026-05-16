@@ -63,11 +63,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.common.enums.CallOutcome
+import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.Interaction
 import com.project.vortex.callsagent.ui.components.Avatar
+import com.project.vortex.callsagent.ui.components.InterestLevelSelector
 import com.project.vortex.callsagent.ui.components.StatusPill
 import com.project.vortex.callsagent.ui.theme.PillShape
+import com.project.vortex.callsagent.ui.theme.icon
+import com.project.vortex.callsagent.ui.theme.isAnswered
 import com.project.vortex.callsagent.ui.theme.label
 import com.project.vortex.callsagent.ui.theme.palette
 import java.time.Instant
@@ -159,6 +163,7 @@ fun PostCallScreen(
                 client = state.client!!,
                 interaction = state.interaction!!,
                 onSelectOutcome = viewModel::selectOutcome,
+                onSelectLevel = viewModel::selectInterestLevel,
                 onNoteChange = viewModel::onNoteChange,
                 onDateChange = viewModel::onFollowUpDateChange,
                 onTimeChange = viewModel::onFollowUpTimeChange,
@@ -174,6 +179,7 @@ private fun PostCallContent(
     client: Client,
     interaction: Interaction,
     onSelectOutcome: (CallOutcome) -> Unit,
+    onSelectLevel: (InterestLevel) -> Unit,
     onNoteChange: (String) -> Unit,
     onDateChange: (LocalDate) -> Unit,
     onTimeChange: (LocalTime) -> Unit,
@@ -213,6 +219,7 @@ private fun PostCallContent(
             OutcomeSelector(
                 state = state,
                 onSelect = onSelectOutcome,
+                onSelectLevel = onSelectLevel,
                 onDateChange = onDateChange,
                 onTimeChange = onTimeChange,
             )
@@ -292,29 +299,70 @@ private fun CallSummaryCard(client: Client, interaction: Interaction) {
 private fun OutcomeSelector(
     state: PostCallUiState,
     onSelect: (CallOutcome) -> Unit,
+    onSelectLevel: (InterestLevel) -> Unit,
     onDateChange: (LocalDate) -> Unit,
     onTimeChange: (LocalTime) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        val outcomesToShow = state.allowedOutcomes.takeIf { it.isNotEmpty() }
-            ?: CallOutcome.values().toList()
-        outcomesToShow.forEach { outcome ->
-            OutcomeRow(
-                outcome = outcome,
-                selected = state.selectedOutcome == outcome,
-                onSelect = { onSelect(outcome) },
-            )
-            // Follow-up form expands directly under the INTERESTED row
-            // so the agent picks date/time without scrolling around.
-            if (outcome == CallOutcome.INTERESTED && state.showFollowUpForm) {
-                FollowUpForm(
-                    state = state,
-                    onDateChange = onDateChange,
-                    onTimeChange = onTimeChange,
-                )
+    val outcomesToShow = state.allowedOutcomes.takeIf { it.isNotEmpty() }
+        ?: CallOutcome.values().toList()
+    // Stable order: backend enum declaration order is already the order
+    // HOW_IT_WORKS §5 prescribes (ANSWERED_* first, then non-answered).
+    val answered = outcomesToShow.filter { it.isAnswered }
+    val notAnswered = outcomesToShow.filterNot { it.isAnswered }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (answered.isNotEmpty()) {
+            OutcomeSectionHeader(text = "✅ Respondió")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                answered.forEach { outcome ->
+                    OutcomeRow(
+                        outcome = outcome,
+                        selected = state.selectedOutcome == outcome,
+                        onSelect = { onSelect(outcome) },
+                    )
+                    // When ANSWERED_INTERESTED is picked, expand inline:
+                    //   1) thermometer selector (COLD default, agent can promote),
+                    //   2) follow-up date/time form.
+                    // Both live under the row so the agent doesn't scroll.
+                    if (outcome == CallOutcome.ANSWERED_INTERESTED && state.showFollowUpForm) {
+                        InterestLevelSelector(
+                            selected = state.selectedInterestLevel,
+                            onSelect = onSelectLevel,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                        FollowUpForm(
+                            state = state,
+                            onDateChange = onDateChange,
+                            onTimeChange = onTimeChange,
+                        )
+                    }
+                }
+            }
+        }
+        if (notAnswered.isNotEmpty()) {
+            OutcomeSectionHeader(text = "❌ No respondió")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                notAnswered.forEach { outcome ->
+                    OutcomeRow(
+                        outcome = outcome,
+                        selected = state.selectedOutcome == outcome,
+                        onSelect = { onSelect(outcome) },
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun OutcomeSectionHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+    )
 }
 
 @Composable
@@ -342,21 +390,22 @@ private fun OutcomeRow(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Outcome icon — same color treatment as the row's palette.
+            // Recognizable at a glance without reading the label, which
+            // matters for the 7-button grid (HOW_IT_WORKS §5).
             Box(
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(36.dp)
                     .clip(RoundedCornerShape(50))
                     .background(palette.container),
                 contentAlignment = Alignment.Center,
             ) {
-                if (selected) {
-                    Icon(
-                        Icons.Filled.Check,
-                        contentDescription = null,
-                        tint = palette.onContainer,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
+                Icon(
+                    imageVector = outcome.icon(),
+                    contentDescription = null,
+                    tint = palette.onContainer,
+                    modifier = Modifier.size(22.dp),
+                )
             }
             Spacer(Modifier.width(12.dp))
             Text(
@@ -364,7 +413,18 @@ private fun OutcomeRow(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 color = if (selected) palette.onContainer else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
             )
+            // Trailing checkmark only when selected — keeps the row
+            // height stable whether or not the agent has tapped it.
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = palette.onContainer,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }

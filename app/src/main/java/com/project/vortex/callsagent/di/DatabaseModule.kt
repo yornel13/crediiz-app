@@ -7,6 +7,7 @@ import com.project.vortex.callsagent.data.local.db.ClientDao
 import com.project.vortex.callsagent.data.local.db.ClientDismissalDao
 import com.project.vortex.callsagent.data.local.db.FollowUpDao
 import com.project.vortex.callsagent.data.local.db.InteractionDao
+import com.project.vortex.callsagent.data.local.db.LocalAgentStatusChangeDao
 import com.project.vortex.callsagent.data.local.db.MissedCallDao
 import com.project.vortex.callsagent.data.local.db.NoteDao
 import dagger.Module
@@ -38,4 +39,7 @@ object DatabaseModule {
     @Provides fun provideFollowUpDao(db: AppDatabase): FollowUpDao = db.followUpDao()
     @Provides fun provideMissedCallDao(db: AppDatabase): MissedCallDao = db.missedCallDao()
     @Provides fun provideClientDismissalDao(db: AppDatabase): ClientDismissalDao = db.clientDismissalDao()
+    @Provides
+    fun provideLocalAgentStatusChangeDao(db: AppDatabase): LocalAgentStatusChangeDao =
+        db.localAgentStatusChangeDao()
 }

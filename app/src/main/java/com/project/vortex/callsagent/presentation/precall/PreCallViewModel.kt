@@ -82,6 +82,103 @@ class PreCallViewModel @Inject constructor(
     /** Tap "Reintentar" on the SIP-disconnected banner. */
     fun retrySipRegistration() = callReadinessProvider.retry()
 
+    /**
+     * Promote/demote the thermometer of the currently displayed
+     * INTERESTED client. No-op if the client isn't INTERESTED
+     * (button is hidden in that case but a stale tap could race).
+     */
+    fun updateInterestLevel(level: com.project.vortex.callsagent.common.enums.InterestLevel) {
+        val client = _uiState.value.client ?: return
+        if (client.status != com.project.vortex.callsagent.common.enums.ClientStatus.INTERESTED) return
+        viewModelScope.launch {
+            val result = clientRepository.updateInterestLevel(
+                clientId = client.id,
+                level = level,
+                previous = client.interestLevel,
+            )
+            when (result) {
+                is com.project.vortex.callsagent.domain.result.OperationResult.Success ->
+                    _snackbar.send(
+                        com.project.vortex.callsagent.presentation.common.SnackbarMessage(
+                            text = "Nivel de interés actualizado",
+                            tone = com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.SUCCESS,
+                        ),
+                    )
+                is com.project.vortex.callsagent.domain.result.OperationResult.Failure ->
+                    _snackbar.send(snackbarFor(result.error))
+            }
+        }
+    }
+
+    /**
+     * Out-of-band status change (HOW_IT_WORKS §7). The agent moves the
+     * current client to [toStatus] without placing a call. Optimistic
+     * via [ClientRepository.agentStatusChange] (rollback on network
+     * failure). Every result emits a snackbar — success or failure.
+     */
+    fun agentStatusChange(
+        toStatus: com.project.vortex.callsagent.common.enums.ClientStatus,
+        reason: String?,
+        level: com.project.vortex.callsagent.common.enums.InterestLevel?,
+    ) {
+        val client = _uiState.value.client ?: return
+        viewModelScope.launch {
+            val result = clientRepository.agentStatusChange(
+                clientId = client.id,
+                toStatus = toStatus,
+                previousStatus = client.status,
+                previousLevel = client.interestLevel,
+                reason = reason,
+                level = level,
+            )
+            when (result) {
+                is com.project.vortex.callsagent.domain.result.OperationResult.Success ->
+                    _snackbar.send(
+                        com.project.vortex.callsagent.presentation.common.SnackbarMessage(
+                            text = "${client.name} actualizado",
+                            tone = com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.SUCCESS,
+                        ),
+                    )
+                is com.project.vortex.callsagent.domain.result.OperationResult.Failure ->
+                    _snackbar.send(snackbarFor(result.error))
+            }
+        }
+    }
+
+    /** Maps a typed client error to a Spanish snackbar payload. */
+    private fun snackbarFor(
+        error: com.project.vortex.callsagent.domain.error.ClientError,
+    ): com.project.vortex.callsagent.presentation.common.SnackbarMessage {
+        val text = when (error) {
+            is com.project.vortex.callsagent.domain.error.ClientError.ReasonRequired ->
+                "El motivo es obligatorio para ${error.toStatus.ifBlank { "este cambio" }}."
+            com.project.vortex.callsagent.domain.error.ClientError.NotAssigned ->
+                "Este cliente ya no está asignado a ti."
+            is com.project.vortex.callsagent.domain.error.ClientError.TargetNotAllowed ->
+                "No se permite mover a ${error.toStatus.ifBlank { "ese estado" }} sin llamar."
+            com.project.vortex.callsagent.domain.error.ClientError.InterestLevelNotApplicable ->
+                "El termómetro solo aplica a clientes interesados."
+            com.project.vortex.callsagent.domain.error.ClientError.NotFound ->
+                "El cliente ya no existe en el servidor."
+            com.project.vortex.callsagent.domain.error.ClientError.Conflict ->
+                "El cliente cambió mientras editabas. Refresca y reintenta."
+            com.project.vortex.callsagent.domain.error.ClientError.SessionExpired ->
+                "Tu sesión expiró. Vuelve a iniciar sesión."
+            com.project.vortex.callsagent.domain.error.ClientError.Network ->
+                "Sin conexión. Reintenta cuando vuelva la red."
+            is com.project.vortex.callsagent.domain.error.ClientError.Unknown ->
+                "No se pudo actualizar: ${error.detail}"
+        }
+        val tone = when (error) {
+            com.project.vortex.callsagent.domain.error.ClientError.Network,
+            com.project.vortex.callsagent.domain.error.ClientError.Conflict ->
+                com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.WARN
+            else ->
+                com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.ERROR
+        }
+        return com.project.vortex.callsagent.presentation.common.SnackbarMessage(text, tone)
+    }
+
     /** Live auto-call session state — renders the badge + Skip button. */
     val autoCallSession = autoCallOrchestrator.session
 
@@ -170,6 +267,19 @@ class PreCallViewModel @Inject constructor(
 
     private val _events = Channel<PreCallEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
+
+    /**
+     * Channel of snackbar payloads triggered by client-write
+     * operations (interest level, agent-status-change). The screen
+     * collects these and forwards to its `SnackbarHostState`.
+     *
+     * Project invariant: every typed [ClientWriteError] MUST produce
+     * exactly one [SnackbarMessage] here. Silent failure is a bug.
+     */
+    private val _snackbar = Channel<com.project.vortex.callsagent.presentation.common.SnackbarMessage>(
+        Channel.BUFFERED,
+    )
+    val snackbarMessages = _snackbar.receiveAsFlow()
 
     val notes: StateFlow<List<Note>> = noteRepository.observeByClient(clientId)
         .stateIn(

@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.InterestLevel
 import java.time.Instant
 
 /**
@@ -23,9 +24,23 @@ data class ClientEntity(
     /** Monthly salary in USD. */
     val salary: Double?,
     val status: ClientStatus,
+    /**
+     * Thermometer sub-classification when [status] is INTERESTED.
+     * Always `null` for any other status (backend invariant — see
+     * `HOW_IT_WORKS.md §4`).
+     */
+    val interestLevel: InterestLevel?,
     val assignedTo: String?,
     val assignedAt: Instant?,
     val callAttempts: Int,
+    /**
+     * Consecutive `WRONG_NUMBER` outcomes counted by the backend. Used
+     * by the UI to show a "Wrong # ×N" badge in the Retry section and
+     * warn the agent how close the client is to the UNREACHABLE
+     * threshold (default 3). Reset to 0 by the server when any other
+     * outcome lands.
+     */
+    val wrongNumberCount: Int,
     val lastCalledAt: Instant?,
     val lastOutcome: CallOutcome?,
     val lastNote: String?,

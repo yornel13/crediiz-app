@@ -187,21 +187,21 @@ class AutoCallOrchestrator @Inject constructor(
     }
 
     /**
-     * Auto-advance policy: **every** outcome triggers the countdown
-     * when the agent is in an auto-call session.
+     * Auto-advance policy: the countdown fires after every outcome
+     * **except** [CallOutcome.ANSWERED_SOLD]. A closed sale is the
+     * funnel's terminal state (`HOW_IT_WORKS.md §5`) and the agent
+     * deserves a beat to confirm details before moving on — auto-
+     * dialing the next client right after a "💰 Sold" tap feels
+     * disrespectful to the moment.
      *
-     * Earlier iterations stopped on INTERESTED (rationale: agent just
-     * filled the follow-up form, deserves a beat). Field feedback was
-     * the opposite — stopping on INTERESTED feels like the session
-     * "deactivated" mid-flow. The agent already paused naturally
-     * while filling the follow-up date/time, so the post-save moment
-     * doesn't need an extra stop.
-     *
-     * Kept as a function (not a constant `true`) so future tuning
-     * stays a single edit.
+     * INTERESTED still auto-advances: field feedback showed that
+     * stopping there made the session feel "deactivated"; the agent
+     * already paused naturally while filling the follow-up form.
      */
-    @Suppress("UNUSED_PARAMETER")
-    private fun shouldAutoAdvanceFor(outcome: CallOutcome): Boolean = true
+    private fun shouldAutoAdvanceFor(outcome: CallOutcome): Boolean = when (outcome) {
+        CallOutcome.ANSWERED_SOLD -> false
+        else -> true
+    }
 
     companion object {
         private const val TAG = "AutoCallOrchestrator"

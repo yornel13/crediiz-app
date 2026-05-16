@@ -1,6 +1,8 @@
 package com.project.vortex.callsagent.domain.repository
 
 import com.project.vortex.callsagent.data.device.DeviceInfo
+import com.project.vortex.callsagent.domain.error.AuthError
+import com.project.vortex.callsagent.domain.result.OperationResult
 import kotlinx.coroutines.flow.Flow
 
 interface AuthRepository {
@@ -12,8 +14,15 @@ interface AuthRepository {
      * The backend requires `device` for AGENT logins to track the
      * single-active-session per agent. See
      * `docs/SESSION_AND_VOIP_INTEGRATION.md § 1`.
+     *
+     * **Silent failure is always a bug.** The caller MUST handle
+     * [OperationResult.Failure] explicitly (inline error or snackbar).
      */
-    suspend fun login(email: String, password: String, device: DeviceInfo): Result<Unit>
+    suspend fun login(
+        email: String,
+        password: String,
+        device: DeviceInfo,
+    ): OperationResult<Unit, AuthError>
 
     /** Clear the saved token and all local agent-scoped data. */
     suspend fun logout()

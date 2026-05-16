@@ -2,7 +2,11 @@ package com.project.vortex.callsagent.domain.repository
 
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.InterestLevel
+import com.project.vortex.callsagent.domain.error.ClientError
+import com.project.vortex.callsagent.domain.model.AgentStatusChangeLocal
 import com.project.vortex.callsagent.domain.model.Client
+import com.project.vortex.callsagent.domain.result.OperationResult
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
 
@@ -74,4 +78,52 @@ interface ClientRepository {
 
     /** Update the denormalized lastNote field after saving a note locally. */
     suspend fun updateLastNoteLocally(clientId: String, note: String)
+
+    /**
+     * Promote/demote the thermometer of an INTERESTED client.
+     *
+     * Optimistic write to Room first, then PATCH to the server. If the
+     * network call fails the local value is rolled back to [previous]
+     * so the UI doesn't lie, and the typed [ClientError] is
+     * returned so the caller can surface a snackbar.
+     *
+     * **Silent rollback is always a bug.** The caller MUST handle
+     * [OperationResult.Failure] explicitly.
+     */
+    suspend fun updateInterestLevel(
+        clientId: String,
+        level: InterestLevel,
+        previous: InterestLevel?,
+    ): OperationResult<Unit, ClientError>
+
+    /**
+     * Move an assigned client to [toStatus] without placing a call —
+     * the agent flow for out-of-band signals (WhatsApp opt-out, etc.).
+     * Optimistic local write, then `POST /clients/:id/agent-status-change`.
+     * Rolls back to [previousStatus] / [previousLevel] on failure.
+     *
+     * [level] is only honored when [toStatus] is INTERESTED.
+     *
+     * On success, persists a local-only `AgentStatusChangeLocal` row
+     * so the action surfaces in the Recientes feed for 24 h even
+     * though no call took place.
+     *
+     * **Silent rollback is always a bug.** The caller MUST handle
+     * [OperationResult.Failure] explicitly (snackbar, retry, etc.).
+     */
+    suspend fun agentStatusChange(
+        clientId: String,
+        toStatus: ClientStatus,
+        previousStatus: ClientStatus,
+        previousLevel: InterestLevel?,
+        reason: String? = null,
+        level: InterestLevel? = null,
+    ): OperationResult<Unit, ClientError>
+
+    /**
+     * Observe agent-initiated status changes inside the given window
+     * (24 h for the Recientes feed). Local-only — does NOT reflect
+     * status changes done from the admin panel.
+     */
+    fun observeRecentAgentStatusChanges(since: Instant): Flow<List<AgentStatusChangeLocal>>
 }

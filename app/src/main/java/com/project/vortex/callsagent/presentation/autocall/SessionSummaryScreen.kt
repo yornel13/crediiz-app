@@ -180,8 +180,8 @@ private fun StatGrid(stats: AutoCallSessionStats) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             StatCard(
-                label = "Invalid",
-                value = stats.invalidNumber,
+                label = "Wrong #",
+                value = stats.wrongNumber,
                 icon = Icons.Filled.QuestionMark,
                 color = Rose600,
                 modifier = Modifier.weight(1f),

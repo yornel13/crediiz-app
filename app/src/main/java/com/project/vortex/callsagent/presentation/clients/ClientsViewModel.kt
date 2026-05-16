@@ -8,6 +8,7 @@ import com.project.vortex.callsagent.data.sync.ConnectivityObserver
 import com.project.vortex.callsagent.data.sync.SyncManager
 import com.project.vortex.callsagent.data.sync.SyncResult
 import com.project.vortex.callsagent.data.sync.SyncScheduler
+import com.project.vortex.callsagent.domain.model.AgentStatusChangeLocal
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.ClientDismissal
 import com.project.vortex.callsagent.domain.model.MissedCall
@@ -157,16 +158,21 @@ class ClientsViewModel @Inject constructor(
         )
 
     /**
-     * Recientes feed — unified list of recent calls AND recent
-     * dismissals, deduped by clientId (the most recent intent wins).
+     * Recientes feed — unified list of:
+     *  - recent calls (`lastCalledAt` in window),
+     *  - recent dismissals (still active),
+     *  - recent agent-driven status changes (no call).
+     *
+     * Deduped by clientId — the most recent agent intent wins.
      * Sorted by timestamp desc.
      */
     val recentEntries: StateFlow<List<RecentEntry>> = combine(
         clientRepository.observeRecent(recentSince),
         clientDismissalRepository.observeActiveSince(recentSince),
+        clientRepository.observeRecentAgentStatusChanges(recentSince),
         _searchQuery,
-    ) { calledClients, dismissals, query ->
-        buildRecentEntries(calledClients, dismissals, query.trim())
+    ) { calledClients, dismissals, statusChanges, query ->
+        buildRecentEntries(calledClients, dismissals, statusChanges, query.trim())
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -175,14 +181,16 @@ class ClientsViewModel @Inject constructor(
 
     /**
      * Search-independent count for the pill. Recientes count = unique
-     * client IDs across calls + dismissals.
+     * client IDs across calls + dismissals + status changes.
      */
     val totalRecentCount: StateFlow<Int> = combine(
         clientRepository.observeRecent(recentSince),
         clientDismissalRepository.observeActiveSince(recentSince),
-    ) { calledClients, dismissals ->
+        clientRepository.observeRecentAgentStatusChanges(recentSince),
+    ) { calledClients, dismissals, statusChanges ->
         val ids = calledClients.map { it.id }.toMutableSet()
         dismissals.forEach { ids += it.clientId }
+        statusChanges.forEach { ids += it.clientId }
         ids.size
     }.stateIn(
         scope = viewModelScope,
@@ -193,32 +201,44 @@ class ClientsViewModel @Inject constructor(
     private suspend fun buildRecentEntries(
         calledClients: List<Client>,
         dismissals: List<ClientDismissal>,
+        statusChanges: List<AgentStatusChangeLocal>,
         query: String,
     ): List<RecentEntry> {
         val byClientId = mutableMapOf<String, RecentEntry>()
-        // Start with calls; dismissals will override when more recent.
+        // 1. Calls first — base layer.
         for (client in calledClients) {
             client.lastCalledAt?.let {
                 byClientId[client.id] = RecentEntry.Called(client, it)
             }
         }
+        // 2. Status changes — override calls when more recent.
+        //    Clients moved without a call may not be in `calledClients`
+        //    so we fetch them on miss.
+        for (change in statusChanges) {
+            val existing = byClientId[change.clientId]
+            val client = (existing?.client) ?: clientRepository.findById(change.clientId)
+            if (client == null) continue
+            val existingTs = existing?.timestamp
+            if (existingTs == null || change.timestamp.isAfter(existingTs)) {
+                byClientId[change.clientId] = RecentEntry.StatusChanged(
+                    client = client,
+                    timestamp = change.timestamp,
+                    change = change,
+                )
+            }
+        }
+        // 3. Dismissals — most recent intent wins again.
         for (dismissal in dismissals) {
-            // Find the client snapshot. Prefer the one in `calledClients`
-            // (already loaded). Fallback: hit the repo. Without a client
-            // we can't render — skip.
             val existing = byClientId[dismissal.clientId]
             val client = (existing?.client) ?: clientRepository.findById(dismissal.clientId)
             if (client == null) continue
-
-            val entry = RecentEntry.Dismissed(
-                client = client,
-                timestamp = dismissal.dismissedAt,
-                dismissal = dismissal,
-            )
-            // Dismissal wins if it's more recent than an existing call entry.
             val existingTs = existing?.timestamp
             if (existingTs == null || dismissal.dismissedAt.isAfter(existingTs)) {
-                byClientId[dismissal.clientId] = entry
+                byClientId[dismissal.clientId] = RecentEntry.Dismissed(
+                    client = client,
+                    timestamp = dismissal.dismissedAt,
+                    dismissal = dismissal,
+                )
             }
         }
 

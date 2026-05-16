@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -67,6 +68,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.common.enums.CallOutcome
+import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.domain.call.CallReadiness
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
@@ -74,10 +77,13 @@ import com.project.vortex.callsagent.domain.model.Note
 import com.project.vortex.callsagent.presentation.autocall.AutoCallSession
 import com.project.vortex.callsagent.presentation.clients.components.DismissClientSheet
 import com.project.vortex.callsagent.presentation.autocall.PendingAutoCall
+import com.project.vortex.callsagent.presentation.precall.components.AgentStatusChangeSheet
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.components.CallReadinessBanner
+import com.project.vortex.callsagent.ui.components.InterestLevelSelector
 import com.project.vortex.callsagent.ui.components.SectionHeader
 import com.project.vortex.callsagent.ui.components.StatusPill
+import com.project.vortex.callsagent.ui.theme.emoji
 import com.project.vortex.callsagent.ui.theme.PhoneGreen
 import com.project.vortex.callsagent.ui.theme.PillShape
 import com.project.vortex.callsagent.ui.theme.Teal700
@@ -112,6 +118,8 @@ fun PreCallScreen(
     val canCall = callReadiness is CallReadiness.Ready
 
     var dismissSheetOpen by remember { mutableStateOf(false) }
+    var interestSheetOpen by remember { mutableStateOf(false) }
+    var statusChangeSheetOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -169,7 +177,22 @@ fun PreCallScreen(
         }
     }
 
+    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+
+    // Forward typed snackbar payloads from the VM to the host. One-shot
+    // per emission — duration deliberately Short (the user will be
+    // mid-action and a long-lived snackbar is intrusive).
+    LaunchedEffect(Unit) {
+        viewModel.snackbarMessages.collect { msg ->
+            snackbarHostState.showSnackbar(
+                message = msg.text,
+                duration = androidx.compose.material3.SnackbarDuration.Short,
+            )
+        }
+    }
+
     Scaffold(
+        snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
         bottomBar = {
             CallActionBar(
                 client = uiState.client,
@@ -208,8 +231,39 @@ fun PreCallScreen(
                 onBack = effectiveOnBack,
                 onExitAutoCall = viewModel::exitAutoCall,
                 onRequestDismiss = { dismissSheetOpen = true },
+                onChangeInterestLevel = { interestSheetOpen = true },
+                onRequestStatusChange = { statusChangeSheetOpen = true },
                 contentPadding = padding,
             )
+        }
+
+        if (interestSheetOpen && uiState.client?.status == ClientStatus.INTERESTED) {
+            InterestLevelSheet(
+                current = uiState.client?.interestLevel,
+                onDismiss = { interestSheetOpen = false },
+                onSelect = { level ->
+                    viewModel.updateInterestLevel(level)
+                    interestSheetOpen = false
+                },
+            )
+        }
+
+        if (statusChangeSheetOpen) {
+            uiState.client?.let { client ->
+                AgentStatusChangeSheet(
+                    clientName = client.name,
+                    currentStatus = client.status,
+                    onDismiss = { statusChangeSheetOpen = false },
+                    onConfirm = { change ->
+                        viewModel.agentStatusChange(
+                            toStatus = change.status,
+                            reason = change.reason,
+                            level = change.level,
+                        )
+                        statusChangeSheetOpen = false
+                    },
+                )
+            }
         }
 
         if (uiState.isNoteSheetOpen) {
@@ -249,6 +303,8 @@ private fun PreCallContent(
     onBack: () -> Unit,
     onExitAutoCall: () -> Unit,
     onRequestDismiss: () -> Unit,
+    onChangeInterestLevel: () -> Unit,
+    onRequestStatusChange: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     LazyColumn(
@@ -264,6 +320,8 @@ private fun PreCallContent(
                 onBack = onBack,
                 onExitAutoCall = onExitAutoCall,
                 onRequestDismiss = onRequestDismiss,
+                onChangeInterestLevel = onChangeInterestLevel,
+                onRequestStatusChange = onRequestStatusChange,
             )
         }
 
@@ -394,6 +452,8 @@ private fun Hero(
     onBack: () -> Unit,
     onExitAutoCall: () -> Unit,
     onRequestDismiss: () -> Unit,
+    onChangeInterestLevel: () -> Unit,
+    onRequestStatusChange: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val isDark = MaterialTheme.colorScheme.surface.let {
@@ -451,6 +511,13 @@ private fun Hero(
                         onDismissRequest = { menuOpen = false },
                     ) {
                         DropdownMenuItem(
+                            text = { Text("Cambiar estado (sin llamar)") },
+                            onClick = {
+                                menuOpen = false
+                                onRequestStatusChange()
+                            },
+                        )
+                        DropdownMenuItem(
                             text = { Text("Dismiss client") },
                             onClick = {
                                 menuOpen = false
@@ -483,26 +550,39 @@ private fun Hero(
                     color = Color.White.copy(alpha = 0.85f),
                 )
                 Spacer(Modifier.height(10.dp))
-                Surface(
-                    shape = PillShape,
-                    color = Color.White.copy(alpha = 0.18f),
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    Surface(
+                        shape = PillShape,
+                        color = Color.White.copy(alpha = 0.18f),
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(Color.White),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = client.status.label(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = client.status.label(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                    // Thermometer chip — only when INTERESTED. Tappable
+                    // to re-classify the level via bottom sheet.
+                    if (client.status == ClientStatus.INTERESTED) {
+                        InterestThermometerHeroPill(
+                            level = client.interestLevel ?: InterestLevel.COLD,
+                            onClick = onChangeInterestLevel,
                         )
                     }
                 }
@@ -1096,11 +1176,13 @@ private fun ErrorState(message: String, onBack: () -> Unit, modifier: Modifier =
 }
 
 private fun outcomeLabel(outcome: CallOutcome): String = when (outcome) {
-    CallOutcome.INTERESTED -> "Interested"
-    CallOutcome.NOT_INTERESTED -> "Not int."
+    CallOutcome.ANSWERED_INTERESTED -> "Interested"
+    CallOutcome.ANSWERED_NOT_INTERESTED -> "Not int."
+    CallOutcome.ANSWERED_OPT_OUT -> "Opt-out"
+    CallOutcome.ANSWERED_SOLD -> "Sold"
     CallOutcome.NO_ANSWER -> "No ans."
     CallOutcome.BUSY -> "Busy"
-    CallOutcome.INVALID_NUMBER -> "Invalid"
+    CallOutcome.WRONG_NUMBER -> "Wrong #"
 }
 
 private val timestampFormatter: DateTimeFormatter =
@@ -1193,6 +1275,77 @@ private fun HeroProgressBar(position: Int, total: Int) {
                 .clip(RoundedCornerShape(2.dp))
                 .background(Color.White),
         )
+    }
+}
+
+/**
+ * Bottom sheet that lets the agent re-classify the thermometer
+ * (COLD / WARM / HOT) of the current INTERESTED client.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InterestLevelSheet(
+    current: InterestLevel?,
+    onDismiss: () -> Unit,
+    onSelect: (InterestLevel) -> Unit,
+) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = "Actualizar nivel de interés",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            InterestLevelSelector(
+                selected = current,
+                onSelect = onSelect,
+            )
+        }
+    }
+}
+
+/**
+ * Hero variant of the thermometer chip — translucent-white container
+ * (to live on the dark teal hero) instead of the level-tinted body of
+ * [com.project.vortex.callsagent.ui.components.InterestLevelChip].
+ *
+ * Tappable: the parent screen opens a bottom sheet with
+ * [InterestLevelSelector] when this pill is touched.
+ */
+@Composable
+private fun InterestThermometerHeroPill(
+    level: InterestLevel,
+    onClick: () -> Unit,
+) {
+    Surface(
+        shape = PillShape,
+        color = Color.White.copy(alpha = 0.18f),
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+        ) {
+            Text(
+                text = level.emoji(),
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = level.label(),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+            )
+        }
     }
 }
 

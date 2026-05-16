@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
@@ -56,14 +58,20 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                // Landscape on tablets can't fit all cards + logout in one
+                // viewport. Scroll keeps the bottom action (Sign out)
+                // reachable without redesigning the screen as a grid.
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             AccountCard(name = state.agentName, email = state.agentEmail)
 
-            AppearanceCard(
+            DisplayCard(
                 themeMode = state.themeMode,
-                onSelect = viewModel::onThemeModeChange,
+                onThemeSelect = viewModel::onThemeModeChange,
+                keepScreenOn = state.keepScreenOn,
+                onKeepScreenOnToggle = viewModel::onKeepScreenOnToggle,
             )
 
             AutoAdvanceCard(
@@ -118,13 +126,18 @@ private fun AccountCard(name: String, email: String) {
 }
 
 @Composable
-private fun AppearanceCard(themeMode: ThemeMode, onSelect: (ThemeMode) -> Unit) {
+private fun DisplayCard(
+    themeMode: ThemeMode,
+    onThemeSelect: (ThemeMode) -> Unit,
+    keepScreenOn: Boolean,
+    onKeepScreenOnToggle: (Boolean) -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            SectionTitle("Appearance")
+            SectionTitle("Display")
             Text(
                 text = "Theme",
                 style = MaterialTheme.typography.bodyLarge,
@@ -136,7 +149,7 @@ private fun AppearanceCard(themeMode: ThemeMode, onSelect: (ThemeMode) -> Unit) 
                 ThemeMode.values().forEach { mode ->
                     FilterChip(
                         selected = themeMode == mode,
-                        onClick = { onSelect(mode) },
+                        onClick = { onThemeSelect(mode) },
                         label = { Text(themeLabel(mode)) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -144,6 +157,33 @@ private fun AppearanceCard(themeMode: ThemeMode, onSelect: (ThemeMode) -> Unit) 
                         ),
                     )
                 }
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+
+            // Keep-screen-on toggle. The actual enforcement (Window flag
+            // + login gate) lives in MainActivity — this control only
+            // owns the user-facing intent.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Keep screen on",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = "Prevent the display from sleeping while the app is open and you are signed in.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = keepScreenOn, onCheckedChange = onKeepScreenOnToggle)
             }
         }
     }

@@ -5,6 +5,7 @@ import com.project.vortex.callsagent.common.enums.CallDirection
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.common.enums.FollowUpStatus
+import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.common.enums.MissedCallReason
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
@@ -37,6 +38,11 @@ class Converters {
     // ─── ClientStatus ↔ String ────────────────────────────────────────────────
     @TypeConverter fun clientStatusToString(v: ClientStatus): String = v.name
     @TypeConverter fun stringToClientStatus(v: String): ClientStatus = ClientStatus.valueOf(v)
+
+    // ─── InterestLevel ↔ String (nullable — only set when INTERESTED) ─────────
+    @TypeConverter fun interestLevelToString(v: InterestLevel?): String? = v?.name
+    @TypeConverter fun stringToInterestLevel(v: String?): InterestLevel? =
+        v?.let { InterestLevel.valueOf(it) }
 
     // ─── CallOutcome ↔ String ─────────────────────────────────────────────────
     @TypeConverter fun callOutcomeToString(v: CallOutcome?): String? = v?.name

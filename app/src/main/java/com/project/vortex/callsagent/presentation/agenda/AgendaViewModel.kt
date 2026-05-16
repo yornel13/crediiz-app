@@ -2,7 +2,9 @@ package com.project.vortex.callsagent.presentation.agenda
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.common.enums.DismissalReasonCode
+import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.data.sync.ConnectivityObserver
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
@@ -39,7 +41,16 @@ enum class AgendaSection { TODAY, TOMORROW, THIS_WEEK, LATER, UNSCHEDULED }
  * with its own card variant.
  */
 sealed interface AgendaItem {
-    data class Scheduled(val followUp: FollowUp) : AgendaItem
+    /**
+     * [interestLevel] is the current thermometer of the scheduled
+     * client (resolved via local lookup against the assigned INTERESTED
+     * set). `null` means the client row isn't in the local cache yet —
+     * the UI hides the chip in that case.
+     */
+    data class Scheduled(
+        val followUp: FollowUp,
+        val interestLevel: InterestLevel?,
+    ) : AgendaItem
     data class Unscheduled(val client: Client) : AgendaItem
 }
 
@@ -60,15 +71,20 @@ class AgendaViewModel @Inject constructor(
     val uiState: StateFlow<AgendaUiState> = _uiState.asStateFlow()
 
     /**
-     * Map of section → agenda items. Combines scheduled follow-ups
-     * (grouped by date) with the "Sin agendar" orphan-INTERESTED set
-     * (oldest assigned first).
+     * Map of section → agenda items. Combines:
+     *  - scheduled follow-ups grouped by date,
+     *  - the "Sin agendar" orphan-INTERESTED set (oldest first),
+     *  - a lookup of `clientId → interestLevel` derived from the local
+     *    INTERESTED snapshot, so each Scheduled card can render the
+     *    thermometer without a per-row DB call.
      */
     val agenda: StateFlow<Map<AgendaSection, List<AgendaItem>>> = combine(
         followUpRepository.observeAgenda(startOfToday()),
         clientRepository.observeUnscheduledInterested(Instant.now()),
-    ) { followUps, orphans ->
-        buildSections(followUps, orphans)
+        clientRepository.observeAssigned(ClientStatus.INTERESTED),
+    ) { followUps, orphans, interested ->
+        val levelByClientId = interested.associate { it.id to it.interestLevel }
+        buildSections(followUps, orphans, levelByClientId)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -128,10 +144,16 @@ class AgendaViewModel @Inject constructor(
     private fun buildSections(
         followUps: List<FollowUp>,
         orphans: List<Client>,
+        levelByClientId: Map<String, InterestLevel?>,
     ): Map<AgendaSection, List<AgendaItem>> {
         val result = linkedMapOf<AgendaSection, List<AgendaItem>>()
         groupFollowUpsByDate(followUps).forEach { (section, items) ->
-            result[section] = items.map { AgendaItem.Scheduled(it) }
+            result[section] = items.map { fu ->
+                AgendaItem.Scheduled(
+                    followUp = fu,
+                    interestLevel = levelByClientId[fu.clientId],
+                )
+            }
         }
         if (orphans.isNotEmpty()) {
             result[AgendaSection.UNSCHEDULED] = orphans.map { AgendaItem.Unscheduled(it) }

@@ -7,6 +7,7 @@ import com.project.vortex.callsagent.data.local.entity.ClientDismissalEntity
 import com.project.vortex.callsagent.data.local.entity.ClientEntity
 import com.project.vortex.callsagent.data.local.entity.FollowUpEntity
 import com.project.vortex.callsagent.data.local.entity.InteractionEntity
+import com.project.vortex.callsagent.data.local.entity.LocalAgentStatusChangeEntity
 import com.project.vortex.callsagent.data.local.entity.MissedCallEntity
 import com.project.vortex.callsagent.data.local.entity.NoteEntity
 
@@ -18,8 +19,9 @@ import com.project.vortex.callsagent.data.local.entity.NoteEntity
         FollowUpEntity::class,
         MissedCallEntity::class,
         ClientDismissalEntity::class,
+        LocalAgentStatusChangeEntity::class,
     ],
-    version = 5,
+    version = 9,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -30,6 +32,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun followUpDao(): FollowUpDao
     abstract fun missedCallDao(): MissedCallDao
     abstract fun clientDismissalDao(): ClientDismissalDao
+    abstract fun localAgentStatusChangeDao(): LocalAgentStatusChangeDao
 
     companion object {
         const val DATABASE_NAME = "calls_agent.db"

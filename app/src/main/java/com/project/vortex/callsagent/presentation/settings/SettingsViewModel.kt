@@ -32,6 +32,7 @@ data class SettingsUiState(
     val lastSync: SyncResult = SyncResult.Idle,
     val isSyncing: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val keepScreenOn: Boolean = false,
 )
 
 sealed interface SettingsEvent {
@@ -63,6 +64,7 @@ class SettingsViewModel @Inject constructor(
         _pendingCount,
         settingsPreferences.themeModeFlow,
         settingsPreferences.autoCallDelayFlow,
+        settingsPreferences.keepScreenOnFlow,
     ) { values ->
         SettingsUiState(
             agentName = (values[0] as String?).orEmpty(),
@@ -73,6 +75,7 @@ class SettingsViewModel @Inject constructor(
             pendingCount = values[5] as Int,
             themeMode = values[6] as ThemeMode,
             autoCallDelaySeconds = values[7] as Int,
+            keepScreenOn = values[8] as Boolean,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -94,6 +97,10 @@ class SettingsViewModel @Inject constructor(
 
     fun onThemeModeChange(mode: ThemeMode) {
         viewModelScope.launch { settingsPreferences.setThemeMode(mode) }
+    }
+
+    fun onKeepScreenOnToggle(enabled: Boolean) {
+        viewModelScope.launch { settingsPreferences.setKeepScreenOn(enabled) }
     }
 
     fun forceSync() {

@@ -7,6 +7,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.data.local.entity.ClientEntity
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
@@ -18,20 +19,18 @@ interface ClientDao {
     fun observeByStatus(status: ClientStatus): Flow<List<ClientEntity>>
 
     /**
-     * Pendientes feed — clients the agent has **never** called yet.
+     * Pendientes feed — clients the agent has **never** called.
      *
-     * Why filter on `lastCalledAt IS NULL`: an outcome of `NO_ANSWER`
-     * or `BUSY` keeps the client at `status = PENDING` (so it can be
-     * retried later), but mixing already-tried rows with cold ones
-     * makes it impossible at a glance for the agent to tell what's
-     * still untouched. Once a row has `lastCalledAt`, it lives in
-     * Recientes for the next 24 h with its outcome badge — the agent
-     * goes there to retry, not to Pendientes.
+     * After the 2026-05 backend refactor, the source of truth for
+     * "untouched" is the status itself: PENDING means literally
+     * "never called". The first NO_ANSWER / BUSY / WRONG_NUMBER
+     * transitions the client to IN_PROGRESS server-side — at which
+     * point it moves to the [observePendingForRetry] feed.
      */
     @Query(
         """
         SELECT * FROM clients
-        WHERE status = 'PENDING' AND lastCalledAt IS NULL
+        WHERE status = 'PENDING'
         ORDER BY queueOrder ASC
         """,
     )
@@ -40,7 +39,7 @@ interface ClientDao {
     @Query(
         """
         SELECT * FROM clients
-        WHERE status = 'PENDING' AND lastCalledAt IS NULL
+        WHERE status = 'PENDING'
           AND (name LIKE '%' || :query || '%' OR phone LIKE '%' || :query || '%')
         ORDER BY queueOrder ASC
         """,
@@ -48,15 +47,18 @@ interface ClientDao {
     fun searchPendingNeverCalled(query: String): Flow<List<ClientEntity>>
 
     /**
-     * "Para reintentar" feed — clients that already got at least one
-     * call attempt but stayed at `status = PENDING` (NO_ANSWER, BUSY).
-     * Sort by `lastCalledAt` ascending (oldest call first) so the
-     * client most "ready" to retry is at the top of the section.
+     * "Para reintentar" feed — clients with `status = IN_PROGRESS`
+     * (called at least once without a closing outcome). Sort by
+     * `lastCalledAt` ascending so the oldest attempt floats to the
+     * top: those are the most ready to dial again.
+     *
+     * Rows without `lastCalledAt` (admin-reassigned IN_PROGRESS leads
+     * from another agent) sort first thanks to SQLite's NULL ordering.
      */
     @Query(
         """
         SELECT * FROM clients
-        WHERE status = 'PENDING' AND lastCalledAt IS NOT NULL
+        WHERE status = 'IN_PROGRESS'
         ORDER BY lastCalledAt ASC
         """,
     )
@@ -65,7 +67,7 @@ interface ClientDao {
     @Query(
         """
         SELECT * FROM clients
-        WHERE status = 'PENDING' AND lastCalledAt IS NOT NULL
+        WHERE status = 'IN_PROGRESS'
           AND (name LIKE '%' || :query || '%' OR phone LIKE '%' || :query || '%')
         ORDER BY lastCalledAt ASC
         """,
@@ -111,9 +113,9 @@ interface ClientDao {
      * whose `lastCalledAt` falls inside the rolling window (24 h is the
      * v1.0 default — caller passes the cutoff). Ordered newest first.
      *
-     * Outcome-agnostic: NO_ANSWER, BUSY, INTERESTED, NOT_INTERESTED and
-     * INVALID_NUMBER all show up. The card variant in the UI picks
-     * different visuals based on `lastOutcome`.
+     * Outcome-agnostic: ANSWERED_*, NO_ANSWER, BUSY and WRONG_NUMBER
+     * all show up. The card variant in the UI picks different visuals
+     * based on `lastOutcome`.
      */
     @Query(
         """
@@ -227,4 +229,13 @@ interface ClientDao {
 
     @Query("UPDATE clients SET status = :status, updatedAt = :now WHERE id = :clientId")
     suspend fun setStatus(clientId: String, status: ClientStatus, now: Instant)
+
+    /**
+     * Optimistic write of the thermometer level. The repository calls
+     * this before the PATCH and rolls back on network failure.
+     */
+    @Query(
+        "UPDATE clients SET interestLevel = :level, updatedAt = :now WHERE id = :clientId",
+    )
+    suspend fun setInterestLevel(clientId: String, level: InterestLevel?, now: Instant)
 }

@@ -48,9 +48,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
 import com.project.vortex.callsagent.presentation.clients.components.DismissClientSheet
+import com.project.vortex.callsagent.ui.components.InterestLevelChip
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.theme.PillShape
 import java.time.Instant
@@ -110,6 +112,7 @@ fun AgendaScreen(
                             when (entry) {
                                 is AgendaItem.Scheduled -> ScheduledRow(
                                     followUp = entry.followUp,
+                                    interestLevel = entry.interestLevel,
                                     isToday = section == AgendaSection.TODAY,
                                     onClick = { onFollowUpSelected(entry.followUp.clientId) },
                                 )
@@ -216,6 +219,7 @@ private fun SectionHeader(section: AgendaSection, count: Int) {
 @Composable
 private fun ScheduledRow(
     followUp: FollowUp,
+    interestLevel: InterestLevel?,
     isToday: Boolean,
     onClick: () -> Unit,
 ) {
@@ -252,11 +256,20 @@ private fun ScheduledRow(
                 )
             }
             if (!followUp.clientPhone.isNullOrBlank()) {
-                Text(
-                    text = followUp.clientPhone,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = followUp.clientPhone,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (interestLevel != null) {
+                        Spacer(Modifier.width(8.dp))
+                        InterestLevelChip(level = interestLevel)
+                    }
+                }
+            } else if (interestLevel != null) {
+                Spacer(Modifier.height(2.dp))
+                InterestLevelChip(level = interestLevel)
             }
             // Optional reason — older follow-ups still carry it.
             if (followUp.reason.isNotBlank()) {
@@ -362,11 +375,17 @@ private fun UnscheduledRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = client.phone,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = client.phone,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                client.interestLevel?.let { level ->
+                    Spacer(Modifier.width(8.dp))
+                    InterestLevelChip(level = level)
+                }
+            }
             client.lastNote?.takeIf { it.isNotBlank() }?.let { note ->
                 Spacer(Modifier.height(2.dp))
                 Text(

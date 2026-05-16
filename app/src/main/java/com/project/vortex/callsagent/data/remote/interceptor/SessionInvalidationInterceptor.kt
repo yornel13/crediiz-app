@@ -1,18 +1,22 @@
 package com.project.vortex.callsagent.data.remote.interceptor
 
+import com.project.vortex.callsagent.common.error.ErrorCodes
 import com.project.vortex.callsagent.domain.auth.SessionEventBus
 import com.project.vortex.callsagent.domain.auth.SessionInvalidationReason
 import okhttp3.Interceptor
 import okhttp3.Response
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
  * Inspects every response and, on `401`, distinguishes between:
- *  - server-side session kill (`"Session has been invalidated"`)
- *    → emits [SessionInvalidationReason.Invalidated]
- *  - any other 401 (typically expired JWT)
- *    → emits [SessionInvalidationReason.Expired]
+ *  - server-side session kill (RFC 9457 `code = AUTH_SESSION_INVALIDATED`
+ *    or `AUTH_TOKEN_MISSING_SESSION`) → emits
+ *    [SessionInvalidationReason.Invalidated],
+ *  - any other 401 (typically expired JWT or `AUTH_INVALID_CREDENTIALS`
+ *    on an already-logged-in session) → emits
+ *    [SessionInvalidationReason.Expired].
  *
  * The actual logout cleanup + navigation lives in the app shell,
  * subscribed to [SessionEventBus]. This interceptor is intentionally
@@ -43,18 +47,30 @@ class SessionInvalidationInterceptor @Inject constructor(
         val peeked = runCatching { response.peekBody(PEEK_LIMIT_BYTES).string() }
             .getOrDefault("")
 
-        val reason = if (INVALIDATED_MARKER in peeked) {
-            SessionInvalidationReason.Invalidated
-        } else {
-            SessionInvalidationReason.Expired
+        val code = extractCode(peeked)
+        val reason = when (code) {
+            ErrorCodes.AUTH_SESSION_INVALIDATED,
+            ErrorCodes.AUTH_TOKEN_MISSING_SESSION -> SessionInvalidationReason.Invalidated
+            else -> SessionInvalidationReason.Expired
         }
         sessionEventBus.publish(reason)
         return response
     }
 
+    /**
+     * Cheap one-field JSON parse — we only need [ErrorCodes] discriminator,
+     * not the full [com.project.vortex.callsagent.data.remote.dto.ProblemDetails]
+     * payload (Moshi isn't available at the interceptor layer anyway).
+     * Returns `null` on any parse failure or missing field.
+     */
+    private fun extractCode(body: String): String? = try {
+        if (body.isBlank()) null else JSONObject(body).optString("code").takeIf { it.isNotBlank() }
+    } catch (_: Throwable) {
+        null
+    }
+
     companion object {
         private const val HTTP_UNAUTHORIZED = 401
         private const val PEEK_LIMIT_BYTES = 2048L
-        private const val INVALIDATED_MARKER = "Session has been invalidated"
     }
 }

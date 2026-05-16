@@ -2,6 +2,7 @@ package com.project.vortex.callsagent.data.mapper
 
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.data.local.entity.ClientEntity
 import com.project.vortex.callsagent.data.remote.dto.ClientResponse
 import com.project.vortex.callsagent.domain.model.Client
@@ -29,9 +30,13 @@ fun ClientResponse.toEntity(): ClientEntity = ClientEntity(
     ssNumber = ssNumber,
     salary = salary,
     status = runCatching { ClientStatus.valueOf(status) }.getOrDefault(ClientStatus.PENDING),
+    interestLevel = interestLevel?.let {
+        runCatching { InterestLevel.valueOf(it) }.getOrNull()
+    },
     assignedTo = assignedTo,
     assignedAt = assignedAt.toInstantOrNull(),
     callAttempts = callAttempts,
+    wrongNumberCount = wrongNumberCount ?: 0,
     lastCalledAt = lastCalledAt.toInstantOrNull(),
     lastOutcome = lastOutcome?.let { runCatching { CallOutcome.valueOf(it) }.getOrNull() },
     lastNote = lastNote,
@@ -51,8 +56,10 @@ fun ClientEntity.toDomain(): Client = Client(
     ssNumber = ssNumber,
     salary = salary,
     status = status,
+    interestLevel = interestLevel,
     assignedTo = assignedTo,
     callAttempts = callAttempts,
+    wrongNumberCount = wrongNumberCount,
     lastCalledAt = lastCalledAt,
     lastOutcome = lastOutcome,
     lastNote = lastNote,

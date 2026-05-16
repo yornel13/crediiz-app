@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.ui.components.Avatar
+import com.project.vortex.callsagent.ui.components.InterestLevelChip
 import com.project.vortex.callsagent.ui.components.StatusPill
 import com.project.vortex.callsagent.ui.theme.label
 import com.project.vortex.callsagent.ui.theme.palette
@@ -79,11 +80,17 @@ fun RecentClientCard(
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = client.phone,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = client.phone,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        client.interestLevel?.let { level ->
+                            Spacer(Modifier.width(8.dp))
+                            InterestLevelChip(level = level)
+                        }
+                    }
                 }
                 client.lastCalledAt?.let {
                     Text(

@@ -70,6 +70,7 @@ import com.project.vortex.callsagent.domain.model.MissedCall
 import com.project.vortex.callsagent.presentation.clients.components.ClientsViewSelector
 import com.project.vortex.callsagent.presentation.clients.components.DismissClientSheet
 import com.project.vortex.callsagent.presentation.clients.components.RecentClientCard
+import com.project.vortex.callsagent.presentation.clients.components.RecentStatusChangeCard
 import com.project.vortex.callsagent.presentation.clients.components.RecentDismissalCard
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.components.StatusPill
@@ -262,6 +263,11 @@ fun ClientsScreen(
                                 dismissal = entry.dismissal,
                                 onOpen = { onClientSelected(entry.client.id) },
                                 onUndo = { viewModel.undoDismissal(entry.client.id) },
+                            )
+                            is RecentEntry.StatusChanged -> RecentStatusChangeCard(
+                                client = entry.client,
+                                change = entry.change,
+                                onOpen = { onClientSelected(entry.client.id) },
                             )
                         }
                     }
@@ -503,6 +509,10 @@ private fun ClientCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     AttemptsChip(attempts = client.callAttempts)
+                    if (client.wrongNumberCount > 0) {
+                        Spacer(Modifier.width(6.dp))
+                        WrongNumberChip(count = client.wrongNumberCount)
+                    }
                     if (client.lastCalledAt != null) {
                         Spacer(Modifier.width(8.dp))
                         Text(
@@ -590,6 +600,41 @@ private fun AttemptsChip(attempts: Int) {
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * "Wrong # ×N" badge — only rendered when [count] > 0 (caller guards
+ * this). Color shifts from amber (1) to error red (2) to warn the
+ * agent that the next strike will move the client to UNREACHABLE
+ * (HOW_IT_WORKS §6, default threshold = 3).
+ */
+@Composable
+private fun WrongNumberChip(count: Int) {
+    val isUrgent = count >= 2
+    val container = if (isUrgent) {
+        MaterialTheme.colorScheme.errorContainer
+    } else {
+        MaterialTheme.colorScheme.tertiaryContainer
+    }
+    val content = if (isUrgent) {
+        MaterialTheme.colorScheme.onErrorContainer
+    } else {
+        MaterialTheme.colorScheme.onTertiaryContainer
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+            .background(container)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text = "❓ Wrong # ×$count",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = content,
         )
     }
 }

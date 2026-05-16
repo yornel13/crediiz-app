@@ -62,6 +62,21 @@ class SettingsPreferences @Inject constructor(
         dataStore.edit { it[KEY_THEME_MODE] = mode.name }
     }
 
+    /**
+     * When true, the device screen is kept on while the app is in
+     * foreground AND the agent is signed in. The activity-level enforcer
+     * lives in MainActivity (it combines this flow with the auth state
+     * and toggles FLAG_KEEP_SCREEN_ON accordingly). Default is `false`
+     * so we don't drain battery on agents who didn't ask for it.
+     */
+    val keepScreenOnFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_KEEP_SCREEN_ON] ?: DEFAULT_KEEP_SCREEN_ON
+    }
+
+    suspend fun setKeepScreenOn(enabled: Boolean) {
+        dataStore.edit { it[KEY_KEEP_SCREEN_ON] = enabled }
+    }
+
     companion object {
         private val KEY_AUTO_ADVANCE = booleanPreferencesKey("auto_advance")
         private const val DEFAULT_AUTO_ADVANCE = true
@@ -72,5 +87,8 @@ class SettingsPreferences @Inject constructor(
         const val MAX_AUTO_CALL_DELAY = 15
 
         private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
+
+        private val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
+        private const val DEFAULT_KEEP_SCREEN_ON = false
     }
 }

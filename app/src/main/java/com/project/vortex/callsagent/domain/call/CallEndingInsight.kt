@@ -23,25 +23,30 @@ data class CallEndingInsight(
     val reasonLabel: String?,
 ) {
     companion object {
+        /** All 7 outcomes the backend accepts (HOW_IT_WORKS §5). */
         private val ALL_OUTCOMES = listOf(
-            CallOutcome.INTERESTED,
-            CallOutcome.NOT_INTERESTED,
+            CallOutcome.ANSWERED_INTERESTED,
+            CallOutcome.ANSWERED_NOT_INTERESTED,
+            CallOutcome.ANSWERED_OPT_OUT,
+            CallOutcome.ANSWERED_SOLD,
             CallOutcome.NO_ANSWER,
             CallOutcome.BUSY,
-            CallOutcome.INVALID_NUMBER,
+            CallOutcome.WRONG_NUMBER,
         )
 
         /** Outcomes that only make sense after a real conversation. */
         private val CONVERSATIONAL_OUTCOMES = listOf(
-            CallOutcome.INTERESTED,
-            CallOutcome.NOT_INTERESTED,
+            CallOutcome.ANSWERED_INTERESTED,
+            CallOutcome.ANSWERED_NOT_INTERESTED,
+            CallOutcome.ANSWERED_OPT_OUT,
+            CallOutcome.ANSWERED_SOLD,
         )
 
         /** Outcomes that only make sense when the call never connected. */
         private val NON_CONVERSATIONAL_OUTCOMES = listOf(
             CallOutcome.NO_ANSWER,
             CallOutcome.BUSY,
-            CallOutcome.INVALID_NUMBER,
+            CallOutcome.WRONG_NUMBER,
         )
 
         fun from(ending: SipCallEnding): CallEndingInsight = when (ending) {
@@ -70,8 +75,8 @@ data class CallEndingInsight(
             )
 
             SipCallEnding.InvalidNumber -> CallEndingInsight(
-                suggestedOutcome = CallOutcome.INVALID_NUMBER,
-                allowedOutcomes = listOf(CallOutcome.INVALID_NUMBER),
+                suggestedOutcome = CallOutcome.WRONG_NUMBER,
+                allowedOutcomes = listOf(CallOutcome.WRONG_NUMBER),
                 reasonLabel = "Número no válido.",
             )
 
