@@ -33,6 +33,7 @@ data class SettingsUiState(
     val isSyncing: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val keepScreenOn: Boolean = false,
+    val showFullActivityHistory: Boolean = true,
 )
 
 sealed interface SettingsEvent {
@@ -65,6 +66,7 @@ class SettingsViewModel @Inject constructor(
         settingsPreferences.themeModeFlow,
         settingsPreferences.autoCallDelayFlow,
         settingsPreferences.keepScreenOnFlow,
+        settingsPreferences.showFullActivityHistoryFlow,
     ) { values ->
         SettingsUiState(
             agentName = (values[0] as String?).orEmpty(),
@@ -76,6 +78,7 @@ class SettingsViewModel @Inject constructor(
             themeMode = values[6] as ThemeMode,
             autoCallDelaySeconds = values[7] as Int,
             keepScreenOn = values[8] as Boolean,
+            showFullActivityHistory = values[9] as Boolean,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -101,6 +104,10 @@ class SettingsViewModel @Inject constructor(
 
     fun onKeepScreenOnToggle(enabled: Boolean) {
         viewModelScope.launch { settingsPreferences.setKeepScreenOn(enabled) }
+    }
+
+    fun onShowFullActivityHistoryToggle(enabled: Boolean) {
+        viewModelScope.launch { settingsPreferences.setShowFullActivityHistory(enabled) }
     }
 
     fun forceSync() {

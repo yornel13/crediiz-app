@@ -128,6 +128,18 @@ class ClientRepositoryImpl @Inject constructor(
         )
     }
 
+    override suspend fun refineInteractionOutcome(
+        clientId: String,
+        outcome: CallOutcome,
+    ) = withContext(Dispatchers.IO) {
+        dao.refineOutcomeAndStatus(
+            clientId = clientId,
+            outcome = outcome,
+            newStatus = OPTIMISTIC_OUTCOME_TO_STATUS.getValue(outcome),
+            now = Instant.now(),
+        )
+    }
+
     override suspend fun updateLastNoteLocally(clientId: String, note: String) =
         withContext(Dispatchers.IO) {
             dao.updateLastNote(clientId, note, Instant.now())

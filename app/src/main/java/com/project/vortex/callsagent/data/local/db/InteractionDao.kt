@@ -26,6 +26,13 @@ interface InteractionDao {
     @Query("SELECT COUNT(*) FROM interactions WHERE syncStatus = :status")
     fun observeCountBySyncStatus(status: SyncStatus): kotlinx.coroutines.flow.Flow<Int>
 
+    /**
+     * All interactions for a single client, ordered most-recent first.
+     * Backs the activity timeline on PreCall.
+     */
+    @Query("SELECT * FROM interactions WHERE clientId = :clientId ORDER BY callStartedAt DESC")
+    fun observeByClient(clientId: String): kotlinx.coroutines.flow.Flow<List<InteractionEntity>>
+
     @Query("UPDATE interactions SET syncStatus = :status WHERE mobileSyncId IN (:ids)")
     suspend fun markSyncStatus(ids: List<String>, status: SyncStatus)
 

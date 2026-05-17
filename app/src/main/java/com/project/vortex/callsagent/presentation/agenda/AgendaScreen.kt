@@ -60,8 +60,22 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
+/**
+ * Internal list-pane composable for the Agenda tab.
+ *
+ * Previously the public `AgendaScreen`. Renamed when the screen was
+ * split into adaptive list/detail panes for tablets — the public
+ * entry point now lives in [AgendaScreenAdaptive], which picks
+ * between this list pane on its own (compact widths) or list+detail
+ * with a draggable divider (wide widths).
+ *
+ * Kept intentionally unchanged: the entire pre-existing UI (sections,
+ * scheduled/unscheduled rows, dismissal sheet, scroll-to-top tick) is
+ * preserved bit-for-bit on phones and reused as the list pane on
+ * tablets.
+ */
 @Composable
-fun AgendaScreen(
+internal fun AgendaListPane(
     onFollowUpSelected: (String) -> Unit,
     /**
      * Increments every time the agent re-taps the Agenda tab on the

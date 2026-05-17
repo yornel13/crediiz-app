@@ -61,6 +61,33 @@ import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.Instant
 
+// ╔══════════════════════════════════════════════════════════════════════════╗
+// ║                                                                          ║
+// ║   ████████  ███████  ████████ ████████     ███    ███████  ████████      ║
+// ║      ██     ██       ██          ██        ████  ████ ██  ██   ██        ║
+// ║      ██     ██████   ████████    ██        ██ ████ ██ ██  ██   ██        ║
+// ║      ██     ██             ██    ██        ██  ██  ██ ██  ██   ██        ║
+// ║      ██     ███████  ████████    ██        ██      ██ ████████  ███████  ║
+// ║                                                                          ║
+// ║   TEMPORARY DESIGN-REVIEW DELAY — REMOVE BEFORE SHIPPING                ║
+// ║                                                                          ║
+// ║   Holds the InCallScreen "Call ended" state visible for 10 seconds      ║
+// ║   after disconnection so the team can review the post-call visual       ║
+// ║   handoff (animation, banners, hang-up confirmation) before the         ║
+// ║   PostCall screen takes over.                                            ║
+// ║                                                                          ║
+// ║   Production value: 1_200 ms (1.2 s). Anything longer makes the agent  ║
+// ║   wait unnecessarily between calls — every extra second on this screen ║
+// ║   is a second NOT spent on the next client.                              ║
+// ║                                                                          ║
+// ║   To remove: revert [POST_DISCONNECT_HOLD_MS] back to 1_200L and        ║
+// ║   delete this banner.                                                    ║
+// ║                                                                          ║
+// ║   Set on: 2026-05-17 for SIP-end-of-call UX review.                    ║
+// ║                                                                          ║
+// ╚══════════════════════════════════════════════════════════════════════════╝
+private const val POST_DISCONNECT_HOLD_MS = 10_000L
+
 @Composable
 fun InCallScreen(
     onCallFinished: () -> Unit,
@@ -79,7 +106,9 @@ fun InCallScreen(
 
     LaunchedEffect(hasDisconnected) {
         if (hasDisconnected) {
-            delay(1200)
+            // TEMPORARY — see POST_DISCONNECT_HOLD_MS banner at the top
+            // of this file. Restore to 1_200 ms before shipping.
+            delay(POST_DISCONNECT_HOLD_MS)
             onCallFinished()
         }
     }

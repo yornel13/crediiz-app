@@ -1,9 +1,11 @@
 package com.project.vortex.callsagent.presentation.navigation
 
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -13,6 +15,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.project.vortex.callsagent.domain.auth.SessionInvalidationReason
 import com.project.vortex.callsagent.presentation.autocall.SessionSummaryScreen
+import com.project.vortex.callsagent.presentation.common.WindowSize
 import com.project.vortex.callsagent.presentation.home.HomeScreen
 import com.project.vortex.callsagent.presentation.login.LoginReason
 import com.project.vortex.callsagent.presentation.login.LoginScreen
@@ -32,6 +35,19 @@ fun AppNavGraph(
     sessionWatcher: SessionWatcherViewModel = hiltViewModel(),
 ) {
     val navController: NavHostController = rememberNavController()
+    val ctx = LocalContext.current
+
+    // Save-failure surface — CallController emits a non-null message
+    // here when post-call persistence fails. We Toast it so the agent
+    // sees WHY the call disappeared instead of just observing
+    // "no aparece en recientes". The Toast is long so a screenshot
+    // gives enough info to diagnose without logcat.
+    val saveError by callNavViewModel.saveError.collectAsState()
+    LaunchedEffect(saveError) {
+        val msg = saveError ?: return@LaunchedEffect
+        Toast.makeText(ctx, msg, Toast.LENGTH_LONG).show()
+        callNavViewModel.consumeSaveError()
+    }
 
     // Server killed the session (single-active-session displaced this
     // device, admin revoked, agent logged out elsewhere) → bounce to
@@ -151,8 +167,11 @@ fun AppNavGraph(
         composable(
             route = Routes.PRE_CALL,
             arguments = listOf(navArgument("clientId") { type = NavType.StringType }),
-        ) {
+        ) { entry ->
+            val clientId = entry.arguments?.getString("clientId")
+                ?: error("PreCall route entered without a clientId arg")
             PreCallScreen(
+                clientId = clientId,
                 onBack = { navController.popBackStack() },
                 onSkipToNext = { nextClientId ->
                     navController.navigate(Routes.preCall(nextClientId)) {
@@ -193,6 +212,15 @@ fun AppNavGraph(
                 },
             ),
         ) {
+            // Captured once per PostCall mount — drives the routing
+            // branch on PostCall save. The PreCall route is full-screen
+            // and bypasses the Home shell's list/detail scaffold; we
+            // only want to take that path on compact phones. On tablet
+            // / split mode the agent should return to the shared
+            // Home shell so the next client opens IN the detail pane,
+            // not in a separate full-screen route that hides the list.
+            val isSplitMode = WindowSize.isWideWidth
+
             PostCallScreen(
                 onBack = { navController.popBackStack() },
                 onSaved = {
@@ -200,9 +228,20 @@ fun AppNavGraph(
                     navController.popBackStack(Routes.HOME, inclusive = false)
                 },
                 onSavedNextInSession = { nextClientId ->
-                    navController.navigate(Routes.preCall(nextClientId)) {
-                        popUpTo(Routes.HOME) { inclusive = false }
-                        launchSingleTop = true
+                    if (isSplitMode) {
+                        // Wide / split: return to Home. ClientsScreenAdaptive
+                        // observes the AutoCallOrchestrator session and will
+                        // route the detail pane to `nextClientId` as soon as
+                        // its composition resumes — keeping the list +
+                        // detail layout intact.
+                        navController.popBackStack(Routes.HOME, inclusive = false)
+                    } else {
+                        // Compact: PreCall lives as its own full-screen
+                        // route. Navigate directly to the next one.
+                        navController.navigate(Routes.preCall(nextClientId)) {
+                            popUpTo(Routes.HOME) { inclusive = false }
+                            launchSingleTop = true
+                        }
                     }
                 },
                 onSavedSessionComplete = {

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -23,6 +24,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.data.sync.SyncResult
+import com.project.vortex.callsagent.presentation.common.WindowSize
 import com.project.vortex.callsagent.ui.theme.ThemeMode
 
 @Composable
@@ -51,6 +54,12 @@ fun SettingsScreen(
         }
     }
 
+    // Settings is a form-like screen — content stretched edge-to-edge
+    // on a 1300dp tablet leaves toggles unreachable from where the
+    // operator's thumbs naturally rest. Cap to ~720dp on wide screens
+    // and center it. On Compact (phone) keep edge-to-edge.
+    val contentMaxWidth = if (WindowSize.isWideWidth) 720.dp else androidx.compose.ui.unit.Dp.Unspecified
+
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
@@ -64,7 +73,17 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            // Inner column owns the actual content width. Decoupling
+            // it from the scrollable outer column lets us center the
+            // whole form without breaking scroll bounds.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = contentMaxWidth),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
             AccountCard(name = state.agentName, email = state.agentEmail)
 
             DisplayCard(
@@ -72,6 +91,8 @@ fun SettingsScreen(
                 onThemeSelect = viewModel::onThemeModeChange,
                 keepScreenOn = state.keepScreenOn,
                 onKeepScreenOnToggle = viewModel::onKeepScreenOnToggle,
+                showFullActivityHistory = state.showFullActivityHistory,
+                onShowFullActivityHistoryToggle = viewModel::onShowFullActivityHistoryToggle,
             )
 
             AutoAdvanceCard(
@@ -99,6 +120,7 @@ fun SettingsScreen(
             ) {
                 Text("Sign out")
             }
+            } // end inner content column
         }
     }
 }
@@ -131,6 +153,8 @@ private fun DisplayCard(
     onThemeSelect: (ThemeMode) -> Unit,
     keepScreenOn: Boolean,
     onKeepScreenOnToggle: (Boolean) -> Unit,
+    showFullActivityHistory: Boolean,
+    onShowFullActivityHistoryToggle: (Boolean) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -183,7 +207,43 @@ private fun DisplayCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(checked = keepScreenOn, onCheckedChange = onKeepScreenOnToggle)
+                Switch(
+                    checked = keepScreenOn,
+                    onCheckedChange = onKeepScreenOnToggle,
+                    colors = appSwitchColors(),
+                )
+            }
+
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 8.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+
+            // Activity-history view mode for PreCall timeline.
+            // When false, only NoteEntry events show; calls/follow-ups
+            // are filtered out. The PreCall ViewModel observes this
+            // flow — no per-screen toggle.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Mostrar historial completo",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = "Si está apagado, en PreCall verás solo las notas; las llamadas y otros eventos se ocultan.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = showFullActivityHistory,
+                    onCheckedChange = onShowFullActivityHistoryToggle,
+                    colors = appSwitchColors(),
+                )
             }
         }
     }
@@ -194,6 +254,26 @@ private fun themeLabel(mode: ThemeMode): String = when (mode) {
     ThemeMode.LIGHT -> "Light"
     ThemeMode.DARK -> "Dark"
 }
+
+/**
+ * Switch colours with EXPLICIT off-state values so the toggle stays
+ * visible in dark mode. The Material 3 defaults use
+ * `surfaceContainerHighest` for the track and `outline` for the
+ * thumb, which in our dark theme collide visually with the card
+ * background — the switch appeared "missing" when off.
+ *
+ * Overriding with `surfaceVariant` (track) and `onSurfaceVariant`
+ * (thumb) guarantees the two colours are tonal opposites of each
+ * other AND distinct from the card surface in both light and dark
+ * palettes. The "on" colours stay at the M3 defaults (primary) so
+ * the toggle's positive state still reads as the brand accent.
+ */
+@Composable
+private fun appSwitchColors() = SwitchDefaults.colors(
+    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    uncheckedBorderColor = MaterialTheme.colorScheme.outline,
+)
 
 @Composable
 private fun AutoAdvanceCard(
@@ -228,7 +308,11 @@ private fun AutoAdvanceCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(checked = enabled, onCheckedChange = onToggle)
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onToggle,
+                    colors = appSwitchColors(),
+                )
             }
 
             // Countdown delay only matters when auto-advance is on. We

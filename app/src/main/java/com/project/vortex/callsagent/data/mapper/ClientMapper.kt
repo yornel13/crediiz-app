@@ -58,6 +58,7 @@ fun ClientEntity.toDomain(): Client = Client(
     status = status,
     interestLevel = interestLevel,
     assignedTo = assignedTo,
+    assignedAt = assignedAt,
     callAttempts = callAttempts,
     wrongNumberCount = wrongNumberCount,
     lastCalledAt = lastCalledAt,

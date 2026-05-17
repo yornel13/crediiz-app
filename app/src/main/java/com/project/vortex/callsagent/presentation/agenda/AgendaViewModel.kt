@@ -11,6 +11,7 @@ import com.project.vortex.callsagent.domain.model.FollowUp
 import com.project.vortex.callsagent.domain.repository.ClientDismissalRepository
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
+import com.project.vortex.callsagent.domain.repository.NoteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -64,6 +65,7 @@ class AgendaViewModel @Inject constructor(
     private val followUpRepository: FollowUpRepository,
     private val clientRepository: ClientRepository,
     private val clientDismissalRepository: ClientDismissalRepository,
+    private val noteRepository: NoteRepository,
     private val connectivityObserver: ConnectivityObserver,
 ) : ViewModel() {
 
@@ -122,6 +124,25 @@ class AgendaViewModel @Inject constructor(
             clientDismissalRepository.dismiss(clientId, reasonCode, freeFormReason)
         }
     }
+
+    /**
+     * One-shot local lookup used by the adaptive detail pane on
+     * tablets. Same shape as [com.project.vortex.callsagent.presentation
+     * .clients.ClientsViewModel.findClientLocally] — the two screens
+     * each own their own VM but resolve clients identically.
+     */
+    suspend fun findClientLocally(id: String): Client? =
+        clientRepository.findById(id)
+
+    /**
+     * Live note feed for the adaptive detail pane. See
+     * [com.project.vortex.callsagent.presentation.clients.ClientsViewModel
+     * .observeNotesForClient] — same shape, replicated here so the
+     * detail pane consumes its own tab's VM and doesn't reach
+     * sideways across feature packages.
+     */
+    fun observeNotesForClient(clientId: String) =
+        noteRepository.observeByClient(clientId)
 
     fun refresh() {
         viewModelScope.launch {

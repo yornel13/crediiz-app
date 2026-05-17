@@ -77,6 +77,25 @@ class SettingsPreferences @Inject constructor(
         dataStore.edit { it[KEY_KEEP_SCREEN_ON] = enabled }
     }
 
+    /**
+     * Activity-history view mode used by the PreCall timeline:
+     * - true  → render every event type (calls, notes, follow-ups, etc.).
+     * - false → render only NoteEntry events.
+     *
+     * Lives in settings (not on the PreCall screen itself) so the
+     * choice persists across clients and across app launches — agents
+     * who prefer the focused view don't have to re-toggle on every
+     * client. Default is `true` because a new agent benefits from the
+     * full context.
+     */
+    val showFullActivityHistoryFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_SHOW_FULL_ACTIVITY_HISTORY] ?: DEFAULT_SHOW_FULL_ACTIVITY_HISTORY
+    }
+
+    suspend fun setShowFullActivityHistory(enabled: Boolean) {
+        dataStore.edit { it[KEY_SHOW_FULL_ACTIVITY_HISTORY] = enabled }
+    }
+
     companion object {
         private val KEY_AUTO_ADVANCE = booleanPreferencesKey("auto_advance")
         private const val DEFAULT_AUTO_ADVANCE = true
@@ -90,5 +109,9 @@ class SettingsPreferences @Inject constructor(
 
         private val KEY_KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
         private const val DEFAULT_KEEP_SCREEN_ON = false
+
+        private val KEY_SHOW_FULL_ACTIVITY_HISTORY =
+            booleanPreferencesKey("show_full_activity_history")
+        private const val DEFAULT_SHOW_FULL_ACTIVITY_HISTORY = true
     }
 }

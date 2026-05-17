@@ -1,7 +1,9 @@
 package com.project.vortex.callsagent.presentation.clients
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,8 +57,15 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import kotlinx.coroutines.android.awaitFrame
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -85,9 +94,25 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
+/**
+ * Internal list-pane composable for the Clients tab.
+ *
+ * Originally this was `ClientsScreen`. Renamed when the screen was
+ * split into adaptive list/detail panes for tablets — the public
+ * entry point now lives in [ClientsScreenAdaptive] (file
+ * `ClientsScreenAdaptive.kt`), which picks between this list pane on
+ * its own (compact widths) or list+detail with a draggable divider
+ * (wide widths).
+ *
+ * Keeping this composable internal-but-unchanged minimizes risk:
+ * the entire pre-existing UI behavior (search, view kinds, FAB,
+ * dismissal sheet, missed-calls sheet, scroll-to-top tick) is
+ * preserved bit-for-bit on phones, and reused as the list pane on
+ * tablets.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClientsScreen(
+internal fun ClientsListPane(
     onClientSelected: (String) -> Unit,
     onStartAutoCall: (firstClientId: String) -> Unit,
     /**
@@ -100,6 +125,7 @@ fun ClientsScreen(
     viewModel: ClientsViewModel = hiltViewModel(),
 ) {
     val pendingNeverCalled by viewModel.pendingNeverCalled.collectAsState()
+    val pendingNeverCalledByDate by viewModel.pendingNeverCalledByDate.collectAsState()
     val pendingForRetry by viewModel.pendingForRetry.collectAsState()
     val recentEntries by viewModel.recentEntries.collectAsState()
     val totalPending by viewModel.totalPendingCount.collectAsState()
@@ -109,6 +135,8 @@ fun ClientsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val missedCalls by viewModel.missedCalls.collectAsState()
     val syncIndicator by viewModel.syncIndicator.collectAsState()
+    val autoCallSession by viewModel.autoCallSession.collectAsState()
+    val isAutoCallActive = autoCallSession != null
     var missedSheetOpen by remember { mutableStateOf(false) }
     // (clientId, clientName) currently being dismissed via the sheet.
     var dismissTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
@@ -125,21 +153,71 @@ fun ClientsScreen(
         if (scrollToTopTick > 0) listState.animateScrollToItem(0)
     }
 
+    // Gmail-style FAB expand/collapse — show the label text only when
+    // the list is at the very top; collapse to an icon-only pill on
+    // any scroll. `derivedStateOf` keeps the recomposition window
+    // tight: we only re-evaluate the boolean when the underlying
+    // scroll position properties actually change, not on every
+    // millisecond of scroll.
+    val isFabExpanded by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 &&
+                listState.firstVisibleItemScrollOffset == 0
+        }
+    }
+
     Scaffold(
         floatingActionButton = {
-            // Auto-call only makes sense over the Pendientes queue. Hiding
-            // the FAB on Recientes avoids ambiguity about what set is
-            // being dialed.
-            if (pendingListSize > 0 && viewKind == ClientsViewKind.PENDIENTES) {
+            // FAB visibility rule:
+            //  - Auto-call ACTIVE → show always (any tab) so the agent
+            //    can deactivate from anywhere.
+            //  - Auto-call IDLE  → show only on Pendientes with a
+            //    non-empty queue. The button has no meaning on
+            //    Recientes or with an empty pendientes list.
+            val showFab = isAutoCallActive ||
+                (pendingListSize > 0 && viewKind == ClientsViewKind.PENDIENTES)
+
+            if (showFab) {
                 ExtendedFloatingActionButton(
                     onClick = {
-                        val firstClientId = viewModel.startAutoCall()
-                        if (firstClientId != null) onStartAutoCall(firstClientId)
+                        if (isAutoCallActive) {
+                            // Toggle off: cancel the session. The FAB
+                            // re-arms automatically as soon as the
+                            // orchestrator clears `session`.
+                            viewModel.exitAutoCall()
+                        } else {
+                            val firstClientId = viewModel.startAutoCall()
+                            if (firstClientId != null) onStartAutoCall(firstClientId)
+                        }
                     },
-                    icon = { Icon(Icons.Filled.PhoneInTalk, contentDescription = null) },
-                    text = { Text("Auto-call", fontWeight = FontWeight.SemiBold) },
+                    // Gmail-style: expanded at the top of the list,
+                    // collapsed to icon-only as soon as the user
+                    // scrolls. M3 animates the width transition.
+                    expanded = isFabExpanded,
+                    icon = {
+                        Icon(
+                            // Close glyph signals "tap to stop" when a
+                            // session is running; phone-in-talk signals
+                            // "tap to start" when idle.
+                            imageVector = if (isAutoCallActive) {
+                                Icons.Filled.Close
+                            } else {
+                                Icons.Filled.PhoneInTalk
+                            },
+                            contentDescription = null,
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = if (isAutoCallActive) "Desactivar" else "Auto-call",
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    },
                     containerColor = PhoneGreen,
-                    contentColor = Color.White,
+                    // Dark content over the saturated PhoneGreen —
+                    // matches the LLAMAR button styling in PreCall's
+                    // bottom bar for visual consistency.
+                    contentColor = Color.Black,
                 )
             }
         },
@@ -155,7 +233,7 @@ fun ClientsScreen(
                 top = padding.calculateTopPadding(),
                 bottom = padding.calculateBottomPadding() + 96.dp,
             ),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
             item("hero") {
@@ -226,12 +304,35 @@ fun ClientsScreen(
                                 count = pendingNeverCalled.size,
                             )
                         }
-                        items(pendingNeverCalled, key = { "pn_${it.id}" }) { client ->
-                            ClientCard(
-                                client = client,
-                                onClick = { onClientSelected(client.id) },
-                                onDismiss = { dismissTarget = client.id to client.name },
-                            )
+                        // While searching, headers are noise — the
+                        // agent is already navigating by name/phone.
+                        // Render a flat filtered list in that case.
+                        if (query.isNotBlank()) {
+                            items(pendingNeverCalled, key = { "pn_${it.id}" }) { client ->
+                                ClientCard(
+                                    client = client,
+                                    onClick = { onClientSelected(client.id) },
+                                    onDismiss = { dismissTarget = client.id to client.name },
+                                )
+                            }
+                        } else {
+                            // Group by assignedAt date, oldest first.
+                            // LinkedHashMap iteration order = sort order
+                            // (see groupPendingNeverCalledByAssignedDate).
+                            pendingNeverCalledByDate.forEach { (bucket, clients) ->
+                                item("pn_h_${bucket.key}") {
+                                    PendingDateHeader(label = bucket.label)
+                                }
+                                items(clients, key = { "pn_${it.id}" }) { client ->
+                                    ClientCard(
+                                        client = client,
+                                        onClick = { onClientSelected(client.id) },
+                                        onDismiss = {
+                                            dismissTarget = client.id to client.name
+                                        },
+                                    )
+                                }
+                            }
                         }
                     }
                     if (pendingForRetry.isNotEmpty()) {
@@ -411,8 +512,66 @@ private fun SyncChip(state: SyncIndicatorState, onClick: () -> Unit) {
     }
 }
 
+/**
+ * Two-state search input.
+ *
+ * - **Idle**: a clickable Surface that looks like a search field but is
+ *   NOT a TextField. There's no input to focus on entry, which means
+ *   the system can't auto-open the IME just because the composition
+ *   contains a focusable input. This is the Gmail-Android pattern.
+ * - **Active**: an actual [TextField] requesting focus on mount. The
+ *   IME opens because the agent expressly tapped to search — not as a
+ *   side-effect of layout. When the agent dismisses focus AND the
+ *   query is blank, we revert to Idle so the input is gone again.
+ *
+ * If the agent navigates away with a non-blank query and returns, we
+ * start in Active so the cursor sits in the existing text where the
+ * agent left it.
+ */
 @Composable
 private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
+    // Persist editing mode across recompositions but reset on screen
+    // re-entry. Initial state = Active iff there's already a query
+    // (returning to a partially-typed search).
+    var isActive by rememberSaveable(query.isNotBlank()) { mutableStateOf(query.isNotBlank()) }
+    // Latch that flips on the FIRST time the TextField is focused.
+    // Without it, the initial onFocusChanged callback (which fires with
+    // isFocused=false on mount, BEFORE our requestFocus has run) would
+    // collapse the field straight back to Idle on the first frame —
+    // since query is also blank at that point. Only after we've had
+    // focus once do we trust an unfocused+blank state as "user dismissed".
+    var hasReceivedFocus by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    if (!isActive) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { isActive = true },
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = "Search by name or phone",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+        }
+        return
+    }
+
     TextField(
         value = query,
         onValueChange = onQueryChange,
@@ -434,21 +593,66 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
             unfocusedIndicatorColor = Color.Transparent,
             disabledIndicatorColor = Color.Transparent,
         ),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(focusRequester)
+            .onFocusChanged { focusState ->
+                if (focusState.isFocused) {
+                    hasReceivedFocus = true
+                    return@onFocusChanged
+                }
+                // Only collapse to Idle once we've had focus at least
+                // once — otherwise the initial unfocused callback on
+                // mount (which fires before requestFocus completes)
+                // would close the field on the first frame.
+                if (hasReceivedFocus && query.isBlank()) {
+                    isActive = false
+                }
+            },
     )
+
+    // Request focus + show the IME exactly once when we enter Active
+    // mode. This is the only place in the screen where focus is asked
+    // programmatically, and it only happens after a user-initiated tap
+    // on the placeholder.
+    //
+    // awaitFrame() is critical: FocusRequester.requestFocus() silently
+    // fails when the focusable Modifier hasn't completed its layout
+    // pass yet. The composition→layout gap is sub-frame, but races
+    // exist on slower devices. Waiting one frame guarantees the
+    // TextField is positioned before we touch its focus.
+    //
+    // keyboardController.show() is a belt-and-suspenders call: focus
+    // alone usually opens the IME, but on some OEMs/IMEs the implicit
+    // show after focus is suppressed if another window had focus last
+    // (back-to-back navigations, dialogs, etc.). Calling show()
+    // explicitly removes that ambiguity.
+    LaunchedEffect(Unit) {
+        awaitFrame()
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ClientCard(
     client: Client,
     onClick: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // Long-press replaces the kebab (3-dots) button — gains us the
+    // horizontal space the icon used to occupy and removes constant
+    // visual noise from the card. Discoverability is acceptable for
+    // an in-house tool used 8h/day; agents pick it up on day one.
     var menuOpen by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = { menuOpen = true },
+            ),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
@@ -458,43 +662,36 @@ private fun ClientCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Avatar(name = client.name, size = 48.dp)
+                Avatar(name = client.name, size = 36.dp)
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = client.name,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    Spacer(Modifier.height(2.dp))
                     Text(
                         text = client.phone,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = { menuOpen = true }) {
-                    Icon(
-                        Icons.Filled.MoreVert,
-                        contentDescription = "More actions",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                // Long-press context menu — anchored to the card.
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Dismiss client") },
+                        onClick = {
+                            menuOpen = false
+                            onDismiss()
+                        },
                     )
-                    DropdownMenu(
-                        expanded = menuOpen,
-                        onDismissRequest = { menuOpen = false },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Dismiss client") },
-                            onClick = {
-                                menuOpen = false
-                                onDismiss()
-                            },
-                        )
-                    }
                 }
             }
 
@@ -503,7 +700,7 @@ private fun ClientCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -575,6 +772,25 @@ private fun PendingSubHeader(
             )
         }
     }
+}
+
+/**
+ * Section header that splits the "Sin llamar" sub-feed by assignedAt
+ * date (Hoy / Ayer / Antier / weekday / "Más antiguos"). Visually
+ * lighter than [PendingSubHeader] — it's a sub-grouping inside the
+ * Untouched section, not a top-level pill.
+ */
+@Composable
+private fun PendingDateHeader(label: String) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = FontWeight.Medium,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp, bottom = 4.dp, start = 4.dp),
+    )
 }
 
 @Composable

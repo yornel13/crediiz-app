@@ -32,6 +32,27 @@ val DeepInkSurface = Color(0xFF111827)
 val DeepInkSurfaceHigh = Color(0xFF1F2937)
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Dark Mode "Pure Black" palette — 2026-05 redesign.
+// Inspired by the tech-console look (Linear / GitHub Dark / Vercel dark):
+// near-black background with whisper-thin borders. Used by [DarkScheme].
+// The legacy DeepInk* constants above are kept so reverting to the old
+// dark mode is a one-line change in Theme.kt.
+// ─────────────────────────────────────────────────────────────────────────────
+val DeepBlack = Color(0xFF0A0E14)
+val DeepBlackSurface = Color(0xFF12161D)
+val DeepBlackSurfaceHigh = Color(0xFF1A1E26)
+val DeepBlackOutline = Color(0xFF2A2E36)
+val DeepBlackOutlineVariant = Color(0xFF1E2229)
+val DeepBlackOnSurfaceVariant = Color(0xFF9BA3B0)
+
+/**
+ * Brand accent for inline data values (cédula, salario, teléfono, etc.).
+ * Distinct from [PhoneGreen] which owns the primary call CTA — this one
+ * is intended for typography highlights only, never as a button color.
+ */
+val DataGreen = Color(0xFF7AE2A0)
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Semantic state colors — used for ClientStatus + CallOutcome badges and chips.
 // Light/dark variants both readable on their respective surfaces.
 // ─────────────────────────────────────────────────────────────────────────────

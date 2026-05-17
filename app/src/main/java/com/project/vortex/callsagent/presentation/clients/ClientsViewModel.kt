@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -57,6 +58,16 @@ class ClientsViewModel @Inject constructor(
     private val connectivityObserver: ConnectivityObserver,
     syncManager: SyncManager,
 ) : ViewModel() {
+
+    /**
+     * The currently active auto-call session, or null when no batch is
+     * running. Exposed for the split-mode scaffold to react to
+     * orchestrator advances after PostCall save: when the session's
+     * `currentIndex` moves to a new client, the scaffold re-points its
+     * detail pane in place instead of letting the full-screen PreCall
+     * route take over.
+     */
+    val autoCallSession = autoCallOrchestrator.session
 
     // ─── Sync indicator (Phase 4.5.3 / UX-4) ────────────────────────────────
 
@@ -92,6 +103,28 @@ class ClientsViewModel @Inject constructor(
         syncScheduler.triggerImmediateSync()
     }
 
+    /**
+     * One-shot local lookup used by the adaptive detail pane on
+     * tablets. Hits Room directly via [ClientRepository.findById] —
+     * fast (<5ms typical) and covers clients that may have already
+     * fallen off the pending/recent flows (status changed, dismissed).
+     *
+     * Suspend (not Flow) on purpose: the detail pane fetches once per
+     * selection and re-fetches on id change via [produceState]. We
+     * don't need a long-lived subscription for a single record.
+     */
+    suspend fun findClientLocally(id: String): Client? =
+        clientRepository.findById(id)
+
+    /**
+     * Live note feed for the adaptive detail pane. Returns a hot Flow
+     * scoped to the caller composable's collection — Room emits on any
+     * note INSERT/UPDATE/DELETE for the client, so the timeline in the
+     * pane stays in sync with PreCall when the agent is mid-call.
+     */
+    fun observeNotesForClient(clientId: String) =
+        noteRepository.observeByClient(clientId)
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -112,7 +145,13 @@ class ClientsViewModel @Inject constructor(
 
     /**
      * "Sin llamar" sub-feed — never-called PENDING clients, ordered
-     * by `queueOrder` ASC. Search-aware.
+     * by `queueOrder` ASC. Search-aware: when the user types in the
+     * search bar, this flow returns the flat filtered list (no
+     * grouping). When the query is empty, the UI consumes
+     * [pendingNeverCalledByDate] instead so the date headers appear.
+     *
+     * Both flows must stay in sync — keep them sourced from the same
+     * repo methods.
      */
     val pendingNeverCalled: StateFlow<List<Client>> = _searchQuery
         .flatMapLatest { query ->
@@ -125,6 +164,29 @@ class ClientsViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = emptyList(),
         )
+
+    /**
+     * Same data as [pendingNeverCalled] but grouped by `assignedAt`
+     * date into [PendingDateBucket]s ordered oldest-first. Drives the
+     * date headers in the Pendientes → "Sin llamar" view.
+     *
+     * Only populated when the search query is **blank** — searching
+     * by name/phone produces a flat list (the agent is already
+     * navigating by identity, headers add noise).
+     */
+    val pendingNeverCalledByDate: StateFlow<Map<PendingDateBucket, List<Client>>> =
+        _searchQuery
+            .flatMapLatest { query ->
+                if (query.isNotBlank()) flowOf(emptyMap())
+                else clientRepository.observePendingNeverCalled().map {
+                    groupPendingNeverCalledByAssignedDate(it)
+                }
+            }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = emptyMap(),
+            )
 
     /**
      * "Para reintentar" sub-feed — PENDING clients with at least one
@@ -345,6 +407,15 @@ class ClientsViewModel @Inject constructor(
             clientIds = ids,
             sourceTab = HomeTabs.CLIENTS,
         )
+    }
+
+    /**
+     * Cancel the active auto-call session. Clears the orchestrator's
+     * `session` and any pending countdown so the FAB returns to its
+     * idle (re-arm) state. No-op when no session is running.
+     */
+    fun exitAutoCall() {
+        autoCallOrchestrator.exit()
     }
 
     // ─── Dismissal actions ─────────────────────────────────────────────────

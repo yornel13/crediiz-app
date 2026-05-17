@@ -7,6 +7,8 @@ import com.project.vortex.callsagent.data.mapper.toDomain
 import com.project.vortex.callsagent.domain.model.Interaction
 import com.project.vortex.callsagent.domain.repository.InteractionRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import javax.inject.Inject
@@ -58,6 +60,11 @@ class InteractionRepositoryImpl @Inject constructor(
 
     override fun observePendingCount(): kotlinx.coroutines.flow.Flow<Int> =
         dao.observeCountBySyncStatus(SyncStatus.PENDING)
+
+    override fun observeByClient(clientId: String): Flow<List<Interaction>> =
+        dao.observeByClient(clientId).map { entities ->
+            entities.map { it.toDomain() }
+        }
 
     override suspend fun findMostRecentUnconfirmed(since: Instant): Interaction? =
         withContext(Dispatchers.IO) {

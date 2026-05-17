@@ -20,6 +20,14 @@ data class Client(
      */
     val interestLevel: InterestLevel?,
     val assignedTo: String?,
+    /**
+     * Timestamp at which the admin assigned (or re-assigned) the client
+     * to the current agent. Drives the date-grouped headers in the
+     * "Sin llamar" Pendientes feed and the "Asignado · …" tag in
+     * PreCall. `null` for legacy rows imported before the backend
+     * tracked this — those bucket under "Más antiguos".
+     */
+    val assignedAt: Instant?,
     val callAttempts: Int,
     /**
      * Consecutive `WRONG_NUMBER` strikes (HOW_IT_WORKS §6). At

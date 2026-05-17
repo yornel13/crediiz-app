@@ -28,6 +28,12 @@ interface InteractionRepository {
     fun observePendingCount(): kotlinx.coroutines.flow.Flow<Int>
 
     /**
+     * All interactions for a single client, ordered most-recent first.
+     * Backs the per-client activity timeline on PreCall.
+     */
+    fun observeByClient(clientId: String): kotlinx.coroutines.flow.Flow<List<Interaction>>
+
+    /**
      * Phase 7.5 — orphan-call recovery.
      *
      * Returns the most recent interaction the agent never confirmed

@@ -213,11 +213,17 @@ class PostCallViewModel @Inject constructor(
                 // orphan-recovery flow on next app start will skip it.
                 interactionRepository.markConfirmed(interaction.mobileSyncId)
 
-                // 2. Mirror locally on the client row (status + lastOutcome + counters).
-                clientRepository.applyInteractionLocally(
+                // 2. Refine the local client row with the FINAL outcome
+                //    the agent confirmed. The first optimistic write
+                //    (callAttempts++, lastCalledAt, placeholder status)
+                //    already happened in CallController.persistInteraction
+                //    at call-end. This step only updates `lastOutcome`
+                //    and `status` to reflect the agent's confirmed
+                //    decision — `callAttempts` and `lastCalledAt` are
+                //    intentionally NOT touched (one call = one attempt).
+                clientRepository.refineInteractionOutcome(
                     clientId = clientId,
                     outcome = outcome,
-                    callStartedAt = interaction.callStartedAt,
                 )
 
                 // 3. Persist a POST_CALL note if the agent typed anything.
@@ -280,7 +286,15 @@ class PostCallViewModel @Inject constructor(
                     syncScheduler.triggerImmediateSync()
                     // Hand off to the orchestrator if a session is active —
                     // it advances the cursor and tells us where to go next.
-                    val target = autoCallOrchestrator.onPostCallSaved(outcome)
+                    // Pass `clientId` so the orchestrator advances from
+                    // THIS client's actual position in the queue, not
+                    // from the stale `currentIndex` cursor (which would
+                    // be wrong if the agent had deviated to a different
+                    // queue position before calling).
+                    val target = autoCallOrchestrator.onPostCallSaved(
+                        completedClientId = clientId,
+                        outcome = outcome,
+                    )
                     val event = when (target) {
                         is AutoCallNavTarget.NextClient ->
                             PostCallEvent.SavedNextInSession(target.clientId)
@@ -308,18 +322,48 @@ class PostCallViewModel @Inject constructor(
     private fun load() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val interaction = runCatching {
+
+            // Capture results separately so failures expose WHICH lookup
+            // broke. Previously we collapsed both into a single nullable,
+            // which produced an opaque "Couldn't load call details"
+            // message — useless for diagnosis. With separate captures we
+            // can surface "interaction not found" vs "client not found"
+            // vs a thrown exception with its message.
+            val interactionResult = runCatching {
                 interactionRepository.findById(interactionId)
-            }.getOrNull()
-            val client = runCatching {
+            }
+            val clientResult = runCatching {
                 clientRepository.findById(clientId)
-            }.getOrNull()
+            }
+
+            val interaction = interactionResult.getOrNull()
+            val client = clientResult.getOrNull()
 
             if (interaction == null || client == null) {
+                val cause = when {
+                    interactionResult.isFailure ->
+                        "Interaction lookup failed: " +
+                            (interactionResult.exceptionOrNull()?.message ?: "unknown")
+                    clientResult.isFailure ->
+                        "Client lookup failed: " +
+                            (clientResult.exceptionOrNull()?.message ?: "unknown")
+                    interaction == null && client == null ->
+                        "Neither interaction nor client found for this call. " +
+                            "Probable cause: the interaction wasn't persisted " +
+                            "(check CallController logs around `persistInteraction`)."
+                    interaction == null ->
+                        "Interaction $interactionId not found in local DB. " +
+                            "The call ended but the row never got saved — " +
+                            "see CallController.persistInteraction error logs."
+                    else ->
+                        "Client $clientId not found in local DB. " +
+                            "The client may have been removed from the queue " +
+                            "after the call started."
+                }
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        errorMessage = "Couldn't load call details",
+                        errorMessage = "Couldn't load call details — $cause",
                     )
                 }
                 return@launch

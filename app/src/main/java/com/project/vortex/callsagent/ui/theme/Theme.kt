@@ -71,21 +71,26 @@ private val DarkScheme = darkColorScheme(
     errorContainer = Rose600.copy(alpha = 0.3f),
     onErrorContainer = Rose100,
 
-    background = DeepInk,
-    onBackground = Slate100,
+    // ── 2026-05 dark-mode redesign — "Pure Black" ──────────────────────
+    // Background is near-pure black with a whisper of cyan; borders are
+    // intentionally low-contrast so cards float more than divide.
+    // To rollback: replace every `DeepBlack*` here with the legacy
+    // `DeepInk*` / `Slate*` tokens (Color.kt keeps both sets alive).
+    background = DeepBlack,
+    onBackground = Color.White,
 
-    surface = DeepInkSurface,
-    onSurface = Slate100,
-    surfaceVariant = DeepInkSurfaceHigh,
-    onSurfaceVariant = Slate300,
-    surfaceContainerLowest = DeepInk,
-    surfaceContainerLow = DeepInkSurface,
-    surfaceContainer = DeepInkSurfaceHigh,
-    surfaceContainerHigh = Slate700,
-    surfaceContainerHighest = Slate700.copy(alpha = 0.6f),
+    surface = DeepBlackSurface,
+    onSurface = Color.White,
+    surfaceVariant = DeepBlackSurfaceHigh,
+    onSurfaceVariant = DeepBlackOnSurfaceVariant,
+    surfaceContainerLowest = DeepBlack,
+    surfaceContainerLow = DeepBlackSurface,
+    surfaceContainer = DeepBlackSurfaceHigh,
+    surfaceContainerHigh = DeepBlackSurfaceHigh,
+    surfaceContainerHighest = DeepBlackOutline,
 
-    outline = Slate500,
-    outlineVariant = Slate700,
+    outline = DeepBlackOutline,
+    outlineVariant = DeepBlackOutlineVariant,
 )
 
 @Composable

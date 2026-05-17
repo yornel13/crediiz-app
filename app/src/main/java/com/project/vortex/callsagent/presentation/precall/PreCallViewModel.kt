@@ -1,6 +1,5 @@
 package com.project.vortex.callsagent.presentation.precall
 
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.common.enums.DismissalReasonCode
@@ -8,38 +7,43 @@ import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
 import com.project.vortex.callsagent.data.local.preferences.SettingsPreferences
 import com.project.vortex.callsagent.data.sync.SyncScheduler
+import com.project.vortex.callsagent.domain.call.CallController
 import com.project.vortex.callsagent.domain.call.CallReadiness
 import com.project.vortex.callsagent.domain.call.CallReadinessProvider
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
 import com.project.vortex.callsagent.domain.model.Note
+import com.project.vortex.callsagent.domain.model.ActivityEvent
 import com.project.vortex.callsagent.domain.repository.ClientDismissalRepository
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
+import com.project.vortex.callsagent.domain.repository.InteractionRepository
 import com.project.vortex.callsagent.domain.repository.NoteRepository
 import com.project.vortex.callsagent.presentation.autocall.AutoCallNavTarget
 import com.project.vortex.callsagent.presentation.autocall.AutoCallOrchestrator
-import com.project.vortex.callsagent.domain.call.CallController
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.UUID
-import javax.inject.Inject
 
 data class PreCallUiState(
     val isLoading: Boolean = true,
     val client: Client? = null,
     val errorMessage: String? = null,
     val isSubmittingNote: Boolean = false,
-    val isNoteSheetOpen: Boolean = false,
 )
 
 /**
@@ -59,19 +63,34 @@ sealed interface PreCallEvent {
     data object Dismissed : PreCallEvent
 }
 
-@HiltViewModel
-class PreCallViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle,
+/**
+ * Assisted-inject so this ViewModel can be reused in two places:
+ *  - [PreCallScreen] full-screen, where the clientId comes from nav args.
+ *  - The adaptive detail pane, where the clientId comes from the
+ *    `ListDetailPaneScaffoldNavigator`'s `contentKey`.
+ *
+ * In both cases the caller provides the clientId explicitly via
+ * [Factory.create]; we no longer reach for SavedStateHandle.
+ */
+@HiltViewModel(assistedFactory = PreCallViewModel.Factory::class)
+class PreCallViewModel @AssistedInject constructor(
+    @Assisted private val clientIdArg: String,
     private val clientRepository: ClientRepository,
     private val clientDismissalRepository: ClientDismissalRepository,
     private val noteRepository: NoteRepository,
     private val followUpRepository: FollowUpRepository,
+    private val interactionRepository: InteractionRepository,
     private val syncScheduler: SyncScheduler,
     private val callController: CallController,
     private val autoCallOrchestrator: AutoCallOrchestrator,
     settingsPreferences: SettingsPreferences,
     private val callReadinessProvider: CallReadinessProvider,
 ) : ViewModel() {
+
+    @AssistedFactory
+    interface Factory {
+        fun create(clientId: String): PreCallViewModel
+    }
 
     /**
      * VoIP + SIP readiness — drives the persistent banner above the
@@ -240,7 +259,7 @@ class PreCallViewModel @Inject constructor(
      * or to the session summary if the queue is exhausted. */
     fun skipCurrent() {
         viewModelScope.launch {
-            when (val target = autoCallOrchestrator.skipCurrent()) {
+            when (val target = autoCallOrchestrator.skipCurrent(skippedClientId = clientId)) {
                 is AutoCallNavTarget.NextClient ->
                     _events.send(PreCallEvent.SkipToNext(target.clientId))
                 AutoCallNavTarget.SessionSummary ->
@@ -258,9 +277,7 @@ class PreCallViewModel @Inject constructor(
         }
     }
 
-    private val clientId: String = checkNotNull(savedStateHandle["clientId"]) {
-        "PreCallViewModel requires a clientId argument"
-    }
+    private val clientId: String = clientIdArg
 
     private val _uiState = MutableStateFlow(PreCallUiState())
     val uiState: StateFlow<PreCallUiState> = _uiState.asStateFlow()
@@ -289,6 +306,20 @@ class PreCallViewModel @Inject constructor(
         )
 
     /**
+     * Agent preference: "Mostrar historial completo" toggle in
+     * Settings. When false, the PreCall timeline filters out
+     * non-Note events. Sourced from [SettingsPreferences] so the
+     * choice persists across clients and app launches without per-
+     * screen toggles.
+     */
+    val showFullActivityHistory: StateFlow<Boolean> =
+        settingsPreferences.showFullActivityHistoryFlow.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = true,
+        )
+
+    /**
      * Next pending follow-up for this client (after now). Drives the
      * "Scheduled call" card on Pre-Call so the agent sees there's a
      * commitment lined up. Captured once on ViewModel construction —
@@ -302,13 +333,70 @@ class PreCallViewModel @Inject constructor(
                 initialValue = null,
             )
 
+    /**
+     * Unified per-client activity timeline, sorted newest-first.
+     * Combines local note and call-interaction flows plus a synthetic
+     * "lead imported" anchor derived from the client record. The
+     * timeline UI renders this list as a single sequence — see
+     * [ActivityEvent].
+     *
+     * Combination happens here (in the VM) rather than in a dedicated
+     * repository because the join is purely view-shaped: it picks
+     * specific fields out of two unrelated tables for display only.
+     * If a third source (status changes, dismissals) lands, extract
+     * the combine into `ActivityRepository`.
+     */
+    val activity: StateFlow<List<ActivityEvent>> =
+        kotlinx.coroutines.flow.combine(
+            noteRepository.observeByClient(clientId),
+            interactionRepository.observeByClient(clientId),
+            // `assignedAt` from the currently-loaded client. Projected
+            // out of `_uiState` so the timeline re-emits when the
+            // client row reloads (e.g. after a reassign). Distinct so
+            // unrelated `_uiState` mutations (sheets opening, etc.)
+            // don't churn the combine.
+            _uiState.map { it.client?.assignedAt }.distinctUntilChanged(),
+        ) { notes, calls, assignedAt ->
+            val noteEvents = notes.map { note ->
+                ActivityEvent.NoteEntry(
+                    occurredAt = note.deviceCreatedAt,
+                    agentId = null,
+                    content = note.content,
+                    type = note.type,
+                )
+            }
+            val callEvents = calls.map { call ->
+                ActivityEvent.Call(
+                    occurredAt = call.callStartedAt,
+                    agentId = null,
+                    durationSeconds = call.durationSeconds,
+                    outcome = call.outcome,
+                )
+            }
+            // Assignment anchor — only when the backend gave us an
+            // actual `assignedAt`. Legacy rows with null stay
+            // invisible (better than fabricating a date the agent
+            // would read as truth).
+            val assignedEvents = assignedAt
+                ?.let { listOf(ActivityEvent.AssignedToAgent(occurredAt = it)) }
+                .orEmpty()
+
+            // No synthetic LeadImported anchor (it counted but was
+            // filtered out of the empty-state check, producing a
+            // "1 REGISTRO" / empty-timeline mismatch). The
+            // AssignedToAgent anchor above replaces it where data
+            // exists — and counts as a real registro.
+            (noteEvents + callEvents + assignedEvents)
+                .sortedByDescending { it.occurredAt }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5_000),
+            initialValue = emptyList(),
+        )
+
     init {
         loadClient()
     }
-
-    fun openNoteSheet() = _uiState.update { it.copy(isNoteSheetOpen = true) }
-
-    fun dismissNoteSheet() = _uiState.update { it.copy(isNoteSheetOpen = false) }
 
     fun saveManualNote(content: String) {
         val trimmed = content.trim()
@@ -339,7 +427,6 @@ class PreCallViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isSubmittingNote = false,
-                            isNoteSheetOpen = false,
                             errorMessage = null,
                         )
                     }

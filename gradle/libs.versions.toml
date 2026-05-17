@@ -24,6 +24,7 @@ coroutines = "1.8.1"
 lifecycleViewmodelCompose = "2.8.7"
 coreKtxVersion = "1.18.0"
 linphoneSdk = "5.4.85"
+material3Adaptive = "1.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -42,6 +43,12 @@ androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-te
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-material3-window-size = { group = "androidx.compose.material3", name = "material3-window-size-class" }
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+
+# Material 3 Adaptive (NavigationSuiteScaffold, ListDetailPaneScaffold, drag handle)
+androidx-compose-material3-adaptive = { group = "androidx.compose.material3.adaptive", name = "adaptive", version.ref = "material3Adaptive" }
+androidx-compose-material3-adaptive-layout = { group = "androidx.compose.material3.adaptive", name = "adaptive-layout", version.ref = "material3Adaptive" }
+androidx-compose-material3-adaptive-navigation = { group = "androidx.compose.material3.adaptive", name = "adaptive-navigation", version.ref = "material3Adaptive" }
+androidx-compose-material3-adaptive-navigation-suite = { group = "androidx.compose.material3", name = "material3-adaptive-navigation-suite" }
 
 # Hilt (DI)
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }

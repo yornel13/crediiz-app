@@ -67,13 +67,35 @@ interface ClientRepository {
     suspend fun findByPhone(phone: String): Client?
 
     /**
-     * Optimistically apply an interaction's side-effects on the local client row,
-     * mirroring what the backend will do on sync.
+     * Optimistically apply an interaction's side-effects on the local
+     * client row — called ONCE per call at call-end with the placeholder
+     * outcome (from the SIP-engine insight). Increments `callAttempts`,
+     * sets `lastCalledAt`, `lastOutcome`, and the corresponding status.
+     *
+     * Call-end local-first invariant: this MUST run before any sync
+     * pull, otherwise `refreshAssigned(PENDING)` would wipe the row
+     * (status still PENDING) before the optimistic update lands. See
+     * `CallController.persistInteraction`.
      */
     suspend fun applyInteractionLocally(
         clientId: String,
         outcome: CallOutcome,
         callStartedAt: Instant,
+    )
+
+    /**
+     * Refine the outcome on a client row whose call attempt was already
+     * applied via [applyInteractionLocally]. Called from PostCall save
+     * when the agent confirms or changes the placeholder outcome.
+     *
+     * **Does NOT increment `callAttempts`** — one call equals one
+     * attempt, and the increment happened at call-end. **Does NOT
+     * touch `lastCalledAt`** either; that was set to the actual call
+     * start, not "now". Only `lastOutcome` + `status` are refreshed.
+     */
+    suspend fun refineInteractionOutcome(
+        clientId: String,
+        outcome: CallOutcome,
     )
 
     /** Update the denormalized lastNote field after saving a note locally. */

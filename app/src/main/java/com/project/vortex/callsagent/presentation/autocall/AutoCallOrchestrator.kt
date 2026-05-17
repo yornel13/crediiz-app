@@ -78,57 +78,132 @@ class AutoCallOrchestrator @Inject constructor(
 
     /**
      * Called by `PostCallViewModel.save()` after the interaction has been
-     * persisted. Records the outcome, advances the cursor, sets the
-     * "pending auto-call" flag if appropriate, and returns where the UI
-     * should navigate next.
+     * persisted. Records the outcome, advances the cursor to the client
+     * AFTER [completedClientId] in the queue, sets the "pending auto-call"
+     * flag if appropriate, and returns where the UI should navigate next.
+     *
+     * **Why we take `completedClientId` instead of trusting `currentIndex`:**
+     * the agent can manually deviate from the queue order (tapping a
+     * different client in the list while a session is active). When
+     * that happens the orchestrator's `currentIndex` is left untouched
+     * by the manual navigation — it still points at the position the
+     * session started from, not the client actually being called. If we
+     * advanced via `currentIndex + 1` we'd jump back to position 1
+     * regardless of which client the agent really just finished. By
+     * locating `completedClientId` in the queue and advancing from
+     * there, the session resumes from the right place even after
+     * arbitrary deviations.
      *
      * Returns null when no session is active — caller falls back to its
      * default post-save navigation (Home).
      */
-    suspend fun onPostCallSaved(outcome: CallOutcome): AutoCallNavTarget? {
+    suspend fun onPostCallSaved(
+        completedClientId: String,
+        outcome: CallOutcome,
+    ): AutoCallNavTarget? {
         val current = _session.value ?: run {
             Log.d(TAG, "onPostCallSaved — no session active, returning null")
             return null
         }
         val updatedStats = current.stats.recordOutcome(outcome)
 
-        return if (!current.hasNext) {
-            _session.value = current.copy(stats = updatedStats)
-            _pendingAutoCall.value = null
-            Log.d(TAG, "onPostCallSaved — queue exhausted at index=${current.currentIndex}")
-            AutoCallNavTarget.SessionSummary
+        // Locate the completed client in the queue. If somehow not found
+        // (e.g. the agent navigated to a client outside the session
+        // queue), fall back to the stored cursor — best-effort.
+        val completedIndex = current.queue.indexOf(completedClientId)
+        val resolvedCompletedIndex = if (completedIndex >= 0) {
+            completedIndex
         } else {
-            val nextIndex = current.currentIndex + 1
-            val nextClientId = current.queue[nextIndex]
+            Log.w(
+                TAG,
+                "onPostCallSaved — completed client $completedClientId not in queue " +
+                    "(size=${current.total}); falling back to cursor=${current.currentIndex}",
+            )
+            current.currentIndex
+        }
+        val nextIndex = resolvedCompletedIndex + 1
+        val queueExhausted = nextIndex >= current.queue.size
+
+        return if (queueExhausted) {
             _session.value = current.copy(
-                currentIndex = nextIndex,
+                currentIndex = resolvedCompletedIndex,
                 stats = updatedStats,
             )
+            _pendingAutoCall.value = null
+            Log.d(
+                TAG,
+                "onPostCallSaved — queue exhausted at completed=$completedClientId " +
+                    "(index=$resolvedCompletedIndex/${current.total})",
+            )
+            AutoCallNavTarget.SessionSummary
+        } else {
+            val nextClientId = current.queue[nextIndex]
+
+            // Order matters: set `_pendingAutoCall` BEFORE `_session`.
+            //
+            // The split-mode UI observes `_session` to switch the detail
+            // pane to the next client. When that observer fires, a brand-new
+            // `PreCallViewModel` is created for `nextClientId` and starts
+            // collecting `pendingAutoCall`. If we set `_session` first,
+            // there's a window where the new VM observes
+            // `pendingAutoCall == null` (still its old value), computes
+            // `countdownActive = false`, and the countdown never starts —
+            // even though we're about to set the right value milliseconds
+            // later. Setting `_pendingAutoCall` first guarantees the new
+            // VM sees the correct pending state on its very first read.
             val autoAdvanceEnabled = settingsPreferences.autoAdvanceFlow.first()
             val countdown = autoAdvanceEnabled && shouldAutoAdvanceFor(outcome)
             _pendingAutoCall.value =
                 if (countdown) PendingAutoCall(clientId = nextClientId) else null
+            _session.value = current.copy(
+                currentIndex = nextIndex,
+                stats = updatedStats,
+            )
             Log.d(
                 TAG,
-                "onPostCallSaved outcome=$outcome → cursor=$nextIndex/${current.total} " +
-                    "next=$nextClientId countdown=$countdown",
+                "onPostCallSaved outcome=$outcome completed=$completedClientId " +
+                    "(@$resolvedCompletedIndex) → next=$nextClientId (@$nextIndex/" +
+                    "${current.total}) countdown=$countdown",
             )
             AutoCallNavTarget.NextClient(nextClientId)
         }
     }
 
-    /** Skip the current client without calling. Returns the next nav
-     * target (NextClient or SessionSummary), or null if no session. */
-    fun skipCurrent(): AutoCallNavTarget? {
+    /**
+     * Skip the [skippedClientId] without calling. Returns the next nav
+     * target (NextClient or SessionSummary), or null if no session.
+     *
+     * Takes the skipped client's id explicitly for the same reason
+     * [onPostCallSaved] takes `completedClientId`: the agent may have
+     * navigated outside the queue order, and `currentIndex` doesn't
+     * track that.
+     */
+    fun skipCurrent(skippedClientId: String): AutoCallNavTarget? {
         val current = _session.value ?: return null
         val updatedStats = current.stats.recordSkip()
 
-        return if (!current.hasNext) {
-            _session.value = current.copy(stats = updatedStats)
+        val skippedIndex = current.queue.indexOf(skippedClientId)
+        val resolvedSkippedIndex = if (skippedIndex >= 0) {
+            skippedIndex
+        } else {
+            Log.w(
+                TAG,
+                "skipCurrent — skipped client $skippedClientId not in queue " +
+                    "(size=${current.total}); falling back to cursor=${current.currentIndex}",
+            )
+            current.currentIndex
+        }
+        val nextIndex = resolvedSkippedIndex + 1
+        val queueExhausted = nextIndex >= current.queue.size
+
+        return if (queueExhausted) {
+            _session.value = current.copy(
+                currentIndex = resolvedSkippedIndex,
+                stats = updatedStats,
+            )
             _pendingAutoCall.value = null
             AutoCallNavTarget.SessionSummary
         } else {
-            val nextIndex = current.currentIndex + 1
             val nextClientId = current.queue[nextIndex]
             _session.value = current.copy(
                 currentIndex = nextIndex,
@@ -198,10 +273,21 @@ class AutoCallOrchestrator @Inject constructor(
      * stopping there made the session feel "deactivated"; the agent
      * already paused naturally while filling the follow-up form.
      */
-    private fun shouldAutoAdvanceFor(outcome: CallOutcome): Boolean = when (outcome) {
-        CallOutcome.ANSWERED_SOLD -> false
-        else -> true
-    }
+    /**
+     * Auto-advance policy — currently **always true** as long as the
+     * agent has the global `Auto-advance` switch enabled in Settings.
+     *
+     * Previous behavior excluded [CallOutcome.ANSWERED_SOLD] from the
+     * countdown to give the agent a beat after closing a sale, but
+     * agent feedback was clear: when auto-call is ON, the expectation
+     * is "always jump to the next client, until the queue ends". Any
+     * exception was perceived as the system "failing intermittently".
+     *
+     * The hook stays as a function (not an inlined `true`) so we can
+     * reintroduce per-outcome rules later without touching the call
+     * site.
+     */
+    private fun shouldAutoAdvanceFor(outcome: CallOutcome): Boolean = true
 
     companion object {
         private const val TAG = "AutoCallOrchestrator"

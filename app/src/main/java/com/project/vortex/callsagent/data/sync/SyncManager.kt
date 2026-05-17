@@ -150,6 +150,18 @@ class SyncManager @Inject constructor(
             Log.d(TAG, "refreshServerState skipped — agent is in a call")
             return
         }
+
+        // No wrap-up window guard needed any more.
+        //
+        // The previous race ("local row still PENDING when pull runs,
+        // deleteByStatus(PENDING) wipes it") is solved at its root:
+        // CallController.persistInteraction now calls
+        // applyInteractionLocally with the placeholder outcome
+        // BEFORE this sync runs. By the time the pull arrives here,
+        // the row is already in its post-call status (IN_PROGRESS
+        // or whatever the placeholder maps to), so deleteByStatus(PENDING)
+        // doesn't touch it.
+
         runCatching { clientRepo.refreshAssigned(ClientStatus.PENDING) }
             .onFailure { Log.w(TAG, "refreshAssigned PENDING failed", it) }
         runCatching { clientRepo.refreshAssigned(ClientStatus.INTERESTED) }

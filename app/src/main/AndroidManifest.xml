@@ -44,7 +44,19 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.CallsAgends">
+            android:theme="@style/Theme.CallsAgends"
+            android:windowSoftInputMode="adjustResize">
+            <!--
+              windowSoftInputMode="adjustResize" ONLY.
+              We deliberately do NOT set stateHidden/stateAlwaysHidden — that
+              flag controls *whether* the IME auto-shows when the activity
+              gains focus, and previous experience showed it conflicted
+              with Compose's focus management. adjustResize is the
+              orthogonal flag: when the IME is open (user-triggered, e.g.
+              tapped the note input on PreCall), the window resizes so
+              the Scaffold bottom bar lifts above the keyboard and the
+              scrollable content can reach its bottom edge.
+            -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

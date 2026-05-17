@@ -224,6 +224,29 @@ interface ClientDao {
         now: Instant,
     )
 
+    /**
+     * Refine the outcome of a call that was already applied locally.
+     * Used in PostCall save when the agent confirms or changes the
+     * placeholder outcome that [applyInteractionUpdate] set at call
+     * end. Does NOT touch `callAttempts` (one call = one increment)
+     * nor `lastCalledAt` (was set at call end, not now).
+     */
+    @Query(
+        """
+        UPDATE clients
+        SET lastOutcome = :outcome,
+            status = :newStatus,
+            updatedAt = :now
+        WHERE id = :clientId
+        """,
+    )
+    suspend fun refineOutcomeAndStatus(
+        clientId: String,
+        outcome: CallOutcome,
+        newStatus: ClientStatus,
+        now: Instant,
+    )
+
     @Query("UPDATE clients SET lastNote = :note, updatedAt = :now WHERE id = :clientId")
     suspend fun updateLastNote(clientId: String, note: String, now: Instant)
 

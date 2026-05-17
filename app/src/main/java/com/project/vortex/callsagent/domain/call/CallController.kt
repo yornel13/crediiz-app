@@ -16,6 +16,7 @@ import com.project.vortex.callsagent.domain.call.model.EndedCall
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.Interaction
 import com.project.vortex.callsagent.domain.model.Note
+import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.InteractionRepository
 import com.project.vortex.callsagent.domain.repository.NoteRepository
 import kotlinx.coroutines.CoroutineScope
@@ -84,6 +85,7 @@ class CallController @Inject constructor(
     private val coreManager: LinphoneCoreManager,
     private val interactionRepository: InteractionRepository,
     private val noteRepository: NoteRepository,
+    private val clientRepository: ClientRepository,
     private val syncScheduler: SyncScheduler,
     private val callReadinessProvider: CallReadinessProvider,
 ) {
@@ -118,6 +120,18 @@ class CallController @Inject constructor(
 
     private val _lastEndedCall = MutableStateFlow<EndedCall?>(null)
     val lastEndedCall: StateFlow<EndedCall?> = _lastEndedCall.asStateFlow()
+
+    /**
+     * Surfaced when the post-call persistence path fails (interaction
+     * save throws, note save throws, etc.). The UI layer collects this
+     * and shows it as a Toast/Snackbar so the agent — and we, when
+     * debugging — sees WHY the call disappeared instead of silently
+     * losing the record. Consumed via [consumeSaveError].
+     */
+    private val _saveError = MutableStateFlow<String?>(null)
+    val saveError: StateFlow<String?> = _saveError.asStateFlow()
+
+    fun consumeSaveError() { _saveError.value = null }
 
     // SIP registration is no longer kicked off here. Phase B routes
     // all REGISTER flows through `VoipRefreshOrchestrator`, which only
@@ -287,10 +301,67 @@ class CallController @Inject constructor(
             syncStatus = SyncStatus.PENDING,
         )
 
-        runCatching { interactionRepository.save(interaction) }
-            .onFailure {
-                Log.e(TAG, "Failed to persist interaction ${interaction.mobileSyncId}", it)
-            }
+        // Gate the EndedCall emission on a successful save. If the row
+        // didn't make it into the DB, the PostCall route would land on
+        // a "Couldn't load call details" screen — the agent gets
+        // stuck. Better to keep them on the previous screen (PreCall)
+        // and surface the failure via logs so we can diagnose. Note:
+        // this means the call data is lost in the failure case — that
+        // is itself a serious bug, but it's a known-loud failure now
+        // (logs) rather than a silent-stuck-screen mystery.
+        val saveResult = runCatching { interactionRepository.save(interaction) }
+        if (saveResult.isFailure) {
+            val cause = saveResult.exceptionOrNull()
+            Log.e(
+                TAG,
+                "Failed to persist interaction ${interaction.mobileSyncId} — " +
+                    "skipping PostCall navigation. Call data is lost; " +
+                    "investigate the exception below.",
+                cause,
+            )
+            // Surface the failure to the UI so the agent — and we
+            // when debugging — see WHY the call vanished, rather than
+            // losing the record silently. Format includes the
+            // exception type so a screenshot tells us enough to fix
+            // the root cause without logcat access.
+            _saveError.value = "No se pudo guardar la llamada: " +
+                "${cause?.javaClass?.simpleName ?: "Error"} — " +
+                (cause?.message ?: "sin mensaje")
+            return
+        }
+
+        // Local-first: apply the optimistic update to the client row
+        // RIGHT NOW with the placeholder outcome, before any sync runs.
+        //
+        // Why this ordering matters: the sync push that fires below
+        // uploads the interaction; the server transitions the client
+        // to IN_PROGRESS (or whichever target the outcome maps to);
+        // the sync pull then re-fetches `assigned?status=PENDING`
+        // and runs `replaceAllByStatus(PENDING)`. That delete step
+        // wipes any local row whose status is still PENDING — so
+        // if we hadn't already flipped the status here, the client
+        // would vanish from the local DB before PostCallViewModel.save
+        // could update it, and Recientes would never see it.
+        //
+        // With this call in place, the row is `IN_PROGRESS` (or
+        // matching the placeholder outcome's mapping) before the
+        // pull runs. `deleteByStatus(PENDING)` no longer touches it.
+        // The local DB is the source of truth from the moment the
+        // call ends, regardless of network availability.
+        runCatching {
+            clientRepository.applyInteractionLocally(
+                clientId = client.id,
+                outcome = interaction.outcome,
+                callStartedAt = startedAt,
+            )
+        }.onFailure {
+            Log.w(
+                TAG,
+                "applyInteractionLocally failed for client ${client.id} — " +
+                    "Recientes may miss this call until next sync resolves it.",
+                it,
+            )
+        }
 
         val noteText = liveNoteContent.value.trim()
         if (noteText.isNotEmpty()) {
