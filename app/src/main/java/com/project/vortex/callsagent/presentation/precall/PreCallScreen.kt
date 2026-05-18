@@ -409,6 +409,113 @@ fun PreCallScreen(
  * The bottom bar (call CTA + quick actions) is owned by the outer
  * Scaffold and isn't part of this composable.
  */
+
+/**
+ * Read-only client info panel — header (avatar/name/status/data grid)
+ * + activity timeline, with NO interactive call actions, NO note
+ * input, and NO bottom bar. Designed to be embedded inside other
+ * screens (currently used by [InCallScreen] so the agent can read
+ * the client's context while talking).
+ *
+ * Uses its own [PreCallViewModel] instance — `key` is suffixed with
+ * "readonly-" so it lives independently from the one that
+ * [PreCallScreen] would create for the same `clientId` (avoids state
+ * leaks between the two surfaces). Both share the underlying Room
+ * flows, so updates appear in both instances reactively.
+ *
+ * Status/interest pills are kept clickable but the handlers are
+ * no-ops — clicking won't open a sheet. We intentionally do NOT
+ * disable them visually (would make the panel feel "different")
+ * but they do nothing on tap. If/when a use case emerges to allow
+ * status changes mid-call, we can add an optional click callback.
+ */
+@Composable
+fun PreCallReadOnlyPanel(
+    clientId: String,
+    modifier: Modifier = Modifier,
+) {
+    val viewModel: PreCallViewModel =
+        hiltViewModel<PreCallViewModel, PreCallViewModel.Factory>(
+            key = "readonly-$clientId",
+        ) { factory: PreCallViewModel.Factory -> factory.create(clientId) }
+
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val activity by viewModel.activity.collectAsStateWithLifecycle()
+    val showFullActivityHistory by viewModel.showFullActivityHistory
+        .collectAsStateWithLifecycle()
+
+    androidx.compose.material3.Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.background,
+    ) {
+        when {
+            uiState.isLoading -> LoadingState(modifier = Modifier.fillMaxSize())
+            uiState.client == null -> ErrorState(
+                message = uiState.errorMessage ?: "Client not found",
+                onBack = null,
+                modifier = Modifier.fillMaxSize(),
+            )
+            else -> {
+                val visibleActivity = remember(showFullActivityHistory, activity) {
+                    if (showFullActivityHistory) activity
+                    else activity.filterIsInstance<ActivityEvent.NoteEntry>()
+                }
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                ) {
+                    item("readonly_header") {
+                        CompactHeader(
+                            client = uiState.client!!,
+                            onBack = null,
+                            onStatusClick = { /* read-only — no sheet */ },
+                            onInterestClick = { /* read-only — no sheet */ },
+                        )
+                    }
+                    item("readonly_activity_header") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    start = 20.dp,
+                                    end = 20.dp,
+                                    top = 16.dp,
+                                    bottom = 8.dp,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = "HISTORIAL DE ACTIVIDAD",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                text = "${visibleActivity.size} " +
+                                    if (visibleActivity.size == 1) "REGISTRO"
+                                    else "REGISTROS",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (visibleActivity.isEmpty()) {
+                        item("readonly_empty") {
+                            ActivityEmptyState(
+                                showAll = showFullActivityHistory,
+                                modifier = Modifier.padding(top = 24.dp),
+                            )
+                        }
+                    } else {
+                        renderActivityTimeline(visibleActivity)
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun PreCallContent(
     client: Client,

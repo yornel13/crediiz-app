@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,7 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -30,7 +34,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -52,6 +58,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.common.enums.CallDirection
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.call.model.CallUiState
+import com.project.vortex.callsagent.presentation.common.WindowSize
+import com.project.vortex.callsagent.presentation.precall.PreCallReadOnlyPanel
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.theme.PhoneGreen
 import com.project.vortex.callsagent.ui.theme.PillShape
@@ -61,32 +69,14 @@ import kotlinx.coroutines.delay
 import java.time.Duration
 import java.time.Instant
 
-// ╔══════════════════════════════════════════════════════════════════════════╗
-// ║                                                                          ║
-// ║   ████████  ███████  ████████ ████████     ███    ███████  ████████      ║
-// ║      ██     ██       ██          ██        ████  ████ ██  ██   ██        ║
-// ║      ██     ██████   ████████    ██        ██ ████ ██ ██  ██   ██        ║
-// ║      ██     ██             ██    ██        ██  ██  ██ ██  ██   ██        ║
-// ║      ██     ███████  ████████    ██        ██      ██ ████████  ███████  ║
-// ║                                                                          ║
-// ║   TEMPORARY DESIGN-REVIEW DELAY — REMOVE BEFORE SHIPPING                ║
-// ║                                                                          ║
-// ║   Holds the InCallScreen "Call ended" state visible for 10 seconds      ║
-// ║   after disconnection so the team can review the post-call visual       ║
-// ║   handoff (animation, banners, hang-up confirmation) before the         ║
-// ║   PostCall screen takes over.                                            ║
-// ║                                                                          ║
-// ║   Production value: 1_200 ms (1.2 s). Anything longer makes the agent  ║
-// ║   wait unnecessarily between calls — every extra second on this screen ║
-// ║   is a second NOT spent on the next client.                              ║
-// ║                                                                          ║
-// ║   To remove: revert [POST_DISCONNECT_HOLD_MS] back to 1_200L and        ║
-// ║   delete this banner.                                                    ║
-// ║                                                                          ║
-// ║   Set on: 2026-05-17 for SIP-end-of-call UX review.                    ║
-// ║                                                                          ║
-// ╚══════════════════════════════════════════════════════════════════════════╝
-private const val POST_DISCONNECT_HOLD_MS = 10_000L
+/**
+ * How long the "Call ended" state stays visible on InCallScreen
+ * after the SIP session disconnects, before the Activity finishes
+ * and AppNavGraph routes to PostCall. Short enough that the agent
+ * isn't waiting between calls; long enough to confirm visually that
+ * the hang-up registered.
+ */
+private const val POST_DISCONNECT_HOLD_MS = 1_200L
 
 @Composable
 fun InCallScreen(
@@ -94,36 +84,140 @@ fun InCallScreen(
     viewModel: InCallViewModel = hiltViewModel(),
 ) {
     val callState by viewModel.callState.collectAsState()
-    val client by viewModel.currentClient.collectAsState()
+    val liveClient by viewModel.currentClient.collectAsState()
     val direction by viewModel.callDirection.collectAsState()
     val incomingPhone by viewModel.incomingPhoneNumber.collectAsState()
     val isMuted by viewModel.isMuted.collectAsState()
     val isSpeaker by viewModel.isSpeakerOn.collectAsState()
     val liveNote by viewModel.liveNoteContent.collectAsState()
 
+    // `CallController` nulls out `currentClient` the moment the SIP
+    // session ends. Without caching, the InCallScreen would lose its
+    // client mid-screen (during the post-disconnect hold), so the
+    // split layout would collapse to single-panel and the right-side
+    // info pane would vanish — making "InCall" and the "call-ending"
+    // state render as visually different layouts. We latch the last
+    // non-null client so the layout stays identical from the moment
+    // the call starts until this Activity actually finishes.
+    var stableClient by remember {
+        mutableStateOf<com.project.vortex.callsagent.domain.model.Client?>(null)
+    }
+    if (liveClient != null) stableClient = liveClient
+    val client = stableClient
+
     var hasDisconnected by remember { mutableStateOf(false) }
     if (callState is CallUiState.Disconnected) hasDisconnected = true
 
     LaunchedEffect(hasDisconnected) {
         if (hasDisconnected) {
-            // TEMPORARY — see POST_DISCONNECT_HOLD_MS banner at the top
-            // of this file. Restore to 1_200 ms before shipping.
             delay(POST_DISCONNECT_HOLD_MS)
             onCallFinished()
         }
     }
 
-    val gradient = Brush.verticalGradient(colors = listOf(Teal700, Teal900))
+    // Responsive layout decision — matrix of width × height instead
+    // of the previous "wide vs compact width" one-dimensional check.
+    //
+    //                  │ Compact height  │ Non-compact height
+    //   ───────────────┼─────────────────┼────────────────────
+    //   Compact width  │ Tabs            │ Vertical split
+    //   Non-compact W  │ Tabs            │ Horizontal split (Row)
+    //
+    // - Horizontal split: tablet portrait/landscape, foldable open.
+    //   Plenty of horizontal AND vertical room — two panes fit
+    //   comfortably.
+    // - Vertical split: phone portrait. Tall + narrow → stack the
+    //   call panel on top, scrollable info below. Each pane gets
+    //   real vertical space.
+    // - Tabs: short screens (phone landscape, tablet with IME up).
+    //   Neither horizontal nor vertical split would give either
+    //   pane a usable size. Tabs let the agent switch between
+    //   "Llamada" and "Cliente" without compromising either view.
+    val layoutMode = when {
+        WindowSize.isCompactHeight -> InCallLayoutMode.Tabs
+        WindowSize.isCompactWidth -> InCallLayoutMode.VerticalSplit
+        else -> InCallLayoutMode.HorizontalSplit
+    }
 
-    Surface(modifier = Modifier.fillMaxSize().background(gradient)) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(gradient)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-        ) {
-            ActiveCallContent(
+    // If we don't have a client yet (very brief window during call
+    // start), the right-pane / info-tab content has nothing to show.
+    // Fall back to single-panel call UI to keep the agent looking at
+    // something coherent.
+    val hasClient = client != null
+
+    Surface(modifier = Modifier.fillMaxSize()) {
+        if (!hasClient) {
+            CallControlPanel(
+                client = client,
+                fallbackPhone = incomingPhone.orEmpty(),
+                direction = direction,
+                callState = callState,
+                liveNote = liveNote,
+                isMuted = isMuted,
+                isSpeakerOn = isSpeaker,
+                onNoteChange = viewModel::onNoteChange,
+                onToggleMute = viewModel::toggleMute,
+                onToggleSpeaker = viewModel::toggleSpeaker,
+                onEndCall = viewModel::endCall,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else when (layoutMode) {
+            InCallLayoutMode.HorizontalSplit -> Row(modifier = Modifier.fillMaxSize()) {
+                CallControlPanel(
+                    client = client,
+                    fallbackPhone = incomingPhone.orEmpty(),
+                    direction = direction,
+                    callState = callState,
+                    liveNote = liveNote,
+                    isMuted = isMuted,
+                    isSpeakerOn = isSpeaker,
+                    onNoteChange = viewModel::onNoteChange,
+                    onToggleMute = viewModel::toggleMute,
+                    onToggleSpeaker = viewModel::toggleSpeaker,
+                    onEndCall = viewModel::endCall,
+                    modifier = Modifier
+                        .weight(0.45f)
+                        .fillMaxHeight(),
+                )
+                PreCallReadOnlyPanel(
+                    clientId = client!!.id,
+                    modifier = Modifier
+                        .weight(0.55f)
+                        .fillMaxHeight(),
+                )
+            }
+
+            InCallLayoutMode.VerticalSplit -> Column(modifier = Modifier.fillMaxSize()) {
+                // Call panel takes the top ~45% — enough for status
+                // hero, the LiveNote textarea (shorter than wide-mode
+                // since vertical space is split now), and the row of
+                // controls. The info panel takes the remaining ~55%
+                // with its own scroll for the timeline.
+                CallControlPanel(
+                    client = client,
+                    fallbackPhone = incomingPhone.orEmpty(),
+                    direction = direction,
+                    callState = callState,
+                    liveNote = liveNote,
+                    isMuted = isMuted,
+                    isSpeakerOn = isSpeaker,
+                    onNoteChange = viewModel::onNoteChange,
+                    onToggleMute = viewModel::toggleMute,
+                    onToggleSpeaker = viewModel::toggleSpeaker,
+                    onEndCall = viewModel::endCall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(0.45f),
+                )
+                PreCallReadOnlyPanel(
+                    clientId = client!!.id,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(0.55f),
+                )
+            }
+
+            InCallLayoutMode.Tabs -> InCallTabsLayout(
                 client = client,
                 fallbackPhone = incomingPhone.orEmpty(),
                 direction = direction,
@@ -136,6 +230,317 @@ fun InCallScreen(
                 onToggleSpeaker = viewModel::toggleSpeaker,
                 onEndCall = viewModel::endCall,
             )
+        }
+    }
+}
+
+/**
+ * Layout mode for [InCallScreen] derived from the current window
+ * size class along both axes. See the matrix comment at the call
+ * site for the full decision table.
+ */
+private enum class InCallLayoutMode { HorizontalSplit, VerticalSplit, Tabs }
+
+/**
+ * Tabbed in-call layout for short screens (phone landscape, tablet
+ * with IME up). Default tab is "Llamada" so the agent can hang up
+ * immediately — the "Cliente" tab is one tap away when they want
+ * context. We deliberately do NOT pre-load both tab contents into
+ * an off-screen state; the inactive tab unmounts to free RAM and
+ * avoid background flows churning while invisible.
+ */
+@Composable
+private fun InCallTabsLayout(
+    client: Client?,
+    fallbackPhone: String,
+    direction: CallDirection,
+    callState: CallUiState,
+    liveNote: String,
+    isMuted: Boolean,
+    isSpeakerOn: Boolean,
+    onNoteChange: (String) -> Unit,
+    onToggleMute: () -> Unit,
+    onToggleSpeaker: () -> Unit,
+    onEndCall: () -> Unit,
+) {
+    var selectedTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    Column(modifier = Modifier.fillMaxSize()) {
+        PrimaryTabRow(selectedTabIndex = selectedTab) {
+            Tab(
+                selected = selectedTab == 0,
+                onClick = { selectedTab = 0 },
+                text = { Text("Llamada") },
+            )
+            Tab(
+                selected = selectedTab == 1,
+                onClick = { selectedTab = 1 },
+                text = { Text("Cliente") },
+                enabled = client != null,
+            )
+        }
+        when (selectedTab) {
+            0 -> CallControlPanel(
+                client = client,
+                fallbackPhone = fallbackPhone,
+                direction = direction,
+                callState = callState,
+                liveNote = liveNote,
+                isMuted = isMuted,
+                isSpeakerOn = isSpeakerOn,
+                onNoteChange = onNoteChange,
+                onToggleMute = onToggleMute,
+                onToggleSpeaker = onToggleSpeaker,
+                onEndCall = onEndCall,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            )
+            1 -> client?.let {
+                PreCallReadOnlyPanel(
+                    clientId = it.id,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Left-pane (or full-screen on compact) call control panel.
+ *
+ * Same skeleton as PostCall's left panel:
+ *   ┌────────────────┐
+ *   │ Green hero     │   <- call identity (avatar, name, status, timer)
+ *   ├────────────────┤
+ *   │                │
+ *   │ Theme body     │   <- live notes textarea + Mute/Speaker toggles
+ *   │ (scrollable)   │
+ *   │                │
+ *   ├────────────────┤
+ *   │ End call (red) │   <- primary CTA
+ *   └────────────────┘
+ *
+ * **Why no more full-panel green gradient:** the previous version
+ * had the entire panel saturated with Teal — InCall and PostCall
+ * read as two completely different visual languages. Now the green
+ * lives only in the hero strip (call identity) and the body is
+ * theme-aware (light/dark adapts correctly). The two panels are
+ * structurally identical, only their internal content differs.
+ */
+@Composable
+private fun CallControlPanel(
+    client: Client?,
+    fallbackPhone: String,
+    direction: CallDirection,
+    callState: CallUiState,
+    liveNote: String,
+    isMuted: Boolean,
+    isSpeakerOn: Boolean,
+    onNoteChange: (String) -> Unit,
+    onToggleMute: () -> Unit,
+    onToggleSpeaker: () -> Unit,
+    onEndCall: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.background)
+            // `imePadding()` shrinks this column from the bottom by
+            // the IME's height whenever the soft keyboard is up. The
+            // body (Column with `weight(1f)`) absorbs the loss — the
+            // TextField gets shorter — so the EndCallCta at the
+            // bottom of the panel STAYS visible above the keyboard.
+            // Without this, the keyboard would cover the End button
+            // and the Mute/Speaker row above it.
+            .imePadding(),
+    ) {
+        // Green hero strip — keeps the "in-a-call" visual identity
+        // concentrated at the top of the panel. Mirrors the
+        // `CallEndedHero` of PostCall (same gradient, same layout).
+        CallActiveHero(
+            client = client,
+            fallbackPhone = fallbackPhone,
+            direction = direction,
+            callState = callState,
+        )
+        // Theme-color body. Notes textarea expands to fill available
+        // height; Mute/Speaker pinned right above the End CTA.
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            OutlinedTextField(
+                value = liveNote,
+                onValueChange = onNoteChange,
+                label = { Text("Notas en vivo") },
+                placeholder = { Text("Captura lo que el cliente dice…") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                shape = RoundedCornerShape(20.dp),
+                enabled = callState !is CallUiState.Disconnected,
+            )
+            MuteSpeakerRow(
+                isMuted = isMuted,
+                isSpeakerOn = isSpeakerOn,
+                enabled = callState !is CallUiState.Disconnected,
+                onToggleMute = onToggleMute,
+                onToggleSpeaker = onToggleSpeaker,
+            )
+        }
+        // Primary CTA at the bottom — symmetric to PostCall's Save
+        // button (same position, same size, just red because the
+        // action is destructive: terminate the call).
+        EndCallCta(
+            enabled = callState !is CallUiState.Disconnected,
+            onClick = onEndCall,
+        )
+    }
+}
+
+/**
+ * Green hero strip at the top of the in-call panel. Renders avatar,
+ * name, phone, and the status+timer pill — all in white over the
+ * Teal gradient. Status bar inset is handled here so the panel
+ * itself doesn't need to know about safeDrawing.
+ *
+ * Visually paired with [com.project.vortex.callsagent.presentation.postcall.CallEndedHero]
+ * — same gradient, same avatar+name layout, same pill structure.
+ */
+@Composable
+private fun CallActiveHero(
+    client: Client?,
+    fallbackPhone: String,
+    direction: CallDirection,
+    callState: CallUiState,
+) {
+    val gradient = Brush.verticalGradient(colors = listOf(Teal700, Teal900))
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(gradient)
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        if (direction == CallDirection.INBOUND) {
+            DirectionBadge(label = "INCOMING")
+            Spacer(Modifier.height(8.dp))
+        }
+        Avatar(name = client?.name ?: "?", size = 56.dp)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = client?.name
+                ?: if (direction == CallDirection.INBOUND) "Unknown number"
+                else "Connecting...",
+            style = MaterialTheme.typography.titleLarge,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = client?.phone?.takeIf { it.isNotBlank() } ?: fallbackPhone,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color.White.copy(alpha = 0.85f),
+        )
+        Spacer(Modifier.height(10.dp))
+        StatusAndTimer(state = callState)
+    }
+}
+
+/**
+ * Mute + Speaker toggles, side by side, theme-aware.
+ *
+ * Replaces the previous round white-on-green buttons from the
+ * `ControlsRow` — those only made sense when the whole panel was
+ * green. Now they're `FilledTonalButton` circles in the theme's
+ * secondary container, with the toggled state lighting up in the
+ * primary palette.
+ */
+@Composable
+private fun MuteSpeakerRow(
+    isMuted: Boolean,
+    isSpeakerOn: Boolean,
+    enabled: Boolean,
+    onToggleMute: () -> Unit,
+    onToggleSpeaker: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ToggleControl(
+            icon = if (isMuted) {
+                androidx.compose.material.icons.Icons.Filled.MicOff
+            } else {
+                androidx.compose.material.icons.Icons.Filled.Mic
+            },
+            label = if (isMuted) "Silencio" else "Mute",
+            checked = isMuted,
+            enabled = enabled,
+            onClick = onToggleMute,
+        )
+        ToggleControl(
+            // Use AutoMirrored VolumeUp regardless of state — the
+            // toggled state shows via the container colour change,
+            // not via different icons. (Icons.Filled.VolumeUp is
+            // deprecated in favour of the AutoMirrored variant for
+            // RTL correctness.)
+            icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.VolumeUp,
+            label = "Altavoz",
+            checked = isSpeakerOn,
+            enabled = enabled,
+            onClick = onToggleSpeaker,
+        )
+    }
+}
+
+/**
+ * End-call CTA — symmetric to PostCall's Save button at the bottom
+ * of the panel. Full-width within the panel, error-coloured because
+ * "End" is the destructive primary action of a call.
+ */
+@Composable
+private fun EndCallCta(enabled: Boolean, onClick: () -> Unit) {
+    androidx.compose.material3.Surface(
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp,
+        shadowElevation = 12.dp,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Button(
+                onClick = onClick,
+                enabled = enabled,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+            ) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Filled.CallEnd,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Colgar",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }
@@ -254,95 +659,9 @@ private fun CircleActionButton(
     }
 }
 
-// ─── Active call (outgoing OR accepted incoming) ─────────────────────────
-
-@Composable
-private fun ColumnScope.ActiveCallContent(
-    client: Client?,
-    fallbackPhone: String,
-    direction: CallDirection,
-    callState: CallUiState,
-    liveNote: String,
-    isMuted: Boolean,
-    isSpeakerOn: Boolean,
-    onNoteChange: (String) -> Unit,
-    onToggleMute: () -> Unit,
-    onToggleSpeaker: () -> Unit,
-    onEndCall: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        if (direction == CallDirection.INBOUND) {
-            DirectionBadge(label = "INCOMING")
-            Spacer(Modifier.height(10.dp))
-        }
-        Avatar(name = client?.name ?: "?", size = 72.dp)
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = client?.name ?: if (direction == CallDirection.INBOUND) "Unknown number"
-            else "Connecting...",
-            style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            text = client?.phone?.takeIf { it.isNotBlank() } ?: fallbackPhone,
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color.White.copy(alpha = 0.85f),
-        )
-        Spacer(Modifier.height(12.dp))
-        StatusAndTimer(state = callState)
-    }
-
-    Spacer(Modifier.height(16.dp))
-
-    Text(
-        text = "NOTES",
-        style = MaterialTheme.typography.labelMedium,
-        color = Color.White.copy(alpha = 0.85f),
-        fontWeight = FontWeight.SemiBold,
-    )
-    Spacer(Modifier.height(8.dp))
-    OutlinedTextField(
-        value = liveNote,
-        onValueChange = onNoteChange,
-        placeholder = {
-            Text(
-                text = "Capture what the client says…",
-                color = Color.White.copy(alpha = 0.5f),
-            )
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .weight(1f),
-        shape = RoundedCornerShape(20.dp),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = Color.White.copy(alpha = 0.12f),
-            unfocusedContainerColor = Color.White.copy(alpha = 0.10f),
-            disabledContainerColor = Color.White.copy(alpha = 0.06f),
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            cursorColor = Color.White,
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent,
-        ),
-    )
-
-    Spacer(Modifier.height(20.dp))
-
-    ControlsRow(
-        isMuted = isMuted,
-        isSpeakerOn = isSpeakerOn,
-        canHangUp = callState !is CallUiState.Disconnected,
-        onToggleMute = onToggleMute,
-        onToggleSpeaker = onToggleSpeaker,
-        onEndCall = onEndCall,
-    )
-}
+// (Old `ActiveCallContent` was deleted — its layout lived assumed a
+// fully-green panel and is no longer used. The new `CallControlPanel`
+// renders the hero+body+CTA inline.)
 
 @Composable
 private fun DirectionBadge(label: String) {
@@ -425,89 +744,51 @@ private fun LiveTimer(activeSince: Instant) {
     )
 }
 
-@Composable
-private fun ControlsRow(
-    isMuted: Boolean,
-    isSpeakerOn: Boolean,
-    canHangUp: Boolean,
-    onToggleMute: () -> Unit,
-    onToggleSpeaker: () -> Unit,
-    onEndCall: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ToggleControl(
-            icon = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
-            label = if (isMuted) "Muted" else "Mute",
-            active = isMuted,
-            onClick = onToggleMute,
-        )
-        ToggleControl(
-            icon = Icons.AutoMirrored.Filled.VolumeUp,
-            label = "Speaker",
-            active = isSpeakerOn,
-            onClick = onToggleSpeaker,
-        )
-        EndCallButton(enabled = canHangUp, onClick = onEndCall)
-    }
-}
-
+/**
+ * Theme-aware toggle (Mute / Speaker). Replaces the previous
+ * white-on-green version that only made sense over a fully-green
+ * panel. Now uses `FilledTonalIconToggleButton` semantics — neutral
+ * `secondaryContainer` when off, primary `primaryContainer` when on.
+ */
 @Composable
 private fun ToggleControl(
     icon: ImageVector,
     label: String,
-    active: Boolean,
+    checked: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        val container = if (checked) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.secondaryContainer
+        }
+        val contentColor = if (checked) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSecondaryContainer
+        }
         Surface(
             shape = CircleShape,
-            color = if (active) Color.White else Color.White.copy(alpha = 0.18f),
-            modifier = Modifier.size(64.dp),
+            color = container,
+            modifier = Modifier.size(56.dp),
             onClick = onClick,
+            enabled = enabled,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = icon,
                     contentDescription = label,
-                    tint = if (active) Teal900 else Color.White,
-                    modifier = Modifier.size(28.dp),
+                    tint = contentColor,
+                    modifier = Modifier.size(24.dp),
                 )
             }
         }
         Spacer(Modifier.height(6.dp))
         Text(
             text = label,
-            color = Color.White.copy(alpha = 0.85f),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
-private fun EndCallButton(enabled: Boolean, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Button(
-            onClick = onClick,
-            enabled = enabled,
-            modifier = Modifier.size(width = 96.dp, height = 64.dp),
-            shape = RoundedCornerShape(32.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.error,
-                contentColor = Color.White,
-                disabledContainerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
-            ),
-        ) {
-            Icon(Icons.Filled.CallEnd, contentDescription = "End call")
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "End",
-            color = Color.White.copy(alpha = 0.85f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Medium,
         )
