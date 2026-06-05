@@ -15,7 +15,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.presentation.precall.PreCallScreen
 
 /**
@@ -103,12 +105,12 @@ private fun DetailEmptyState() {
                 modifier = Modifier.size(64.dp),
             )
             Text(
-                text = "Select a client to see details",
+                text = stringResource(R.string.clientdetail_empty_title),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = "Pick someone from the list on the left to open the call screen.",
+                text = stringResource(R.string.clientdetail_empty_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 24.dp),

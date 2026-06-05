@@ -43,22 +43,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.project.vortex.callsagent.common.BusinessConfig
 import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.presentation.clients.components.DismissClientSheet
+import com.project.vortex.callsagent.presentation.common.relativeFuture
+import com.project.vortex.callsagent.presentation.common.relativePast
 import com.project.vortex.callsagent.ui.components.InterestLevelChip
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.theme.PillShape
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 
 /**
  * Internal list-pane composable for the Agenda tab.
@@ -172,11 +177,11 @@ private fun AgendaItem.stableKey(): String = when (this) {
 private fun SectionHeader(section: AgendaSection, count: Int) {
     val isToday = section == AgendaSection.TODAY
     val label = when (section) {
-        AgendaSection.TODAY -> "Today"
-        AgendaSection.TOMORROW -> "Tomorrow"
-        AgendaSection.THIS_WEEK -> "This week"
-        AgendaSection.LATER -> "Later"
-        AgendaSection.UNSCHEDULED -> "Unscheduled"
+        AgendaSection.TODAY -> stringResource(R.string.agenda_section_today)
+        AgendaSection.TOMORROW -> stringResource(R.string.agenda_section_tomorrow)
+        AgendaSection.THIS_WEEK -> stringResource(R.string.agenda_section_this_week)
+        AgendaSection.LATER -> stringResource(R.string.agenda_section_later)
+        AgendaSection.UNSCHEDULED -> stringResource(R.string.agenda_section_unscheduled)
     }
     val isUnscheduled = section == AgendaSection.UNSCHEDULED
 
@@ -218,7 +223,7 @@ private fun SectionHeader(section: AgendaSection, count: Int) {
         if (isUnscheduled) {
             Spacer(Modifier.height(2.dp))
             Text(
-                text = "Interested leads without a scheduled re-call.",
+                text = stringResource(R.string.agenda_unscheduled_subtitle),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -237,7 +242,10 @@ private fun ScheduledRow(
     isToday: Boolean,
     onClick: () -> Unit,
 ) {
-    val zone = ZoneId.systemDefault()
+    // Business clock — see BusinessConfig. Without this, agents in
+    // Caracas would see follow-ups in their local wall-clock, off by
+    // one hour from the admin/client view.
+    val zone = BusinessConfig.BUSINESS_TIMEZONE
     val now = Instant.now()
     val isOverdue = followUp.scheduledAt.isBefore(now)
 
@@ -245,7 +253,7 @@ private fun ScheduledRow(
         val pattern = if (isToday) "h:mm a" else "EEE · h:mm a"
         DateTimeFormatter.ofPattern(pattern).format(followUp.scheduledAt.atZone(zone))
     }
-    val relativeTime = formatRelativeFromNow(followUp.scheduledAt, now)
+    val relativeTime = relativeFuture(followUp.scheduledAt, now)
 
     Row(
         modifier = Modifier
@@ -254,14 +262,15 @@ private fun ScheduledRow(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Avatar(name = followUp.clientName ?: "Client", size = 44.dp)
+        val clientFallback = stringResource(R.string.agenda_client_fallback)
+        Avatar(name = followUp.clientName ?: clientFallback, size = 44.dp)
         Spacer(Modifier.width(12.dp))
 
         // Identity column
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = followUp.clientName ?: "Client",
+                    text = followUp.clientName ?: clientFallback,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -342,7 +351,7 @@ private fun OverdueBadge() {
             )
             Spacer(Modifier.width(3.dp))
             Text(
-                text = "OVERDUE",
+                text = stringResource(R.string.agenda_overdue),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onErrorContainer,
@@ -417,7 +426,8 @@ private fun UnscheduledRow(
 
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = client.lastCalledAt?.let { formatPastRelative(it) } ?: "Never called",
+                text = client.lastCalledAt?.let { relativePast(it) }
+                    ?: stringResource(R.string.agenda_never_called),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -428,7 +438,11 @@ private fun UnscheduledRow(
                 color = MaterialTheme.colorScheme.tertiaryContainer,
             ) {
                 Text(
-                    text = "${client.callAttempts} attempts",
+                    text = pluralStringResource(
+                        R.plurals.agenda_attempts,
+                        client.callAttempts,
+                        client.callAttempts,
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -441,7 +455,7 @@ private fun UnscheduledRow(
             IconButton(onClick = { menuOpen = true }) {
                 Icon(
                     Icons.Filled.MoreVert,
-                    contentDescription = "More actions",
+                    contentDescription = stringResource(R.string.agenda_more_actions),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -450,7 +464,7 @@ private fun UnscheduledRow(
                 onDismissRequest = { menuOpen = false },
             ) {
                 DropdownMenuItem(
-                    text = { Text("Dismiss client") },
+                    text = { Text(stringResource(R.string.agenda_dismiss_client)) },
                     onClick = {
                         menuOpen = false
                         onDismiss()
@@ -483,32 +497,11 @@ private fun EmptyAgenda(isRefreshing: Boolean) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = if (isRefreshing) "Loading agenda..." else "No follow-ups scheduled.",
+            text = if (isRefreshing) stringResource(R.string.agenda_loading)
+            else stringResource(R.string.agenda_empty),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-private fun formatRelativeFromNow(target: Instant, now: Instant): String {
-    val minutes = ChronoUnit.MINUTES.between(now, target)
-    return when {
-        minutes < 1 -> "now"
-        minutes < 60 -> "in ${minutes}m"
-        minutes < 60 * 24 -> "in ${minutes / 60}h"
-        minutes < 60 * 24 * 7 -> "in ${minutes / (60 * 24)}d"
-        else -> "in ${minutes / (60 * 24 * 7)}w"
-    }
-}
-
-private fun formatPastRelative(instant: Instant): String {
-    val minutes = ChronoUnit.MINUTES.between(instant, Instant.now()).coerceAtLeast(0)
-    return when {
-        minutes < 1 -> "just now"
-        minutes < 60 -> "${minutes}m ago"
-        minutes < 60 * 24 -> "${minutes / 60}h ago"
-        minutes < 60 * 24 * 7 -> "${minutes / (60 * 24)}d ago"
-        else -> "${minutes / (60 * 24 * 7)}w ago"
     }
 }
 

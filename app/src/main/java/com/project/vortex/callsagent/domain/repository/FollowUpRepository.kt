@@ -25,6 +25,19 @@ interface FollowUpRepository {
     /** Mark a follow-up as completed locally (completionSyncStatus = PENDING). */
     suspend fun markCompletedLocally(mobileSyncId: String, completedAt: Instant)
 
+    /**
+     * Auto-close every PENDING follow-up of [clientId] whose
+     * `scheduledAt <= asOf`. Invoked from `PostCallViewModel.save()` so
+     * any past-due follow-up is closed by the very call that
+     * satisfied it, regardless of which entry point the agent used
+     * (agenda card, clients list, auto-call queue, future deep link).
+     *
+     * Future-dated follow-ups for the same client are preserved.
+     *
+     * @return number of rows transitioned PENDING → COMPLETED.
+     */
+    suspend fun markPendingForClientCompleted(clientId: String, asOf: Instant): Int
+
     suspend fun pendingCreationSync(): List<FollowUp>
     suspend fun pendingCompletionSync(): List<FollowUp>
 

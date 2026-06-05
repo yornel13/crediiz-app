@@ -25,6 +25,17 @@ val Slate50 = Color(0xFFF8FAFC)
 val Coral500 = Color(0xFFF97066)
 val Coral200 = Color(0xFFFECDD3)
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Crediiz wordmark lockup — the two "i" pillars rendered as the brand mark.
+// Pillar colors are pulled verbatim from the web favicon (calls-web-admin).
+// CrediizInk is the neutral gray used for the rest of the letters; it is the
+// default on light surfaces, but the wordmark accepts any text color so it can
+// also render white on a dark/teal background.
+// ─────────────────────────────────────────────────────────────────────────────
+val CrediizBlue = Color(0xFF3B82F6)
+val CrediizGreen = Color(0xFF22C55E)
+val CrediizInk = Color(0xFF6B7280)
+
 // Backgrounds
 val OffWhite = Color(0xFFFAFAF9)
 val DeepInk = Color(0xFF0B1220)

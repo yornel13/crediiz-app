@@ -1,0 +1,417 @@
+<resources>
+    <!-- ============================== SIP / notifications ============================== -->
+    <string name="sip_call_channel_name">Llamadas activas</string>
+    <string name="sip_call_channel_description">Notificación persistente mientras hay una llamada SIP en curso.</string>
+    <string name="sip_call_notification_title">Llamada en curso</string>
+    <string name="sip_call_notification_text">Toca para volver a la pantalla de llamada.</string>
+    <string name="sip_call_notification_hangup">Colgar</string>
+
+    <!-- ============================== Settings · Language ============================== -->
+    <string name="settings_language_label">Idioma</string>
+    <string name="settings_language_system">Sistema</string>
+    <string name="settings_language_english">Inglés</string>
+    <string name="settings_language_spanish">Español</string>
+
+    <!-- ============================== Common / shared ============================== -->
+    <string name="common_cancel">Cancelar</string>
+    <string name="common_ok">OK</string>
+    <string name="common_save">Guardar</string>
+    <string name="common_back">Atrás</string>
+    <string name="common_continue">Continuar</string>
+    <string name="common_retry">Reintentar</string>
+    <string name="common_dismiss">Descartar</string>
+
+    <!-- ============================== Relative time (compact) ============================== -->
+    <string name="reltime_just_now">hace un momento</string>
+    <string name="reltime_minutes_ago">hace %1$dm</string>
+    <string name="reltime_hours_ago">hace %1$dh</string>
+    <string name="reltime_days_ago">hace %1$dd</string>
+    <string name="reltime_weeks_ago">hace %1$ds</string>
+    <string name="reltime_now">ahora</string>
+    <string name="reltime_in_minutes">en %1$dm</string>
+    <string name="reltime_in_hours">en %1$dh</string>
+    <string name="reltime_in_days">en %1$dd</string>
+    <string name="reltime_in_weeks">en %1$ds</string>
+
+    <!-- ============================== Pre-Call ============================== -->
+    <string name="precall_client_not_found">Cliente no encontrado</string>
+    <string name="precall_activity_history">HISTORIAL DE ACTIVIDAD</string>
+    <string name="precall_schedule_follow_up">Agendar seguimiento</string>
+    <string name="precall_field_cedula">CÉDULA</string>
+    <string name="precall_field_phone">TEL</string>
+    <string name="precall_field_salary">SALARIO</string>
+    <string name="precall_field_social_security">SEG. SOCIAL</string>
+    <string name="precall_field_reference">REF</string>
+    <string name="precall_field_label_format">%1$s: </string>
+    <string name="precall_status_pending">Pendiente</string>
+    <string name="precall_status_in_progress">En proceso</string>
+    <string name="precall_status_interested">Interesado</string>
+    <string name="precall_status_rejected">Rechazado</string>
+    <string name="precall_status_unreachable">Inalcanzable</string>
+    <string name="precall_status_converted">Convertido</string>
+    <string name="precall_status_do_not_call">No llamar</string>
+    <string name="precall_status_dismissed">Descartado</string>
+    <string name="precall_banner_converted_title">Este cliente ha sido convertido</string>
+    <string name="precall_banner_converted_subtitle">No se requiere más contacto.</string>
+    <string name="precall_banner_do_not_call_title">No contactar</string>
+    <string name="precall_banner_do_not_call_subtitle">El cliente pidió no ser contactado — las llamadas están bloqueadas.</string>
+    <string name="precall_banner_unreachable_title">El número podría no pertenecer a este cliente</string>
+    <string name="precall_banner_scheduled_callback_title">Devolución de llamada agendada %1$s</string>
+    <string name="precall_banner_new_lead_title">Nuevo prospecto · Primer contacto</string>
+    <string name="precall_banner_new_lead_subtitle">No hay actividad previa para este cliente.</string>
+    <string name="precall_relative_today">hoy</string>
+    <string name="precall_relative_overdue">vencido</string>
+    <string name="precall_relative_tomorrow">mañana</string>
+    <string name="precall_activity_call">Llamada</string>
+    <string name="precall_activity_note">Nota</string>
+    <string name="precall_followup_scheduled">Seguimiento agendado</string>
+    <string name="precall_lead_imported">Prospecto importado</string>
+    <string name="precall_activity_assigned_title">Asignado a ti</string>
+    <string name="precall_activity_assigned_body">Cliente agregado a tu lista.</string>
+    <string name="precall_empty_all_title">Primer contacto</string>
+    <string name="precall_empty_notes_title">Sin notas aún</string>
+    <string name="precall_empty_all_body">Aún no hay actividad. La historia con este cliente empieza con tu llamada.</string>
+    <string name="precall_empty_notes_body">Aún no se han registrado notas para este cliente.</string>
+    <string name="precall_action_skip">Saltar</string>
+    <string name="precall_action_call">LLAMAR</string>
+    <string name="precall_action_pause">Pausar</string>
+    <string name="precall_action_dismiss">Descartar</string>
+    <string name="precall_call_countdown">%1$s · %2$ds</string>
+    <string name="precall_note_placeholder">Escribir nueva nota de seguimiento…</string>
+    <string name="precall_note_saving">GUARDANDO…</string>
+    <string name="precall_note_save">GUARDAR NOTA</string>
+    <string name="precall_go_back">Volver</string>
+    <string name="precall_interest_level_title">Actualizar nivel de interés</string>
+    <string name="precall_outcome_interested">Respondió — interesado</string>
+    <string name="precall_outcome_not_interested">Respondió — no interesado</string>
+    <string name="precall_outcome_opt_out">Respondió — pidió no ser contactado</string>
+    <string name="precall_outcome_sold">Respondió — venta cerrada</string>
+    <string name="precall_outcome_no_answer">Sin respuesta</string>
+    <string name="precall_outcome_busy">Línea ocupada</string>
+    <string name="precall_outcome_wrong_number">Número equivocado</string>
+    <string name="precall_ts_today_format">HOY, %1$s</string>
+    <string name="precall_ts_yesterday_format">AYER, %1$s</string>
+    <plurals name="precall_activity_record_count">
+        <item quantity="one">%1$d REGISTRO</item>
+        <item quantity="other">%1$d REGISTROS</item>
+    </plurals>
+    <plurals name="precall_banner_unreachable_subtitle">
+        <item quantity="one">%1$d marca de número equivocado registrada.</item>
+        <item quantity="other">%1$d marcas de número equivocado registradas.</item>
+    </plurals>
+    <plurals name="precall_relative_in_days">
+        <item quantity="one">en %1$d día</item>
+        <item quantity="other">en %1$d días</item>
+    </plurals>
+    <plurals name="precall_note_char_count">
+        <item quantity="one">%1$d CARÁCTER</item>
+        <item quantity="other">%1$d CARACTERES</item>
+    </plurals>
+
+    <!-- ============================== Pre-Call · Schedule follow-up sheet ============================== -->
+    <string name="schedule_title">Agendar seguimiento</string>
+    <string name="schedule_date_label">Fecha</string>
+    <string name="schedule_time_label">Hora</string>
+    <string name="schedule_picker_choose">Elegir</string>
+    <string name="schedule_future_date_error">La fecha debe ser en el futuro.</string>
+    <string name="schedule_reason_label">Motivo (opcional)</string>
+    <string name="schedule_reason_placeholder">Ej: Quiere que la llame el lunes en la tarde</string>
+    <string name="schedule_char_counter">%1$d / %2$d</string>
+    <string name="schedule_action_schedule">Agendar</string>
+    <string name="schedule_action_replace">Reemplazar</string>
+    <string name="schedule_existing_warning_title">Ya hay un seguimiento agendado</string>
+    <string name="schedule_existing_reason_quote">\"%1$s\"</string>
+    <string name="schedule_existing_replace_hint">Reemplazar lo marca como completado y crea el nuevo.</string>
+
+    <!-- ============================== Pre-Call · Status change sheet ============================== -->
+    <string name="status_change_title">Cambiar estado sin llamar</string>
+    <string name="status_change_subtitle">Usa esta acción para canales externos (WhatsApp, presencial, etc.). Queda registrado en el historial.</string>
+    <string name="status_change_new_status_label">Nuevo estado</string>
+    <string name="status_change_reason_label_required">Motivo *</string>
+    <string name="status_change_reason_label_optional">Motivo (opcional)</string>
+    <string name="status_change_reason_placeholder">Ej: Cliente lo solicitó por WhatsApp</string>
+    <string name="status_change_reason_required_for_status">Obligatorio para este estado</string>
+    <string name="status_change_reason_required_hint">Motivo obligatorio</string>
+    <string name="status_change_char_counter">%1$d / %2$d</string>
+    <string name="status_change_action_confirm">Confirmar</string>
+    <string name="status_change_quick_reason_label">Motivo rápido</string>
+    <string name="status_change_quick_reason_other">Otro: escribir abajo</string>
+    <string name="status_change_dest_interested_desc">Mostró interés por otro canal (WhatsApp, etc.)</string>
+    <string name="status_change_dest_converted_desc">Cerró la venta por otro canal.</string>
+    <string name="status_change_dest_rejected_desc">Dijo que no por otro canal.</string>
+    <string name="status_change_dest_do_not_call_desc">Pidió no volver a ser contactado (opt-out).</string>
+
+    <!-- ============================== Post-Call ============================== -->
+    <string name="postcall_load_error">No se pudieron cargar los detalles de la llamada</string>
+    <string name="postcall_note_placeholder">¿Qué dijo el cliente?</string>
+    <string name="postcall_note_label">Nota (opcional)</string>
+    <string name="postcall_section_answered">✅ Respondió</string>
+    <string name="postcall_section_not_answered">❌ No respondió</string>
+    <string name="postcall_followup_title">Programar seguimiento</string>
+    <string name="postcall_picker_date_label">Fecha</string>
+    <string name="postcall_picker_date_placeholder">Elegir fecha</string>
+    <string name="postcall_picker_time_label">Hora</string>
+    <string name="postcall_picker_time_placeholder">Elegir hora</string>
+    <string name="postcall_time_dialog_title">Elige una hora</string>
+    <string name="postcall_recovery_title">Recuperando llamada anterior</string>
+    <string name="postcall_recovery_body">Esta llamada terminó pero no la finalizaste. Confirma el resultado.</string>
+    <string name="postcall_hero_subtitle">Finalizar llamada</string>
+    <string name="postcall_call_ended_pill">LLAMADA FINALIZADA · %1$s</string>
+
+    <!-- ============================== Clients ============================== -->
+    <string name="clients_fab_auto_call">Auto-llamada</string>
+    <string name="clients_fab_deactivate">Desactivar</string>
+    <string name="clients_hero_your_queue">Tu cola</string>
+    <string name="clients_sync_syncing">Sincronizando…</string>
+    <string name="clients_sync_synced">Sincronizado</string>
+    <string name="clients_sync_pending">%1$d pendientes</string>
+    <string name="clients_sync_unsynced">%1$d sin sincronizar</string>
+    <string name="clients_search_placeholder">Busca por nombre o teléfono</string>
+    <string name="clients_subheader_untouched">Sin llamar</string>
+    <string name="clients_subheader_retry">Reintentar</string>
+    <string name="clients_subheader_retry_hint">Ya intentado; sigue pendiente hasta cerrarse.</string>
+    <string name="clients_menu_dismiss_client">Descartar cliente</string>
+    <string name="clients_attempts_none">Sin intentos</string>
+    <string name="clients_wrong_number_chip">❓ Núm. errado ×%1$d</string>
+    <string name="clients_search_summary">Mostrando %1$d de %2$d</string>
+    <string name="clients_empty_loading_title">Cargando clientes…</string>
+    <string name="clients_empty_loading_subtitle">Espera un momento</string>
+    <string name="clients_empty_search_title">Sin coincidencias</string>
+    <string name="clients_empty_search_subtitle">Prueba con otro nombre o teléfono.</string>
+    <string name="clients_empty_pending_title">Aún no tienes clientes asignados</string>
+    <string name="clients_empty_pending_subtitle">Desliza hacia abajo para actualizar</string>
+    <string name="clients_empty_recent_title">Sin llamadas recientes</string>
+    <string name="clients_empty_recent_subtitle">Las llamadas que hagas en las últimas 24 h aparecerán aquí.</string>
+    <string name="clients_missed_banner_hint">Toca para revisar y devolver la llamada</string>
+    <string name="clients_missed_sheet_title">Llamadas perdidas</string>
+    <string name="clients_missed_dismiss_all">Descartar todas</string>
+    <string name="clients_missed_sheet_subtitle">Llamadas que entraron mientras no estabas disponible.</string>
+    <string name="clients_missed_assigned_client">Cliente asignado</string>
+    <string name="clients_missed_unknown_number">Número desconocido</string>
+    <string name="clients_missed_reason_rejected">Rechazada</string>
+    <string name="clients_missed_reason_missed">Perdida</string>
+    <string name="clients_missed_reason_busy">Ocupado</string>
+    <string name="clients_missed_call_back">Devolver llamada</string>
+    <string name="clients_bucket_today">Hoy</string>
+    <string name="clients_bucket_yesterday">Ayer</string>
+    <string name="clients_bucket_day_before_yesterday">Antier</string>
+    <string name="clients_bucket_earlier">Más antiguos</string>
+    <plurals name="clients_headline_to_call">
+        <item quantity="one">cliente por llamar</item>
+        <item quantity="other">clientes por llamar</item>
+    </plurals>
+    <plurals name="clients_headline_recent_call">
+        <item quantity="one">llamada reciente</item>
+        <item quantity="other">llamadas recientes</item>
+    </plurals>
+    <plurals name="clients_attempts">
+        <item quantity="one">%1$d intento</item>
+        <item quantity="other">%1$d intentos</item>
+    </plurals>
+    <plurals name="clients_missed_banner">
+        <item quantity="one">%1$d llamada perdida</item>
+        <item quantity="other">%1$d llamadas perdidas</item>
+    </plurals>
+
+    <!-- ============================== In-Call ============================== -->
+    <string name="incall_tab_call">Llamada</string>
+    <string name="incall_tab_client">Cliente</string>
+    <string name="incall_note_label">Nota (opcional)</string>
+    <string name="incall_note_placeholder">Captura lo que el cliente dice…</string>
+    <string name="incall_badge_incoming">ENTRANTE</string>
+    <string name="incall_incoming_call">LLAMADA ENTRANTE</string>
+    <string name="incall_unknown_number">Número desconocido</string>
+    <string name="incall_connecting">Conectando…</string>
+    <string name="incall_hangup">Colgar</string>
+    <string name="incall_reject">Rechazar</string>
+    <string name="incall_accept">Aceptar</string>
+    <string name="incall_control_mute">Silenciar</string>
+    <string name="incall_control_speaker">Altavoz</string>
+    <string name="incall_status_idle">Inactivo</string>
+    <string name="incall_status_dialing">Marcando</string>
+    <string name="incall_status_ringing">Sonando</string>
+    <string name="incall_status_connected">Conectado</string>
+    <string name="incall_status_call_ended">Llamada finalizada</string>
+
+    <!-- ============================== Settings ============================== -->
+    <string name="settings_sign_out">Cerrar sesión</string>
+    <string name="settings_account">Cuenta</string>
+    <string name="settings_display">Pantalla</string>
+    <string name="settings_theme">Tema</string>
+    <string name="settings_theme_system">Sistema</string>
+    <string name="settings_theme_light">Claro</string>
+    <string name="settings_theme_dark">Oscuro</string>
+    <string name="settings_keep_screen_on">Mantener pantalla encendida</string>
+    <string name="settings_keep_screen_on_desc">Evita que la pantalla se apague mientras la app está abierta y tienes la sesión iniciada.</string>
+    <string name="settings_show_full_history">Mostrar historial completo</string>
+    <string name="settings_show_full_history_desc">Si está apagado, en PreCall verás solo las notas; las llamadas y otros eventos se ocultan.</string>
+    <string name="settings_auto_call_mode">Modo de llamada automática</string>
+    <string name="settings_auto_advance">Avance automático</string>
+    <string name="settings_auto_advance_desc_on">Marca automáticamente al siguiente cliente después de No contesta / Ocupado.</string>
+    <string name="settings_auto_advance_desc_off">Detente siempre en el siguiente cliente antes de llamar.</string>
+    <string name="settings_countdown">Cuenta regresiva</string>
+    <string name="settings_countdown_off">Apagado</string>
+    <string name="settings_countdown_seconds">%1$d s</string>
+    <string name="settings_countdown_desc_immediate">Sin cuenta regresiva — el siguiente cliente se marca de inmediato.</string>
+    <string name="settings_synchronization">Sincronización</string>
+    <string name="settings_pending_records">Registros pendientes</string>
+    <string name="settings_sync_idle">Aún no se ha sincronizado.</string>
+    <string name="settings_sync_success">Última sincronización OK — %1$d llamadas, %2$d notas, %3$d seguimientos, %4$d finalizaciones.</string>
+    <string name="settings_sync_error">La última sincronización falló: %1$s</string>
+    <string name="settings_syncing">Sincronizando…</string>
+    <string name="settings_force_sync">Forzar sincronización</string>
+    <plurals name="settings_countdown_desc_wait">
+        <item quantity="one">Espera %1$d segundo antes de marcar al siguiente cliente.</item>
+        <item quantity="other">Espera %1$d segundos antes de marcar al siguiente cliente.</item>
+    </plurals>
+
+    <!-- ============================== Onboarding ============================== -->
+    <string name="onboarding_hero_title">Configura Calls Agent</string>
+    <string name="onboarding_hero_subtitle">Necesitamos algunos permisos para realizar y recibir llamadas. Concédelos todos para continuar.</string>
+    <string name="onboarding_required_permissions">Permisos requeridos</string>
+    <string name="onboarding_permission_denied">Denegado — abre Ajustes para concederlo.</string>
+    <string name="onboarding_granted">Concedido</string>
+    <string name="onboarding_settings">Ajustes</string>
+    <string name="onboarding_allow">Permitir</string>
+    <string name="onboarding_continue_disabled">Concede todos los permisos para continuar</string>
+    <string name="onboarding_step_microphone_title">Acceso al micrófono</string>
+    <string name="onboarding_step_microphone_description">Necesario para que la voz del agente llegue al cliente durante las llamadas SIP.</string>
+    <string name="onboarding_step_audio_title">Gestionar audio</string>
+    <string name="onboarding_step_audio_description">Se usa para enrutar las llamadas al altavoz y que puedas tomar notas con las manos libres.</string>
+    <string name="onboarding_step_notifications_title">Mostrar notificaciones</string>
+    <string name="onboarding_step_notifications_description">Para recordatorios de seguimiento y la notificación durante la llamada.</string>
+    <string name="onboarding_step_battery_title">Ejecutar en segundo plano</string>
+    <string name="onboarding_step_battery_description">Evita que el sistema cierre el servicio de llamadas durante turnos largos.</string>
+
+    <!-- ============================== Agenda ============================== -->
+    <string name="agenda_section_today">Hoy</string>
+    <string name="agenda_section_tomorrow">Mañana</string>
+    <string name="agenda_section_this_week">Esta semana</string>
+    <string name="agenda_section_later">Más adelante</string>
+    <string name="agenda_section_unscheduled">Sin agendar</string>
+    <string name="agenda_unscheduled_subtitle">Prospectos interesados sin una rellamada agendada.</string>
+    <string name="agenda_client_fallback">Cliente</string>
+    <string name="agenda_overdue">VENCIDA</string>
+    <string name="agenda_never_called">Nunca llamado</string>
+    <string name="agenda_more_actions">Más acciones</string>
+    <string name="agenda_dismiss_client">Descartar cliente</string>
+    <string name="agenda_loading">Cargando agenda...</string>
+    <string name="agenda_empty">No hay seguimientos agendados.</string>
+    <plurals name="agenda_attempts">
+        <item quantity="one">%d intento</item>
+        <item quantity="other">%d intentos</item>
+    </plurals>
+
+    <!-- ============================== Login ============================== -->
+    <string name="login_subtitle">Inicia sesión para empezar a trabajar con tu cola.</string>
+    <string name="login_email">Correo electrónico</string>
+    <string name="login_password">Contraseña</string>
+    <string name="login_sign_in">Iniciar sesión</string>
+    <string name="login_loading_queue">Cargando tu cola...</string>
+    <string name="login_signing_in">Iniciando sesión...</string>
+    <string name="login_reason_invalidated">Tu sesión se cerró desde otro dispositivo o por el administrador. Vuelve a iniciar sesión.</string>
+    <string name="login_reason_expired">Tu sesión expiró. Por favor inicia sesión nuevamente.</string>
+    <string name="login_show_password">Mostrar contraseña</string>
+    <string name="login_hide_password">Ocultar contraseña</string>
+
+    <!-- ============================== Home ============================== -->
+    <string name="home_tab_clients">Clientes</string>
+    <string name="home_tab_agenda">Agenda</string>
+    <string name="home_tab_settings">Ajustes</string>
+    <string name="home_stale_title">Los datos podrían estar desactualizados</string>
+    <string name="home_stale_body">No pudimos conectar con el servidor. Desliza para actualizar cuando vuelvas a estar en línea.</string>
+
+    <!-- ============================== Auto-Call · Session summary ============================== -->
+    <string name="autocall_session_complete">Sesión completada</string>
+    <string name="autocall_of_processed">de %1$d procesados</string>
+    <string name="autocall_stat_interested">Interesado</string>
+    <string name="autocall_stat_not_interested">No interesado</string>
+    <string name="autocall_stat_no_answer">Sin respuesta</string>
+    <string name="autocall_stat_busy">Ocupado</string>
+    <string name="autocall_stat_wrong_number">Número erróneo</string>
+    <string name="autocall_stat_skipped">Omitido</string>
+    <string name="autocall_session_duration">Duración de la sesión</string>
+    <string name="autocall_done">Listo</string>
+
+    <!-- ============================== Clients · Dismiss sheet ============================== -->
+    <string name="dismiss_client_title">Descartar %1$s</string>
+    <string name="dismiss_client_description">Sale de tu lista. Queda visible en Recientes por 24 h por si quieres deshacerlo.</string>
+    <string name="dismiss_client_reason_label">Motivo (opcional)</string>
+    <string name="dismiss_client_free_form_placeholder">Detalle adicional (opcional)</string>
+    <string name="dismiss_client_char_count">%1$d / %2$d</string>
+    <string name="dismiss_client_confirm">Descartar</string>
+
+    <!-- ============================== UI components ============================== -->
+    <string name="interest_level_header">Nivel de interés</string>
+    <string name="readiness_unassigned_title">No puedes realizar llamadas</string>
+    <string name="readiness_unassigned_body">No tienes una cuenta VoIP asignada. Contacta al administrador para que te asigne una.</string>
+    <string name="readiness_disconnected_title">Sin conexión con el servidor de llamadas</string>
+    <string name="readiness_disconnected_body">No se pudo conectar con Vozelia. Revisa tu red e intenta nuevamente.</string>
+    <string name="readiness_connecting_title">Conectando con el servidor de llamadas…</string>
+    <string name="readiness_connecting_body">Espera unos segundos antes de llamar.</string>
+
+    <!-- ============================== Pre-Call · Snackbars & errors ============================== -->
+    <string name="precall_snack_interest_updated">Nivel de interés actualizado</string>
+    <string name="precall_snack_client_updated">%1$s actualizado</string>
+    <string name="precall_snack_followup_scheduled">Seguimiento agendado</string>
+    <string name="precall_err_reason_required">El motivo es obligatorio para este cambio.</string>
+    <string name="precall_err_not_assigned">Este cliente ya no está asignado a ti.</string>
+    <string name="precall_err_target_not_allowed">No se permite mover a ese estado sin llamar.</string>
+    <string name="precall_err_interest_not_applicable">El termómetro solo aplica a clientes interesados.</string>
+    <string name="precall_err_not_found">El cliente ya no existe en el servidor.</string>
+    <string name="precall_err_conflict">El cliente cambió mientras editabas. Refresca y reintenta.</string>
+    <string name="precall_err_session_expired">Tu sesión expiró. Vuelve a iniciar sesión.</string>
+    <string name="precall_err_network">Sin conexión. Reintenta cuando vuelva la red.</string>
+    <string name="precall_err_unknown">No se pudo actualizar: %1$s</string>
+    <string name="precall_personal_data">Datos personales</string>
+    <string name="precall_hide">Ocultar</string>
+    <string name="precall_tap_expand">Toca para expandir</string>
+
+    <!-- ============================== Login · errors ============================== -->
+    <string name="login_err_account_disabled">Cuenta deshabilitada. Contacta a tu supervisor.</string>
+    <string name="login_err_device_required">Error interno de la app. Actualiza la versión.</string>
+    <string name="login_err_session_expired">Tu sesión expiró. Vuelve a iniciar sesión.</string>
+    <string name="login_err_network">Sin conexión. Verifica tu red e intenta nuevamente.</string>
+    <string name="login_err_unknown">Ocurrió un error inesperado. Reintenta en unos momentos.</string>
+
+    <!-- ============================== Domain enum labels ============================== -->
+    <string name="enum_interest_cold">Frío</string>
+    <string name="enum_interest_warm">Tibio</string>
+    <string name="enum_interest_hot">Caliente</string>
+    <string name="enum_status_pending">Pendiente</string>
+    <string name="enum_status_in_progress">En proceso</string>
+    <string name="enum_status_interested">Interesado</string>
+    <string name="enum_status_rejected">Rechazado</string>
+    <string name="enum_status_unreachable">Inalcanzable</string>
+    <string name="enum_status_converted">Convertido</string>
+    <string name="enum_status_do_not_call">No llamar</string>
+    <string name="enum_status_dismissed">Descartado</string>
+    <string name="enum_outcome_interested">Interesado</string>
+    <string name="enum_outcome_not_interested">No interesado</string>
+    <string name="enum_outcome_opt_out">No contactar</string>
+    <string name="enum_outcome_sold">Vendido</string>
+    <string name="enum_outcome_no_answer">Sin respuesta</string>
+    <string name="enum_outcome_busy">Ocupado</string>
+    <string name="enum_outcome_wrong_number">Número equivocado</string>
+    <string name="enum_note_call">Durante llamada</string>
+    <string name="enum_note_post_call">Posllamada</string>
+    <string name="enum_note_manual">Manual</string>
+    <string name="enum_note_follow_up">Seguimiento</string>
+    <string name="enum_note_status_change">Cambio de estado</string>
+    <string name="enum_note_dismissal">Descarte</string>
+    <string name="enum_dismissal_corporate">Corporativo</string>
+    <string name="enum_dismissal_invalid_data">Datos incorrectos</string>
+    <string name="enum_dismissal_duplicate">Duplicado</string>
+    <string name="enum_dismissal_optout">No contactar</string>
+    <string name="enum_dismissal_out_of_scope">Fuera de alcance</string>
+    <string name="enum_dismissal_other">Otro</string>
+
+    <!-- ============================== Clients · Recent / detail / views ============================== -->
+    <string name="recent_dismissed_badge">DESCARTADO</string>
+    <string name="recent_undo_dismissal">Deshacer descarte</string>
+    <string name="recent_status_change_label">Cambio de estado · sin llamada</string>
+    <string name="clientdetail_empty_title">Selecciona un cliente para ver los detalles</string>
+    <string name="clientdetail_empty_subtitle">Elige a alguien de la lista de la izquierda para abrir la pantalla de llamada.</string>
+    <string name="clients_view_pending">Pendientes</string>
+    <string name="clients_view_recent">Recientes</string>
+</resources>

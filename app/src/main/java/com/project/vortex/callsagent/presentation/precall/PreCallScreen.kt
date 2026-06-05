@@ -1,5 +1,6 @@
 package com.project.vortex.callsagent.presentation.precall
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import kotlinx.coroutines.android.awaitFrame
 import androidx.compose.foundation.layout.statusBars
@@ -39,6 +41,7 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
@@ -88,6 +91,8 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -96,6 +101,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import com.project.vortex.callsagent.R
+import com.project.vortex.callsagent.common.BusinessConfig
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.common.enums.InterestLevel
@@ -108,6 +115,7 @@ import com.project.vortex.callsagent.presentation.clients.components.DismissClie
 import com.project.vortex.callsagent.presentation.common.WindowSize
 import com.project.vortex.callsagent.presentation.autocall.PendingAutoCall
 import com.project.vortex.callsagent.presentation.precall.components.AgentStatusChangeSheet
+import com.project.vortex.callsagent.presentation.precall.components.ScheduleFollowUpSheet
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.components.CallReadinessBanner
 import com.project.vortex.callsagent.ui.components.InterestLevelSelector
@@ -157,8 +165,13 @@ private sealed interface ActiveSheet {
     data object Dismiss : ActiveSheet
     data object InterestLevel : ActiveSheet
     data object StatusChange : ActiveSheet
+    data object Schedule : ActiveSheet
 }
 
+// Snackbar text arrives from the ViewModel as a @StringRes at runtime, so it
+// must be resolved with context.getString inside the collector (no @Composable
+// scope there). The lint rule targets static resource reads, not this case.
+@SuppressLint("LocalContextGetResourceValueCall")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PreCallScreen(
@@ -275,13 +288,17 @@ fun PreCallScreen(
 
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
 
+    // Locale-overridden Activity Context — resolves the VM's @StringRes
+    // payloads in the language the agent picked in Settings.
+    val context = LocalContext.current
+
     // Forward typed snackbar payloads from the VM to the host. One-shot
     // per emission — duration deliberately Short (the user will be
     // mid-action and a long-lived snackbar is intrusive).
     LaunchedEffect(Unit) {
         viewModel.snackbarMessages.collect { msg ->
             snackbarHostState.showSnackbar(
-                message = msg.text,
+                message = context.getString(msg.textRes, *msg.args.toTypedArray()),
                 duration = androidx.compose.material3.SnackbarDuration.Short,
             )
         }
@@ -315,7 +332,8 @@ fun PreCallScreen(
                 .padding(padding))
 
             uiState.client == null -> ErrorState(
-                message = uiState.errorMessage ?: "Client not found",
+                message = uiState.errorMessage
+                    ?: stringResource(R.string.precall_client_not_found),
                 onBack = effectiveOnBack,
                 modifier = Modifier
                     .fillMaxSize()
@@ -334,6 +352,7 @@ fun PreCallScreen(
                 onBack = effectiveOnBack,
                 onChangeInterestLevel = { activeSheet = ActiveSheet.InterestLevel },
                 onRequestStatusChange = { activeSheet = ActiveSheet.StatusChange },
+                onRequestSchedule = { activeSheet = ActiveSheet.Schedule },
                 contentPadding = padding,
             )
         }
@@ -377,6 +396,25 @@ fun PreCallScreen(
                     activeSheet = ActiveSheet.None
                 },
             )
+            ActiveSheet.Schedule -> uiState.client?.let { client ->
+                // `nextFollowUp` is already collected at the top of
+                // this screen — pass it through so the sheet can warn
+                // about replacing an existing pending follow-up.
+                ScheduleFollowUpSheet(
+                    clientName = client.name,
+                    existingFollowUp = nextFollowUp,
+                    onDismiss = { activeSheet = ActiveSheet.None },
+                    onConfirm = { result ->
+                        viewModel.scheduleFollowUp(
+                            scheduledAt = result.scheduledAt,
+                            reason = result.reason,
+                            level = result.interestLevel,
+                            replacePending = result.replacePending,
+                        )
+                        activeSheet = ActiveSheet.None
+                    },
+                )
+            }
         }
 
         // Note: AddNoteSheet has been replaced by an inline QuickNoteInline
@@ -451,7 +489,8 @@ fun PreCallReadOnlyPanel(
         when {
             uiState.isLoading -> LoadingState(modifier = Modifier.fillMaxSize())
             uiState.client == null -> ErrorState(
-                message = uiState.errorMessage ?: "Client not found",
+                message = uiState.errorMessage
+                    ?: stringResource(R.string.precall_client_not_found),
                 onBack = null,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -485,16 +524,18 @@ fun PreCallReadOnlyPanel(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "HISTORIAL DE ACTIVIDAD",
+                                text = stringResource(R.string.precall_activity_history),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.weight(1f),
                             )
                             Text(
-                                text = "${visibleActivity.size} " +
-                                    if (visibleActivity.size == 1) "REGISTRO"
-                                    else "REGISTROS",
+                                text = pluralStringResource(
+                                    R.plurals.precall_activity_record_count,
+                                    visibleActivity.size,
+                                    visibleActivity.size,
+                                ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -529,6 +570,7 @@ private fun PreCallContent(
     onBack: (() -> Unit)?,
     onChangeInterestLevel: () -> Unit,
     onRequestStatusChange: () -> Unit,
+    onRequestSchedule: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     // Timeline view-mode is sourced from Settings (not toggled here).
@@ -550,6 +592,7 @@ private fun PreCallContent(
                 onBack = onBack,
                 onStatusClick = onRequestStatusChange,
                 onInterestClick = onChangeInterestLevel,
+                onScheduleClick = onRequestSchedule,
             )
         }
 
@@ -593,7 +636,7 @@ private fun PreCallContent(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "HISTORIAL DE ACTIVIDAD",
+                    text = stringResource(R.string.precall_activity_history),
                     style = MaterialTheme.typography.labelMedium,
                     // Neutral gray — section header, not a colour accent.
                     // The mockup uses a quiet label here; primary was
@@ -604,7 +647,11 @@ private fun PreCallContent(
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = "${visibleActivity.size} ${if (visibleActivity.size == 1) "REGISTRO" else "REGISTROS"}",
+                    text = pluralStringResource(
+                        R.plurals.precall_activity_record_count,
+                        visibleActivity.size,
+                        visibleActivity.size,
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -806,6 +853,7 @@ private fun CompactHeader(
     onBack: (() -> Unit)?,
     onStatusClick: () -> Unit,
     onInterestClick: () -> Unit,
+    onScheduleClick: (() -> Unit)? = null,
 ) {
     // Compact-width adaptation: on phones, the header would otherwise
     // overflow horizontally (long names wrapping into 3+ lines, big
@@ -837,7 +885,7 @@ private fun CompactHeader(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.common_back),
                         )
                     }
                 } else {
@@ -872,6 +920,20 @@ private fun CompactHeader(
                         }
                     }
                 }
+                // Calendar action — only shown when scheduling makes
+                // sense for the current client. Terminal statuses
+                // (CONVERTED, DO_NOT_CALL, UNREACHABLE, REJECTED,
+                // DISMISSED) hide the button — those clients can't
+                // be scheduled (D1).
+                if (onScheduleClick != null && client.status.canBeScheduled()) {
+                    IconButton(onClick = onScheduleClick) {
+                        Icon(
+                            imageVector = Icons.Filled.CalendarMonth,
+                            contentDescription = stringResource(R.string.precall_schedule_follow_up),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
 
             // Data grid — full client info per the mockup. Fields that
@@ -885,21 +947,36 @@ private fun CompactHeader(
             // SALARIO uses the success accent color (green) — the
             // mockup's convention for "money figure". All other values
             // stay in the default `onSurface` tone.
-            val dataFields = remember(client) {
+            // Field labels resolved at the call site (composable) so the
+            // grid follows the active locale; keyed into `remember` so the
+            // list rebuilds when either the client or the labels change.
+            val labelCedula = stringResource(R.string.precall_field_cedula)
+            val labelPhone = stringResource(R.string.precall_field_phone)
+            val labelSalary = stringResource(R.string.precall_field_salary)
+            val labelSocialSecurity = stringResource(R.string.precall_field_social_security)
+            val labelReference = stringResource(R.string.precall_field_reference)
+            val dataFields = remember(
+                client,
+                labelCedula,
+                labelPhone,
+                labelSalary,
+                labelSocialSecurity,
+                labelReference,
+            ) {
                 buildList {
-                    add(DataFieldSpec("CÉDULA",
+                    add(DataFieldSpec(labelCedula,
                         client.cedula?.takeIf { it.isNotBlank() } ?: "—",
                         accent = false))
-                    add(DataFieldSpec("TEL", client.phone, accent = false))
-                    add(DataFieldSpec("SALARIO",
+                    add(DataFieldSpec(labelPhone, client.phone, accent = false))
+                    add(DataFieldSpec(labelSalary,
                         client.salary?.let { formatSalary(it) } ?: "—",
                         accent = client.salary != null))
-                    add(DataFieldSpec("SEG. SOCIAL",
+                    add(DataFieldSpec(labelSocialSecurity,
                         client.ssNumber?.takeIf { it.isNotBlank() } ?: "—",
                         accent = false))
                     (client.extraData["loanReference"] as? String)
                         ?.takeIf { it.isNotBlank() }
-                        ?.let { add(DataFieldSpec("REF", it, accent = false)) }
+                        ?.let { add(DataFieldSpec(labelReference, it, accent = false)) }
                 }
             }
             // Order per mockup: data grid lives BETWEEN the name/pill
@@ -995,7 +1072,7 @@ private fun DataField(
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Text(
-            text = "$label: ",
+            text = stringResource(R.string.precall_field_label_format, label),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold,
@@ -1079,14 +1156,14 @@ private fun StatusPillCompact(client: Client, onClick: () -> Unit) {
 @Composable
 @androidx.compose.runtime.ReadOnlyComposable
 private fun ClientStatus.precallLabel(): String = when (this) {
-    ClientStatus.PENDING -> "Pendiente"
-    ClientStatus.IN_PROGRESS -> "En proceso"
-    ClientStatus.INTERESTED -> "Interesado"
-    ClientStatus.REJECTED -> "Rechazado"
-    ClientStatus.UNREACHABLE -> "Inalcanzable"
-    ClientStatus.CONVERTED -> "Convertido"
-    ClientStatus.DO_NOT_CALL -> "No llamar"
-    ClientStatus.DISMISSED -> "Descartado"
+    ClientStatus.PENDING -> stringResource(R.string.precall_status_pending)
+    ClientStatus.IN_PROGRESS -> stringResource(R.string.precall_status_in_progress)
+    ClientStatus.INTERESTED -> stringResource(R.string.precall_status_interested)
+    ClientStatus.REJECTED -> stringResource(R.string.precall_status_rejected)
+    ClientStatus.UNREACHABLE -> stringResource(R.string.precall_status_unreachable)
+    ClientStatus.CONVERTED -> stringResource(R.string.precall_status_converted)
+    ClientStatus.DO_NOT_CALL -> stringResource(R.string.precall_status_do_not_call)
+    ClientStatus.DISMISSED -> stringResource(R.string.precall_status_dismissed)
 }
 
 /**
@@ -1174,36 +1251,43 @@ private fun ContextualBanner(context: BannerContext, modifier: Modifier = Modifi
             icon = Icons.Filled.CheckCircle,
             container = MaterialTheme.colorScheme.tertiaryContainer,
             onContainer = MaterialTheme.colorScheme.onTertiaryContainer,
-            title = "This client has been converted",
-            subtitle = "No further contact required.",
+            title = stringResource(R.string.precall_banner_converted_title),
+            subtitle = stringResource(R.string.precall_banner_converted_subtitle),
         )
         BannerContext.DoNotCall -> BannerStyle(
             icon = Icons.Filled.Block,
             container = MaterialTheme.colorScheme.errorContainer,
             onContainer = MaterialTheme.colorScheme.onErrorContainer,
-            title = "Do not contact",
-            subtitle = "Client opted out — calls are blocked.",
+            title = stringResource(R.string.precall_banner_do_not_call_title),
+            subtitle = stringResource(R.string.precall_banner_do_not_call_subtitle),
         )
         is BannerContext.Unreachable -> BannerStyle(
             icon = Icons.Filled.Block,
             container = MaterialTheme.colorScheme.errorContainer,
             onContainer = MaterialTheme.colorScheme.onErrorContainer,
-            title = "Number may not belong to this client",
-            subtitle = "${context.strikes} wrong-number strikes recorded.",
+            title = stringResource(R.string.precall_banner_unreachable_title),
+            subtitle = pluralStringResource(
+                R.plurals.precall_banner_unreachable_subtitle,
+                context.strikes,
+                context.strikes,
+            ),
         )
         is BannerContext.ScheduledCallback -> BannerStyle(
             icon = Icons.Filled.Schedule,
             container = MaterialTheme.colorScheme.primaryContainer,
             onContainer = MaterialTheme.colorScheme.onPrimaryContainer,
-            title = "Scheduled callback ${formatScheduledRelative(context.at)}",
+            title = stringResource(
+                R.string.precall_banner_scheduled_callback_title,
+                formatScheduledRelative(context.at),
+            ),
             subtitle = formatTimestamp(context.at),
         )
         BannerContext.NewLead -> BannerStyle(
             icon = Icons.Filled.Star,
             container = MaterialTheme.colorScheme.secondaryContainer,
             onContainer = MaterialTheme.colorScheme.onSecondaryContainer,
-            title = "New lead · First contact",
-            subtitle = "No previous activity for this client.",
+            title = stringResource(R.string.precall_banner_new_lead_title),
+            subtitle = stringResource(R.string.precall_banner_new_lead_subtitle),
         )
     }
     Surface(
@@ -1241,17 +1325,28 @@ private data class BannerStyle(
     val subtitle: String,
 )
 
+@Composable
 private fun formatScheduledRelative(at: Instant): String {
     val now = Instant.now()
-    val zone = ZoneId.systemDefault()
+    // Business clock — see BusinessConfig. The "today / tomorrow /
+    // overdue" labels must match the admin/client calendar; otherwise
+    // an agent in Caracas sees a follow-up land in a different bucket
+    // than the admin who scheduled it.
+    val zone = BusinessConfig.BUSINESS_TIMEZONE
     val today = LocalDate.now(zone)
     val target = at.atZone(zone).toLocalDate()
     return when {
-        target == today && at.isAfter(now) -> "today"
-        target == today && at.isBefore(now) -> "overdue"
-        target == today.plusDays(1) -> "tomorrow"
-        target.isAfter(today) -> "in ${ChronoUnit.DAYS.between(today, target)} days"
-        else -> "overdue"
+        target == today && at.isAfter(now) ->
+            stringResource(R.string.precall_relative_today)
+        target == today && at.isBefore(now) ->
+            stringResource(R.string.precall_relative_overdue)
+        target == today.plusDays(1) ->
+            stringResource(R.string.precall_relative_tomorrow)
+        target.isAfter(today) -> {
+            val days = ChronoUnit.DAYS.between(today, target).toInt()
+            pluralStringResource(R.plurals.precall_relative_in_days, days, days)
+        }
+        else -> stringResource(R.string.precall_relative_overdue)
     }
 }
 
@@ -1276,13 +1371,15 @@ private fun PersonalDataCollapsible(client: Client, modifier: Modifier = Modifie
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = if (expanded) "▾ Personal data" else "▸ Personal data",
+                    text = (if (expanded) "▾ " else "▸ ") +
+                        stringResource(R.string.precall_personal_data),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = if (expanded) "Hide" else "Tap to expand",
+                    text = if (expanded) stringResource(R.string.precall_hide)
+                    else stringResource(R.string.precall_tap_expand),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1348,7 +1445,7 @@ private fun ActivityRow(event: ActivityEvent, modifier: Modifier = Modifier) {
  * reads as a continuous log, not a stack of cards.
  *
  * Layout:
- *   [Phone-icon avatar][Llamada · 2:34]                  [HOY/AYER, HH:mm]
+ *   [Phone-icon avatar][Llamada · 2:34]                  [HOY/AYER, h:mm a]
  *                       [Human description of outcome]
  *
  * The title is the literal "Llamada" — we explicitly DON'T show
@@ -1359,7 +1456,7 @@ private fun ActivityRow(event: ActivityEvent, modifier: Modifier = Modifier) {
 @Composable
 private fun CallActivityRow(event: ActivityEvent.Call, modifier: Modifier) {
     ActivityRowPlain(
-        title = "Llamada",
+        title = stringResource(R.string.precall_activity_call),
         meta = formatDuration(event.durationSeconds),
         timestamp = formatActivityTimestamp(event.occurredAt),
         body = outcomeNarrative(event.outcome),
@@ -1376,7 +1473,7 @@ private fun CallActivityRow(event: ActivityEvent.Call, modifier: Modifier) {
 @Composable
 private fun NoteActivityRow(event: ActivityEvent.NoteEntry, modifier: Modifier) {
     ActivityRowPlain(
-        title = "Nota",
+        title = stringResource(R.string.precall_activity_note),
         meta = null,
         timestamp = formatActivityTimestamp(event.occurredAt),
         body = event.content,
@@ -1530,7 +1627,7 @@ private fun FollowUpActivityRow(event: ActivityEvent.FollowUpScheduled, modifier
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Follow-up scheduled",
+                    text = stringResource(R.string.precall_followup_scheduled),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -1555,7 +1652,9 @@ private fun LeadImportedRow(modifier: Modifier) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "✨  Lead imported",
+            // Emoji stays inline (non-translatable symbol); only the
+            // label text is localised.
+            text = "✨  " + stringResource(R.string.precall_lead_imported),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1576,10 +1675,10 @@ private fun AssignedToAgentRow(
     modifier: Modifier,
 ) {
     ActivityRowPlain(
-        title = "Asignado a ti",
+        title = stringResource(R.string.precall_activity_assigned_title),
         meta = null,
         timestamp = formatActivityTimestamp(event.occurredAt),
-        body = "Cliente agregado a tu lista.",
+        body = stringResource(R.string.precall_activity_assigned_body),
         icon = Icons.Filled.PersonAdd,
         modifier = modifier,
     )
@@ -1595,16 +1694,20 @@ private fun ActivityEmptyState(showAll: Boolean, modifier: Modifier = Modifier) 
         Text(text = "✨", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
         Text(
-            text = if (showAll) "Primer contacto" else "Sin notas aún",
+            text = if (showAll) {
+                stringResource(R.string.precall_empty_all_title)
+            } else {
+                stringResource(R.string.precall_empty_notes_title)
+            },
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(4.dp))
         Text(
             text = if (showAll) {
-                "Aún no hay actividad. La historia con este cliente empieza con tu llamada."
+                stringResource(R.string.precall_empty_all_body)
             } else {
-                "Aún no se han registrado notas para este cliente."
+                stringResource(R.string.precall_empty_notes_body)
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1694,7 +1797,10 @@ private fun CallActionBar(
             // 3-second window if they realise the client isn't a
             // good moment to call.
             if (inAutoCall) {
-                SecondaryActionButton(label = "Skip", onClick = onSkip)
+                SecondaryActionButton(
+                    label = stringResource(R.string.precall_action_skip),
+                    onClick = onSkip,
+                )
             }
 
             // Center: primary Call CTA. Single-line horizontal layout
@@ -1755,7 +1861,7 @@ private fun CallActionBar(
                 )
                 Spacer(Modifier.width(callSpacerLeft))
                 Text(
-                    text = "LLAMAR",
+                    text = stringResource(R.string.precall_action_call),
                     style = callLabelStyle,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
@@ -1768,7 +1874,11 @@ private fun CallActionBar(
                 // single-line + ellipsis prevents wrap/clipping if the
                 // number is longer than the slot.
                 val secondary = if (countdownSecondsLeft != null) {
-                    "${client?.phone.orEmpty()} · ${countdownSecondsLeft}s"
+                    stringResource(
+                        R.string.precall_call_countdown,
+                        client?.phone.orEmpty(),
+                        countdownSecondsLeft,
+                    )
                 } else {
                     client?.phone.orEmpty()
                 }
@@ -1788,12 +1898,20 @@ private fun CallActionBar(
             // rendered as a compact icon+label square button to match
             // the reference mockup's bottom strip.
             if (countdownSecondsLeft != null) {
-                SecondaryActionButton(label = "Pausar", onClick = onPauseAutoCall)
+                SecondaryActionButton(
+                    label = stringResource(R.string.precall_action_pause),
+                    onClick = onPauseAutoCall,
+                )
             } else {
                 SquareIconActionButton(
                     icon = Icons.Filled.Close,
-                    label = "Descartar",
-                    secondaryLabel = "cliente",
+                    label = stringResource(R.string.precall_action_dismiss),
+                    // Dropped the "cliente" secondary line — the
+                    // icon + DESCARTAR label already conveys it, and
+                    // the secondary text was overflowing the 60dp
+                    // button height (icon 16 + spacer 4 + two
+                    // labelSmall rows + vertical padding = ~68dp).
+                    secondaryLabel = null,
                     onClick = onDismiss,
                     enabled = client != null,
                 )
@@ -1994,7 +2112,7 @@ private fun QuickNoteInline(
         ) {
             Column {
                 Text(
-                    text = "Escribir nueva nota de seguimiento…",
+                    text = stringResource(R.string.precall_note_placeholder),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
@@ -2051,7 +2169,7 @@ private fun QuickNoteInline(
                 decorationBox = { innerTextField ->
                     if (text.isEmpty()) {
                         Text(
-                            text = "Escribir nueva nota de seguimiento…",
+                            text = stringResource(R.string.precall_note_placeholder),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -2067,7 +2185,11 @@ private fun QuickNoteInline(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "${text.length} CARACTERES",
+                    text = pluralStringResource(
+                        R.plurals.precall_note_char_count,
+                        text.length,
+                        text.length,
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium,
@@ -2089,7 +2211,11 @@ private fun QuickNoteInline(
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        text = if (isSubmitting) "GUARDANDO…" else "GUARDAR NOTA",
+                        text = if (isSubmitting) {
+                            stringResource(R.string.precall_note_saving)
+                        } else {
+                            stringResource(R.string.precall_note_save)
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -2121,7 +2247,7 @@ private fun IdleNoteBottomStrip() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "0 CARACTERES",
+            text = pluralStringResource(R.plurals.precall_note_char_count, 0, 0),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.Medium,
@@ -2143,7 +2269,7 @@ private fun IdleNoteBottomStrip() {
             )
             Spacer(Modifier.width(4.dp))
             Text(
-                text = "GUARDAR NOTA",
+                text = stringResource(R.string.precall_note_save),
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -2229,7 +2355,7 @@ private fun ErrorState(message: String, onBack: (() -> Unit)?, modifier: Modifie
             if (onBack != null) {
                 Spacer(Modifier.height(12.dp))
                 OutlinedButton(onClick = onBack) {
-                    Text("Go back")
+                    Text(stringResource(R.string.precall_go_back))
                 }
             }
         }
@@ -2255,56 +2381,75 @@ private fun outcomeLabel(outcome: CallOutcome): String = when (outcome) {
  * Used as the primary body of a `CallActivityRow` so the agent reads
  * a narrative rather than a raw enum.
  */
+@Composable
 private fun outcomeNarrative(outcome: CallOutcome): String = when (outcome) {
-    CallOutcome.ANSWERED_INTERESTED -> "Cliente interesado."
-    CallOutcome.ANSWERED_NOT_INTERESTED -> "Cliente no mostró interés."
-    CallOutcome.ANSWERED_OPT_OUT -> "Cliente solicitó no ser contactado."
-    CallOutcome.ANSWERED_SOLD -> "Venta cerrada."
-    CallOutcome.NO_ANSWER -> "Llamada no contestada."
-    CallOutcome.BUSY -> "Línea ocupada."
-    CallOutcome.WRONG_NUMBER -> "Número incorrecto. Atendió otra persona."
+    CallOutcome.ANSWERED_INTERESTED ->
+        stringResource(R.string.precall_outcome_interested)
+    CallOutcome.ANSWERED_NOT_INTERESTED ->
+        stringResource(R.string.precall_outcome_not_interested)
+    CallOutcome.ANSWERED_OPT_OUT ->
+        stringResource(R.string.precall_outcome_opt_out)
+    CallOutcome.ANSWERED_SOLD ->
+        stringResource(R.string.precall_outcome_sold)
+    CallOutcome.NO_ANSWER ->
+        stringResource(R.string.precall_outcome_no_answer)
+    CallOutcome.BUSY ->
+        stringResource(R.string.precall_outcome_busy)
+    CallOutcome.WRONG_NUMBER ->
+        stringResource(R.string.precall_outcome_wrong_number)
 }
 
-private val timeOnlyFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("HH:mm")
+// 12-hour clock with AM/PM suffix — matches the rest of the app
+// (AgendaScreen, PostCallScreen, ScheduleFollowUpSheet all use
+// `h:mm a`). Built per-call with the process locale so AM/PM and
+// month names follow the language chosen at runtime (Activities are
+// recreated on language change — see ui/locale/LocaleContext).
+private fun timeOnlyFormatter(): DateTimeFormatter =
+    DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.getDefault())
 
-private val dateMonthFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("d 'de' MMM", java.util.Locale("es"))
+private fun dateMonthFormatter(): DateTimeFormatter =
+    DateTimeFormatter.ofPattern("d MMM", java.util.Locale.getDefault())
 
 /**
  * Absolute timestamp suited to a chronological activity log:
- *  - Same day: "HOY, 14:20"
- *  - Yesterday: "AYER, 09:15"
- *  - This week: "MAR, 14:20" (weekday abbrev + time)
- *  - Older: "12 OCT, 11:02"
+ *  - Same day: "HOY, 2:20 p. m."
+ *  - Yesterday: "AYER, 9:15 a. m."
+ *  - This week: "MAR, 2:20 p. m." (weekday abbrev + time)
+ *  - Older: "12 OCT, 11:02 a. m."
  *
  * The agent gets factual time without having to mentally subtract
  * "hace X horas". Useful for audit trails too.
  */
+@Composable
 private fun formatActivityTimestamp(instant: Instant): String {
-    val zone = ZoneId.systemDefault()
+    // Business clock — "HOY"/"AYER" labels match the admin calendar.
+    // See BusinessConfig.
+    val zone = BusinessConfig.BUSINESS_TIMEZONE
     val now = LocalDate.now(zone)
     val zoned = instant.atZone(zone)
     val date = zoned.toLocalDate()
-    val time = timeOnlyFormatter.format(zoned)
+    val time = timeOnlyFormatter().format(zoned)
     return when {
-        date == now -> "HOY, $time"
-        date == now.minusDays(1) -> "AYER, $time"
+        date == now -> stringResource(R.string.precall_ts_today_format, time)
+        date == now.minusDays(1) ->
+            stringResource(R.string.precall_ts_yesterday_format, time)
         ChronoUnit.DAYS.between(date, now) in 2..6 -> {
             val day = date.dayOfWeek
-                .getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale("es"))
+                .getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.getDefault())
                 .uppercase().take(3)
             "$day, $time"
         }
-        else -> "${dateMonthFormatter.format(zoned).uppercase()}, $time"
+        else -> "${dateMonthFormatter().format(zoned).uppercase()}, $time"
     }
 }
 
-private val timestampFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("d MMM, HH:mm", java.util.Locale("es"))
+private fun timestampFormatter(): DateTimeFormatter =
+    // 12-hour clock — see timeOnlyFormatter rationale above.
+    DateTimeFormatter.ofPattern("d MMM, h:mm a", java.util.Locale.getDefault())
 
 private fun formatTimestamp(instant: Instant): String =
-    timestampFormatter.format(instant.atZone(ZoneId.systemDefault()))
+    // Business clock everywhere — see BusinessConfig.
+    timestampFormatter().format(instant.atZone(BusinessConfig.BUSINESS_TIMEZONE))
 
 /**
  * Bottom sheet that lets the agent re-classify the thermometer
@@ -2317,7 +2462,7 @@ private fun InterestLevelSheet(
     onDismiss: () -> Unit,
     onSelect: (InterestLevel) -> Unit,
 ) {
-    androidx.compose.material3.ModalBottomSheet(
+    com.project.vortex.callsagent.ui.components.FullHeightBottomSheet(
         onDismissRequest = onDismiss,
     ) {
         Column(
@@ -2328,7 +2473,7 @@ private fun InterestLevelSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "Actualizar nivel de interés",
+                text = stringResource(R.string.precall_interest_level_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -2338,5 +2483,25 @@ private fun InterestLevelSheet(
             )
         }
     }
+}
+
+/**
+ * Whether the agent can schedule a follow-up for a client in this
+ * status. Scheduling implies INTERESTED (`HOW_IT_WORKS §4`), so
+ * terminal/closed statuses are excluded — the agent has to reactivate
+ * first (admin path) before scheduling.
+ *
+ * D1 from the design discussion: only PENDING / IN_PROGRESS / INTERESTED
+ * are schedulable from the mobile agent's perspective.
+ */
+private fun ClientStatus.canBeScheduled(): Boolean = when (this) {
+    ClientStatus.PENDING,
+    ClientStatus.IN_PROGRESS,
+    ClientStatus.INTERESTED -> true
+    ClientStatus.CONVERTED,
+    ClientStatus.REJECTED,
+    ClientStatus.UNREACHABLE,
+    ClientStatus.DO_NOT_CALL,
+    ClientStatus.DISMISSED -> false
 }
 

@@ -37,40 +37,40 @@ import javax.inject.Singleton
 private const val TAG = "CallController"
 private const val REGISTER_WAIT_MS = 10_000L
 
-// ╔══════════════════════════════════════════════════════════════════════════╗
-// ║                                                                          ║
+// ╔═════════════════════════════════════════════════════════════════════════════╗
+// ║                                                                             ║
 // ║   ████████  ███████  ████████ ████████     ███    ███████  ████████ ███████ ║
 // ║      ██     ██       ██          ██        ████  ████ ██  ██   ██  ██       ║
 // ║      ██     ██████   ████████    ██        ██ ████ ██ ██  ██   ██  █████    ║
 // ║      ██     ██             ██    ██        ██  ██  ██ ██  ██   ██  ██       ║
 // ║      ██     ███████  ████████    ██        ██      ██ ████████  ███████ ██  ║
-// ║                                                                          ║
-// ║   TEMPORARY TEST OVERRIDE — REMOVE BEFORE SHIPPING TO AGENTS             ║
-// ║                                                                          ║
-// ║   Every outbound call placed via [CallController.startCall] is routed    ║
-// ║   to TEST_HARDCODED_TARGET regardless of the Client the agent selected.  ║
-// ║   The agent will see the right Client name on the in-call screen but    ║
-// ║   the actual SIP INVITE is sent to the hardcoded test number.           ║
-// ║                                                                          ║
-// ║   Scope: end-to-end QA of the SIP migration with a known reachable      ║
-// ║   number. The clientId / Client.phone column is intentionally ignored.  ║
-// ║                                                                          ║
-// ║   To remove:                                                             ║
-// ║      1. Delete TEST_HARDCODED_TARGET below.                              ║
-// ║      2. Restore `coreManager.placeCall(client.phone)` in startCall().   ║
-// ║      3. Search the codebase for "TEST_HARDCODED_TARGET" to ensure no    ║
-// ║         other reference leaked.                                          ║
-// ║                                                                          ║
-// ║   Set on: 2026-05-03 by the SIP migration test plan.                    ║
-// ║                                                                          ║
-// ╚══════════════════════════════════════════════════════════════════════════╝
-private const val TEST_HARDCODED_TARGET = "+507 6342 5495"
+// ║                                                                             ║
+// ║   TEMPORARY TEST OVERRIDE — REMOVE BEFORE SHIPPING TO AGENTS                ║
+// ║                                                                             ║
+// ║   Every outbound call placed via [CallController.startCall] is routed       ║
+// ║   to TEST_HARDCODED_TARGET regardless of the Client the agent selected.     ║
+// ║   The agent will see the right Client name on the in-call screen but        ║
+// ║   the actual SIP INVITE is sent to the hardcoded test number.               ║
+// ║                                                                             ║
+// ║   Scope: end-to-end QA of the SIP migration with a known reachable          ║
+// ║   number. The clientId / Client.phone column is intentionally ignored.      ║
+// ║                                                                             ║
+// ║   To remove:                                                                ║
+// ║      1. Delete TEST_HARDCODED_TARGET below.                                 ║
+// ║      2. Restore `coreManager.placeCall(client.phone)` in startCall().       ║
+// ║      3. Search the codebase for "TEST_HARDCODED_TARGET" to ensure no        ║
+// ║         other reference leaked.                                             ║
+// ║                                                                             ║
+// ║   Set on: 2026-05-03 by the SIP migration test plan.                        ║
+// ║                                                                             ║
+// ╚═════════════════════════════════════════════════════════════════════════════╝
+private const val TEST_HARDCODED_TARGET = "+507 6957 4868"
 
 /**
  * Domain-level orchestrator of an active call. Replaces the legacy
  * Telecom-based `CallManager`.
  *
- * The persistence surface (Interaction + Note + sync trigger) is
+ * The persistence surface (Interaction + Note + sync trigger) isiuiuoiilp[][]]=
  * identical, so existing consumers (PreCallViewModel, InCallViewModel,
  * AutoCallOrchestrator, CallNavigationViewModel, InCallGate) keep
  * their flow contracts unchanged.

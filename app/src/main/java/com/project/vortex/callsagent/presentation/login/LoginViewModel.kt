@@ -2,6 +2,7 @@ package com.project.vortex.callsagent.presentation.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.data.device.DeviceInfoProvider
 import com.project.vortex.callsagent.data.sync.LoginHydrationState
@@ -147,27 +148,27 @@ class LoginViewModel @Inject constructor(
      */
     private fun snackbarFor(error: AuthError): SnackbarMessage = when (error) {
         AuthError.AccountDisabled -> SnackbarMessage(
-            "Cuenta deshabilitada. Contacta a tu supervisor.",
-            SnackbarMessage.Tone.ERROR,
+            textRes = R.string.login_err_account_disabled,
+            tone = SnackbarMessage.Tone.ERROR,
         )
         AuthError.DeviceRequired -> SnackbarMessage(
-            "Error interno de la app. Actualiza la versión.",
-            SnackbarMessage.Tone.ERROR,
+            textRes = R.string.login_err_device_required,
+            tone = SnackbarMessage.Tone.ERROR,
         )
         AuthError.SessionExpired -> SnackbarMessage(
-            "Tu sesión expiró. Vuelve a iniciar sesión.",
-            SnackbarMessage.Tone.ERROR,
+            textRes = R.string.login_err_session_expired,
+            tone = SnackbarMessage.Tone.ERROR,
         )
         AuthError.Network -> SnackbarMessage(
-            "Sin conexión. Verifica tu red e intenta nuevamente.",
-            SnackbarMessage.Tone.WARN,
+            textRes = R.string.login_err_network,
+            tone = SnackbarMessage.Tone.WARN,
         )
         // Detail goes to telemetry (see ErrorMapper), never to the
         // agent — strings like "Server returned non-RFC9457 error body"
         // are noise for a non-technical user.
         is AuthError.Unknown -> SnackbarMessage(
-            "Ocurrió un error inesperado. Reintenta en unos momentos.",
-            SnackbarMessage.Tone.ERROR,
+            textRes = R.string.login_err_unknown,
+            tone = SnackbarMessage.Tone.ERROR,
         )
         AuthError.InvalidCredentials -> error(
             "InvalidCredentials must be handled inline; never route it through snackbarFor.",

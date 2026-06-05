@@ -6,9 +6,13 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.project.vortex.callsagent.ui.locale.AppLanguage
 import com.project.vortex.callsagent.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -63,6 +67,23 @@ class SettingsPreferences @Inject constructor(
     }
 
     /**
+     * App language override. Defaults to SYSTEM so the device locale wins.
+     * Applied at the activity level (see
+     * [com.project.vortex.callsagent.ui.locale.LocaleAwareActivity]); changing
+     * it recreates the activity so resources re-resolve. `onEach` keeps the
+     * synchronous [readLanguageTagBlocking] cache warm while this flow is
+     * collected (e.g. by the locale observer).
+     */
+    val appLanguageFlow: Flow<AppLanguage> = dataStore.data
+        .map { AppLanguage.fromKey(it[KEY_APP_LANGUAGE]) }
+        .onEach { cacheLanguageTag(it.toLocaleTag()) }
+
+    suspend fun setAppLanguage(language: AppLanguage) {
+        cacheLanguageTag(language.toLocaleTag())
+        dataStore.edit { it[KEY_APP_LANGUAGE] = language.name }
+    }
+
+    /**
      * When true, the device screen is kept on while the app is in
      * foreground AND the agent is signed in. The activity-level enforcer
      * lives in MainActivity (it combines this flow with the auth state
@@ -113,5 +134,45 @@ class SettingsPreferences @Inject constructor(
         private val KEY_SHOW_FULL_ACTIVITY_HISTORY =
             booleanPreferencesKey("show_full_activity_history")
         private const val DEFAULT_SHOW_FULL_ACTIVITY_HISTORY = true
+
+        private val KEY_APP_LANGUAGE = stringPreferencesKey("app_language")
+
+        /**
+         * Read-through cache for [readLanguageTagBlocking]. Written only from
+         * the [appLanguageFlow] collector and [setAppLanguage] (both derive
+         * from DataStore), so DataStore stays the single source of truth.
+         */
+        @Volatile
+        private var cachedLanguageTag: String? = null
+
+        @Volatile
+        private var languageCacheWarm = false
+
+        private fun cacheLanguageTag(tag: String?) {
+            cachedLanguageTag = tag
+            languageCacheWarm = true
+        }
+
+        /**
+         * Synchronous accessor for `attachBaseContext`, which runs before Hilt
+         * injection and must return a locale tag without suspending.
+         *
+         * Returns the warm cache when available; otherwise does a one-shot
+         * blocking read (at most once per process — the first cold
+         * `attachBaseContext`) and seeds the cache. Every later activity
+         * creation (rotation, recreate, secondary activities) hits the
+         * `@Volatile` cache with no blocking.
+         *
+         * @return the bare language tag ("en"/"es") or `null` for SYSTEM.
+         */
+        fun readLanguageTagBlocking(context: Context): String? {
+            if (languageCacheWarm) return cachedLanguageTag
+            val tag = runBlocking {
+                val prefs = context.applicationContext.settingsDataStore.data.first()
+                AppLanguage.fromKey(prefs[KEY_APP_LANGUAGE]).toLocaleTag()
+            }
+            cacheLanguageTag(tag)
+            return tag
+        }
     }
 }

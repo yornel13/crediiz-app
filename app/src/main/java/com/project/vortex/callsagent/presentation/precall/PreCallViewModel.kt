@@ -2,9 +2,11 @@ package com.project.vortex.callsagent.presentation.precall
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.DismissalReasonCode
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
+import kotlinx.coroutines.flow.firstOrNull
 import com.project.vortex.callsagent.data.local.preferences.SettingsPreferences
 import com.project.vortex.callsagent.data.sync.SyncScheduler
 import com.project.vortex.callsagent.domain.call.CallController
@@ -119,7 +121,7 @@ class PreCallViewModel @AssistedInject constructor(
                 is com.project.vortex.callsagent.domain.result.OperationResult.Success ->
                     _snackbar.send(
                         com.project.vortex.callsagent.presentation.common.SnackbarMessage(
-                            text = "Nivel de interés actualizado",
+                            textRes = R.string.precall_snack_interest_updated,
                             tone = com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.SUCCESS,
                         ),
                     )
@@ -154,7 +156,8 @@ class PreCallViewModel @AssistedInject constructor(
                 is com.project.vortex.callsagent.domain.result.OperationResult.Success ->
                     _snackbar.send(
                         com.project.vortex.callsagent.presentation.common.SnackbarMessage(
-                            text = "${client.name} actualizado",
+                            textRes = R.string.precall_snack_client_updated,
+                            args = listOf(client.name),
                             tone = com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.SUCCESS,
                         ),
                     )
@@ -164,29 +167,129 @@ class PreCallViewModel @AssistedInject constructor(
         }
     }
 
-    /** Maps a typed client error to a Spanish snackbar payload. */
+    /**
+     * Agent-driven scheduling **without making a call** (HOW_IT_WORKS
+     * §7 extension). If the client isn't INTERESTED yet, promote them
+     * with the chosen [level] first (agent-status-change). If a pending
+     * follow-up already exists for the client, mark it completed
+     * before creating the new one (replace semantics — D3 from the
+     * design discussion).
+     *
+     * All steps are sequenced inside one coroutine: any failure short-
+     * circuits and emits a snackbar.
+     */
+    fun scheduleFollowUp(
+        scheduledAt: java.time.Instant,
+        reason: String?,
+        level: com.project.vortex.callsagent.common.enums.InterestLevel,
+        replacePending: Boolean,
+    ) {
+        val client = _uiState.value.client ?: return
+        viewModelScope.launch {
+            // 1. Promote to INTERESTED if needed. agent-status-change
+            //    needs no reason for INTERESTED targets; we default
+            //    one for the audit trail so the admin sees context.
+            if (client.status != com.project.vortex.callsagent.common.enums.ClientStatus.INTERESTED) {
+                val promotion = clientRepository.agentStatusChange(
+                    clientId = client.id,
+                    toStatus = com.project.vortex.callsagent.common.enums.ClientStatus.INTERESTED,
+                    previousStatus = client.status,
+                    previousLevel = client.interestLevel,
+                    reason = reason ?: "Agendado para seguimiento",
+                    level = level,
+                )
+                if (promotion is com.project.vortex.callsagent.domain.result.OperationResult.Failure) {
+                    _snackbar.send(snackbarFor(promotion.error))
+                    return@launch
+                }
+            } else if (level != client.interestLevel) {
+                // Same-status promotion — only PATCH the thermometer.
+                val levelResult = clientRepository.updateInterestLevel(
+                    clientId = client.id,
+                    level = level,
+                    previous = client.interestLevel,
+                )
+                if (levelResult is com.project.vortex.callsagent.domain.result.OperationResult.Failure) {
+                    _snackbar.send(snackbarFor(levelResult.error))
+                    return@launch
+                }
+            }
+
+            // 2. Replace semantics — mark the existing follow-up
+            //    completed locally. The sync push will propagate this
+            //    to the backend (the only supported "remove from
+            //    agenda" path; see HOW_IT_WORKS handoff §D3).
+            if (replacePending) {
+                val now = java.time.Instant.now()
+                followUpRepository.observeNextPendingForClient(client.id, now)
+                    .firstOrNull()
+                    ?.let { existing ->
+                        followUpRepository.markCompletedLocally(existing.mobileSyncId, now)
+                    }
+            }
+
+            // 3. Persist the new follow-up locally (no interaction
+            //    attached — `interactionMobileSyncId = null`). Outbox
+            //    syncs it on the next push.
+            val followUp = com.project.vortex.callsagent.domain.model.FollowUp(
+                mobileSyncId = java.util.UUID.randomUUID().toString(),
+                clientId = client.id,
+                clientName = client.name,
+                clientPhone = client.phone,
+                interactionMobileSyncId = null,
+                scheduledAt = scheduledAt,
+                reason = reason ?: "",
+                status = com.project.vortex.callsagent.common.enums.FollowUpStatus.PENDING,
+                completedAt = null,
+                deviceCreatedAt = java.time.Instant.now(),
+                syncStatus = com.project.vortex.callsagent.common.enums.SyncStatus.PENDING,
+                completionSyncStatus = com.project.vortex.callsagent.common.enums.SyncStatus.SYNCED,
+            )
+            followUpRepository.save(followUp)
+            syncScheduler.triggerImmediateSync()
+
+            _snackbar.send(
+                com.project.vortex.callsagent.presentation.common.SnackbarMessage(
+                    textRes = R.string.precall_snack_followup_scheduled,
+                    tone = com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.SUCCESS,
+                ),
+            )
+        }
+    }
+
+    /**
+     * Maps a typed client error to a localisable snackbar payload. The
+     * @StringRes is resolved by the screen against the Activity's
+     * locale-overridden Context — this VM carries no resolved strings.
+     */
     private fun snackbarFor(
         error: com.project.vortex.callsagent.domain.error.ClientError,
     ): com.project.vortex.callsagent.presentation.common.SnackbarMessage {
-        val text = when (error) {
+        val textRes = when (error) {
             is com.project.vortex.callsagent.domain.error.ClientError.ReasonRequired ->
-                "El motivo es obligatorio para ${error.toStatus.ifBlank { "este cambio" }}."
+                R.string.precall_err_reason_required
             com.project.vortex.callsagent.domain.error.ClientError.NotAssigned ->
-                "Este cliente ya no está asignado a ti."
+                R.string.precall_err_not_assigned
             is com.project.vortex.callsagent.domain.error.ClientError.TargetNotAllowed ->
-                "No se permite mover a ${error.toStatus.ifBlank { "ese estado" }} sin llamar."
+                R.string.precall_err_target_not_allowed
             com.project.vortex.callsagent.domain.error.ClientError.InterestLevelNotApplicable ->
-                "El termómetro solo aplica a clientes interesados."
+                R.string.precall_err_interest_not_applicable
             com.project.vortex.callsagent.domain.error.ClientError.NotFound ->
-                "El cliente ya no existe en el servidor."
+                R.string.precall_err_not_found
             com.project.vortex.callsagent.domain.error.ClientError.Conflict ->
-                "El cliente cambió mientras editabas. Refresca y reintenta."
+                R.string.precall_err_conflict
             com.project.vortex.callsagent.domain.error.ClientError.SessionExpired ->
-                "Tu sesión expiró. Vuelve a iniciar sesión."
+                R.string.precall_err_session_expired
             com.project.vortex.callsagent.domain.error.ClientError.Network ->
-                "Sin conexión. Reintenta cuando vuelva la red."
+                R.string.precall_err_network
             is com.project.vortex.callsagent.domain.error.ClientError.Unknown ->
-                "No se pudo actualizar: ${error.detail}"
+                R.string.precall_err_unknown
+        }
+        // Only Unknown interpolates a backend-supplied detail string.
+        val args: List<Any> = when (error) {
+            is com.project.vortex.callsagent.domain.error.ClientError.Unknown ->
+                listOf(error.detail)
+            else -> emptyList()
         }
         val tone = when (error) {
             com.project.vortex.callsagent.domain.error.ClientError.Network,
@@ -195,7 +298,11 @@ class PreCallViewModel @AssistedInject constructor(
             else ->
                 com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.ERROR
         }
-        return com.project.vortex.callsagent.presentation.common.SnackbarMessage(text, tone)
+        return com.project.vortex.callsagent.presentation.common.SnackbarMessage(
+            textRes = textRes,
+            args = args,
+            tone = tone,
+        )
     }
 
     /** Live auto-call session state — renders the badge + Skip button. */

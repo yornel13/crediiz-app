@@ -67,9 +67,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.domain.model.Client
@@ -93,11 +95,14 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
-private val dateFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("EEE, MMM d, yyyy")
+// Built per-call with the process locale so weekday/month names and
+// AM/PM follow the language chosen at runtime (Activities are recreated
+// on language change — see ui/locale/LocaleContext).
+private fun dateFormatter(): DateTimeFormatter =
+    DateTimeFormatter.ofPattern("EEE, MMM d, yyyy", java.util.Locale.getDefault())
 
-private val timeFormatter: DateTimeFormatter =
-    DateTimeFormatter.ofPattern("h:mm a")
+private fun timeFormatter(): DateTimeFormatter =
+    DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.getDefault())
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -144,7 +149,8 @@ fun PostCallScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = state.errorMessage ?: "Couldn't load call details",
+                    text = state.errorMessage
+                        ?: stringResource(R.string.postcall_load_error),
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.titleMedium,
                 )
@@ -338,8 +344,8 @@ private fun PostCallContent(
             OutlinedTextField(
                 value = state.noteText,
                 onValueChange = onNoteChange,
-                placeholder = { Text("¿Qué dijo el cliente? (opcional)") },
-                label = { Text("Nota") },
+                placeholder = { Text(stringResource(R.string.postcall_note_placeholder)) },
+                label = { Text(stringResource(R.string.postcall_note_label)) },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp),
                 shape = RoundedCornerShape(16.dp),
                 enabled = !state.isSaving,
@@ -507,7 +513,7 @@ private fun OutcomeSelector(
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (answered.isNotEmpty()) {
-            OutcomeSectionHeader(text = "✅ Respondió")
+            OutcomeSectionHeader(text = stringResource(R.string.postcall_section_answered))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 answered.forEach { outcome ->
                     OutcomeRow(
@@ -535,7 +541,7 @@ private fun OutcomeSelector(
             }
         }
         if (notAnswered.isNotEmpty()) {
-            OutcomeSectionHeader(text = "❌ No respondió")
+            OutcomeSectionHeader(text = stringResource(R.string.postcall_section_not_answered))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 notAnswered.forEach { outcome ->
                     OutcomeRow(
@@ -645,7 +651,7 @@ private fun FollowUpForm(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "Schedule follow-up",
+                text = stringResource(R.string.postcall_followup_title),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
                 fontWeight = FontWeight.SemiBold,
@@ -656,15 +662,17 @@ private fun FollowUpForm(
             ) {
                 PickerButton(
                     icon = Icons.Filled.CalendarMonth,
-                    label = "Date",
-                    value = state.followUpDate?.format(dateFormatter) ?: "Pick date",
+                    label = stringResource(R.string.postcall_picker_date_label),
+                    value = state.followUpDate?.format(dateFormatter())
+                        ?: stringResource(R.string.postcall_picker_date_placeholder),
                     onClick = { showDatePicker = true },
                     modifier = Modifier.weight(1f),
                 )
                 PickerButton(
                     icon = Icons.Filled.Schedule,
-                    label = "Time",
-                    value = state.followUpTime?.format(timeFormatter) ?: "Pick time",
+                    label = stringResource(R.string.postcall_picker_time_label),
+                    value = state.followUpTime?.format(timeFormatter())
+                        ?: stringResource(R.string.postcall_picker_time_placeholder),
                     onClick = { showTimePicker = true },
                     modifier = Modifier.weight(1f),
                 )
@@ -773,10 +781,10 @@ private fun DateDialog(
                         .toLocalDate()
                     onConfirm(date)
                 }
-            }) { Text("OK") }
+            }) { Text(stringResource(R.string.common_ok)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
         },
     ) {
         DatePicker(state = state)
@@ -805,7 +813,7 @@ private fun TimeDialog(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = "Pick a time",
+                    text = stringResource(R.string.postcall_time_dialog_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -816,11 +824,11 @@ private fun TimeDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
                 ) {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = {
                         onConfirm(LocalTime.of(state.hour, state.minute))
-                    }) { Text("OK") }
+                    }) { Text(stringResource(R.string.common_ok)) }
                 }
             }
         }
@@ -857,7 +865,7 @@ private fun SaveBar(canSave: Boolean, isSaving: Boolean, onSave: () -> Unit) {
                     )
                 } else {
                     Text(
-                        text = "Save",
+                        text = stringResource(R.string.common_save),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -889,13 +897,13 @@ private fun RecoveryBanner() {
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Recovering previous call",
+                    text = stringResource(R.string.postcall_recovery_title),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
                 Text(
-                    text = "This call ended but you didn't wrap it up. Confirm the outcome.",
+                    text = stringResource(R.string.postcall_recovery_body),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f),
                 )
@@ -963,7 +971,7 @@ private fun CallEndedHero(
                 IconButton(onClick = onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = stringResource(R.string.common_back),
                         tint = Color.White,
                     )
                 }
@@ -980,14 +988,14 @@ private fun CallEndedHero(
                             maxLines = 1,
                         )
                         Text(
-                            text = "Wrap up call",
+                            text = stringResource(R.string.postcall_hero_subtitle),
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White.copy(alpha = 0.75f),
                         )
                     }
                 } else {
                     Text(
-                        text = "Wrap up call",
+                        text = stringResource(R.string.postcall_hero_subtitle),
                         style = MaterialTheme.typography.titleMedium,
                         color = Color.White,
                         fontWeight = FontWeight.SemiBold,
@@ -1019,8 +1027,10 @@ private fun CallEndedHero(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "LLAMADA FINALIZADA · " +
+                            text = stringResource(
+                                R.string.postcall_call_ended_pill,
                                 formatDuration(durationSeconds),
+                            ),
                             style = MaterialTheme.typography.labelMedium,
                             color = Color.White,
                             fontWeight = FontWeight.Bold,

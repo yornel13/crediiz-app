@@ -32,11 +32,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.data.sync.SyncResult
 import com.project.vortex.callsagent.presentation.common.WindowSize
+import com.project.vortex.callsagent.ui.locale.AppLanguage
 import com.project.vortex.callsagent.ui.theme.ThemeMode
 
 @Composable
@@ -89,6 +93,8 @@ fun SettingsScreen(
             DisplayCard(
                 themeMode = state.themeMode,
                 onThemeSelect = viewModel::onThemeModeChange,
+                appLanguage = state.appLanguage,
+                onLanguageSelect = viewModel::onAppLanguageChange,
                 keepScreenOn = state.keepScreenOn,
                 onKeepScreenOnToggle = viewModel::onKeepScreenOnToggle,
                 showFullActivityHistory = state.showFullActivityHistory,
@@ -118,7 +124,7 @@ fun SettingsScreen(
                 onClick = viewModel::logout,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Sign out")
+                Text(stringResource(R.string.settings_sign_out))
             }
             } // end inner content column
         }
@@ -132,7 +138,7 @@ private fun AccountCard(name: String, email: String) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            SectionTitle("Account")
+            SectionTitle(stringResource(R.string.settings_account))
             Text(
                 text = name.ifBlank { "—" },
                 style = MaterialTheme.typography.titleMedium,
@@ -151,6 +157,8 @@ private fun AccountCard(name: String, email: String) {
 private fun DisplayCard(
     themeMode: ThemeMode,
     onThemeSelect: (ThemeMode) -> Unit,
+    appLanguage: AppLanguage,
+    onLanguageSelect: (AppLanguage) -> Unit,
     keepScreenOn: Boolean,
     onKeepScreenOnToggle: (Boolean) -> Unit,
     showFullActivityHistory: Boolean,
@@ -161,9 +169,9 @@ private fun DisplayCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            SectionTitle("Display")
+            SectionTitle(stringResource(R.string.settings_display))
             Text(
-                text = "Theme",
+                text = stringResource(R.string.settings_theme),
                 style = MaterialTheme.typography.bodyLarge,
             )
             Row(
@@ -175,6 +183,29 @@ private fun DisplayCard(
                         selected = themeMode == mode,
                         onClick = { onThemeSelect(mode) },
                         label = { Text(themeLabel(mode)) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                    )
+                }
+            }
+
+            // Language override. Changing it recreates the activity (see
+            // LocaleAwareActivity) so all resources re-resolve immediately.
+            Text(
+                text = stringResource(R.string.settings_language_label),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AppLanguage.values().forEach { language ->
+                    FilterChip(
+                        selected = appLanguage == language,
+                        onClick = { onLanguageSelect(language) },
+                        label = { Text(languageLabel(language)) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -198,11 +229,11 @@ private fun DisplayCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Keep screen on",
+                        text = stringResource(R.string.settings_keep_screen_on),
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Text(
-                        text = "Prevent the display from sleeping while the app is open and you are signed in.",
+                        text = stringResource(R.string.settings_keep_screen_on_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -230,11 +261,11 @@ private fun DisplayCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Mostrar historial completo",
+                        text = stringResource(R.string.settings_show_full_history),
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Text(
-                        text = "Si está apagado, en PreCall verás solo las notas; las llamadas y otros eventos se ocultan.",
+                        text = stringResource(R.string.settings_show_full_history_desc),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -249,11 +280,23 @@ private fun DisplayCard(
     }
 }
 
-private fun themeLabel(mode: ThemeMode): String = when (mode) {
-    ThemeMode.SYSTEM -> "System"
-    ThemeMode.LIGHT -> "Light"
-    ThemeMode.DARK -> "Dark"
-}
+@Composable
+private fun themeLabel(mode: ThemeMode): String = stringResource(
+    when (mode) {
+        ThemeMode.SYSTEM -> R.string.settings_theme_system
+        ThemeMode.LIGHT -> R.string.settings_theme_light
+        ThemeMode.DARK -> R.string.settings_theme_dark
+    }
+)
+
+@Composable
+private fun languageLabel(language: AppLanguage): String = stringResource(
+    when (language) {
+        AppLanguage.SYSTEM -> R.string.settings_language_system
+        AppLanguage.ENGLISH -> R.string.settings_language_english
+        AppLanguage.SPANISH -> R.string.settings_language_spanish
+    }
+)
 
 /**
  * Switch colours with EXPLICIT off-state values so the toggle stays
@@ -287,7 +330,7 @@ private fun AutoAdvanceCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            SectionTitle("Auto-Call Mode")
+            SectionTitle(stringResource(R.string.settings_auto_call_mode))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -295,14 +338,14 @@ private fun AutoAdvanceCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Auto-advance",
+                        text = stringResource(R.string.settings_auto_advance),
                         style = MaterialTheme.typography.bodyLarge,
                     )
                     Text(
                         text = if (enabled) {
-                            "Automatically dial the next client after No Answer / Busy."
+                            stringResource(R.string.settings_auto_advance_desc_on)
                         } else {
-                            "Always stop at the next client before calling."
+                            stringResource(R.string.settings_auto_advance_desc_off)
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -329,7 +372,7 @@ private fun AutoAdvanceCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "Countdown",
+                    text = stringResource(R.string.settings_countdown),
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (enabled) {
                         MaterialTheme.colorScheme.onSurface
@@ -338,7 +381,11 @@ private fun AutoAdvanceCard(
                     },
                 )
                 Text(
-                    text = if (delaySeconds == 0) "Off" else "$delaySeconds s",
+                    text = if (delaySeconds == 0) {
+                        stringResource(R.string.settings_countdown_off)
+                    } else {
+                        stringResource(R.string.settings_countdown_seconds, delaySeconds)
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = if (enabled) {
@@ -350,9 +397,13 @@ private fun AutoAdvanceCard(
             }
             Text(
                 text = if (delaySeconds == 0) {
-                    "No countdown — the next client is dialed immediately."
+                    stringResource(R.string.settings_countdown_desc_immediate)
                 } else {
-                    "Wait $delaySeconds second${if (delaySeconds == 1) "" else "s"} before dialing the next client."
+                    pluralStringResource(
+                        R.plurals.settings_countdown_desc_wait,
+                        delaySeconds,
+                        delaySeconds,
+                    )
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -384,13 +435,16 @@ private fun SyncCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            SectionTitle("Synchronization")
+            SectionTitle(stringResource(R.string.settings_synchronization))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text("Pending records", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = stringResource(R.string.settings_pending_records),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
                 Text(
                     text = "$pendingCount",
                     style = MaterialTheme.typography.bodyMedium,
@@ -402,15 +456,18 @@ private fun SyncCard(
 
             Text(
                 text = when (val r = lastResult) {
-                    SyncResult.Idle -> "No sync performed yet."
-                    is SyncResult.Success -> buildString {
-                        append("Last sync OK — ")
-                        append(r.syncedInteractions).append(" calls, ")
-                        append(r.syncedNotes).append(" notes, ")
-                        append(r.syncedFollowUps).append(" follow-ups, ")
-                        append(r.syncedCompletions).append(" completions.")
-                    }
-                    is SyncResult.Error -> "Last sync failed: ${r.message}"
+                    SyncResult.Idle -> stringResource(R.string.settings_sync_idle)
+                    is SyncResult.Success -> stringResource(
+                        R.string.settings_sync_success,
+                        r.syncedInteractions,
+                        r.syncedNotes,
+                        r.syncedFollowUps,
+                        r.syncedCompletions,
+                    )
+                    is SyncResult.Error -> stringResource(
+                        R.string.settings_sync_error,
+                        r.message,
+                    )
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -421,7 +478,13 @@ private fun SyncCard(
                 enabled = !isSyncing,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (isSyncing) "Syncing..." else "Force sync")
+                Text(
+                    if (isSyncing) {
+                        stringResource(R.string.settings_syncing)
+                    } else {
+                        stringResource(R.string.settings_force_sync)
+                    }
+                )
             }
         }
     }

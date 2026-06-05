@@ -70,9 +70,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.project.vortex.callsagent.R
+import com.project.vortex.callsagent.common.BusinessConfig
 import com.project.vortex.callsagent.common.enums.MissedCallReason
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.MissedCall
@@ -88,6 +92,7 @@ import com.project.vortex.callsagent.ui.theme.Emerald600
 import com.project.vortex.callsagent.ui.theme.PhoneGreen
 import com.project.vortex.callsagent.ui.theme.PillShape
 import com.project.vortex.callsagent.ui.theme.Rose600
+import com.project.vortex.callsagent.presentation.common.relativePast
 import com.project.vortex.callsagent.ui.theme.label
 import com.project.vortex.callsagent.ui.theme.palette
 import java.time.Instant
@@ -209,7 +214,11 @@ internal fun ClientsListPane(
                     },
                     text = {
                         Text(
-                            text = if (isAutoCallActive) "Desactivar" else "Auto-call",
+                            text = if (isAutoCallActive) {
+                                stringResource(R.string.clients_fab_deactivate)
+                            } else {
+                                stringResource(R.string.clients_fab_auto_call)
+                            },
                             fontWeight = FontWeight.SemiBold,
                         )
                     },
@@ -300,7 +309,7 @@ internal fun ClientsListPane(
                     if (pendingNeverCalled.isNotEmpty()) {
                         item("pending_subheader_never") {
                             PendingSubHeader(
-                                label = "Untouched",
+                                label = stringResource(R.string.clients_subheader_untouched),
                                 count = pendingNeverCalled.size,
                             )
                         }
@@ -321,7 +330,7 @@ internal fun ClientsListPane(
                             // (see groupPendingNeverCalledByAssignedDate).
                             pendingNeverCalledByDate.forEach { (bucket, clients) ->
                                 item("pn_h_${bucket.key}") {
-                                    PendingDateHeader(label = bucket.label)
+                                    PendingDateHeader(bucket = bucket)
                                 }
                                 items(clients, key = { "pn_${it.id}" }) { client ->
                                     ClientCard(
@@ -338,9 +347,9 @@ internal fun ClientsListPane(
                     if (pendingForRetry.isNotEmpty()) {
                         item("pending_subheader_retry") {
                             PendingSubHeader(
-                                label = "Retry",
+                                label = stringResource(R.string.clients_subheader_retry),
                                 count = pendingForRetry.size,
-                                hint = "Already attempted; still pending until closed.",
+                                hint = stringResource(R.string.clients_subheader_retry_hint),
                             )
                         }
                         items(pendingForRetry, key = { "pr_${it.id}" }) { client ->
@@ -423,9 +432,15 @@ private fun Hero(
 ) {
     val (headlineCount, headlineUnit) = when (activeView) {
         ClientsViewKind.PENDIENTES ->
-            pendingCount to (if (pendingCount == 1) "client to call" else "clients to call")
+            pendingCount to pluralStringResource(
+                R.plurals.clients_headline_to_call,
+                pendingCount,
+            )
         ClientsViewKind.RECIENTES ->
-            recentCount to (if (recentCount == 1) "recent call" else "recent calls")
+            recentCount to pluralStringResource(
+                R.plurals.clients_headline_recent_call,
+                recentCount,
+            )
     }
 
     Column(
@@ -438,7 +453,7 @@ private fun Hero(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Your queue",
+                text = stringResource(R.string.clients_hero_your_queue),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.SemiBold,
@@ -475,13 +490,25 @@ private fun Hero(
 private fun SyncChip(state: SyncIndicatorState, onClick: () -> Unit) {
     val (icon, label, color) = when (state) {
         SyncIndicatorState.Syncing ->
-            Triple(Icons.Filled.Sync, "Syncing…", MaterialTheme.colorScheme.primary)
+            Triple(
+                Icons.Filled.Sync,
+                stringResource(R.string.clients_sync_syncing),
+                MaterialTheme.colorScheme.primary,
+            )
         SyncIndicatorState.AllSynced ->
-            Triple(Icons.Filled.CheckCircle, "Synced", Emerald600)
+            Triple(Icons.Filled.CheckCircle, stringResource(R.string.clients_sync_synced), Emerald600)
         is SyncIndicatorState.Pending ->
-            Triple(Icons.Filled.Sync, "${state.count} pending", Amber600)
+            Triple(
+                Icons.Filled.Sync,
+                stringResource(R.string.clients_sync_pending, state.count),
+                Amber600,
+            )
         is SyncIndicatorState.Failed ->
-            Triple(Icons.Filled.CloudOff, "${state.pendingCount} unsynced", Rose600)
+            Triple(
+                Icons.Filled.CloudOff,
+                stringResource(R.string.clients_sync_unsynced, state.pendingCount),
+                Rose600,
+            )
     }
 
     val container = color.copy(alpha = 0.12f)
@@ -563,7 +590,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
                 )
                 Spacer(Modifier.width(12.dp))
                 Text(
-                    text = "Search by name or phone",
+                    text = stringResource(R.string.clients_search_placeholder),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyLarge,
                 )
@@ -575,7 +602,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
     TextField(
         value = query,
         onValueChange = onQueryChange,
-        placeholder = { Text("Search by name or phone") },
+        placeholder = { Text(stringResource(R.string.clients_search_placeholder)) },
         leadingIcon = {
             Icon(
                 Icons.Filled.Search,
@@ -686,7 +713,7 @@ private fun ClientCard(
                     onDismissRequest = { menuOpen = false },
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Dismiss client") },
+                        text = { Text(stringResource(R.string.clients_menu_dismiss_client)) },
                         onClick = {
                             menuOpen = false
                             onDismiss()
@@ -781,9 +808,9 @@ private fun PendingSubHeader(
  * Untouched section, not a top-level pill.
  */
 @Composable
-private fun PendingDateHeader(label: String) {
+private fun PendingDateHeader(bucket: PendingDateBucket) {
     Text(
-        text = label,
+        text = bucket.resolveLabel(),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontWeight = FontWeight.Medium,
@@ -812,7 +839,11 @@ private fun AttemptsChip(attempts: Int) {
         }
         Spacer(Modifier.width(6.dp))
         Text(
-            text = if (attempts == 0) "No attempts" else "$attempts ${if (attempts == 1) "attempt" else "attempts"}",
+            text = if (attempts == 0) {
+                stringResource(R.string.clients_attempts_none)
+            } else {
+                pluralStringResource(R.plurals.clients_attempts, attempts, attempts)
+            },
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -847,7 +878,7 @@ private fun WrongNumberChip(count: Int) {
             .padding(horizontal = 8.dp, vertical = 3.dp),
     ) {
         Text(
-            text = "❓ Wrong # ×$count",
+            text = stringResource(R.string.clients_wrong_number_chip, count),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.SemiBold,
             color = content,
@@ -858,7 +889,7 @@ private fun WrongNumberChip(count: Int) {
 @Composable
 private fun SearchResultSummary(matchCount: Int, totalCount: Int) {
     Text(
-        text = "Showing $matchCount of $totalCount",
+        text = stringResource(R.string.clients_search_summary, matchCount, totalCount),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontWeight = FontWeight.Medium,
@@ -890,21 +921,25 @@ private fun EmptyState(
     isSearching: Boolean,
 ) {
     val (title, subtitle, icon) = when {
-        isLoading -> Triple("Loading clients...", "Hang on a moment", Icons.Filled.Phone)
+        isLoading -> Triple(
+            stringResource(R.string.clients_empty_loading_title),
+            stringResource(R.string.clients_empty_loading_subtitle),
+            Icons.Filled.Phone,
+        )
         isSearching -> Triple(
-            "No matches found",
-            "Try a different name or phone.",
+            stringResource(R.string.clients_empty_search_title),
+            stringResource(R.string.clients_empty_search_subtitle),
             Icons.Filled.Search,
         )
         else -> when (viewKind) {
             ClientsViewKind.PENDIENTES -> Triple(
-                "No clients assigned yet",
-                "Pull down to refresh",
+                stringResource(R.string.clients_empty_pending_title),
+                stringResource(R.string.clients_empty_pending_subtitle),
                 Icons.Filled.Phone,
             )
             ClientsViewKind.RECIENTES -> Triple(
-                "No recent calls",
-                "Calls you make in the last 24 h will show up here.",
+                stringResource(R.string.clients_empty_recent_title),
+                stringResource(R.string.clients_empty_recent_subtitle),
                 Icons.Filled.Phone,
             )
         }
@@ -984,13 +1019,13 @@ private fun MissedCallsBanner(count: Int, onClick: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "$count missed ${if (count == 1) "call" else "calls"}",
+                    text = pluralStringResource(R.plurals.clients_missed_banner, count, count),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
                 Text(
-                    text = "Tap to review and call back",
+                    text = stringResource(R.string.clients_missed_banner_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f),
                 )
@@ -1029,20 +1064,20 @@ private fun MissedCallsSheet(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Missed calls",
+                    text = stringResource(R.string.clients_missed_sheet_title),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
                 if (missedCalls.size > 1) {
                     TextButton(onClick = onDismissAll) {
-                        Text("Dismiss all")
+                        Text(stringResource(R.string.clients_missed_dismiss_all))
                     }
                 }
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Calls that came in while you were unavailable.",
+                text = stringResource(R.string.clients_missed_sheet_subtitle),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1067,12 +1102,14 @@ private fun MissedCallRow(
     onCallBack: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val name = missed.matchedClientId?.let { "Assigned client" } ?: "Unknown number"
+    val name = missed.matchedClientId?.let {
+        stringResource(R.string.clients_missed_assigned_client)
+    } ?: stringResource(R.string.clients_missed_unknown_number)
     val canCallBack = missed.matchedClientId != null
     val reasonLabel = when (missed.reason) {
-        MissedCallReason.REJECTED -> "Rejected"
-        MissedCallReason.NOT_ANSWERED -> "Missed"
-        MissedCallReason.BUSY_OTHER_CALL -> "Busy"
+        MissedCallReason.REJECTED -> stringResource(R.string.clients_missed_reason_rejected)
+        MissedCallReason.NOT_ANSWERED -> stringResource(R.string.clients_missed_reason_missed)
+        MissedCallReason.BUSY_OTHER_CALL -> stringResource(R.string.clients_missed_reason_busy)
     }
 
     Card(
@@ -1125,7 +1162,7 @@ private fun MissedCallRow(
             IconButton(onClick = onDismiss) {
                 Icon(
                     Icons.Filled.Close,
-                    contentDescription = "Dismiss",
+                    contentDescription = stringResource(R.string.common_dismiss),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -1140,25 +1177,29 @@ private fun MissedCallRow(
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(Modifier.width(4.dp))
-                    Text("Call back", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        stringResource(R.string.clients_missed_call_back),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
                 }
             }
         }
     }
 }
 
+@Composable
 private fun formatRelative(instant: Instant): String {
     val now = Instant.now()
-    val zone = ZoneId.systemDefault()
+    // Render against the business clock so "yesterday" / "this week"
+    // boundaries match what admin in Panama sees. See BusinessConfig.
+    val zone = BusinessConfig.BUSINESS_TIMEZONE
     val minutes = ChronoUnit.MINUTES.between(instant, now)
-    return when {
-        minutes < 1 -> "just now"
-        minutes < 60 -> "${minutes}m ago"
-        minutes < 60 * 24 -> "${minutes / 60}h ago"
-        minutes < 60 * 24 * 7 -> "${minutes / (60 * 24)}d ago"
-        else -> {
-            val date = instant.atZone(zone).toLocalDate()
-            "${date.month.name.take(3).lowercase().replaceFirstChar { it.uppercase() }} ${date.dayOfMonth}"
-        }
+    return if (minutes < 60 * 24 * 7) {
+        relativePast(instant, now)
+    } else {
+        // Older than a week → absolute "MMM d" in the current locale.
+        java.time.format.DateTimeFormatter
+            .ofPattern("MMM d", java.util.Locale.getDefault())
+            .format(instant.atZone(zone))
     }
 }

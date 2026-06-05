@@ -47,7 +47,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.annotation.StringRes
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -57,6 +59,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.domain.call.CallReadiness
 import com.project.vortex.callsagent.presentation.agenda.AgendaScreen
 import com.project.vortex.callsagent.presentation.clients.ClientsScreen
@@ -67,14 +70,14 @@ import com.project.vortex.callsagent.ui.components.CallReadinessBanner
 
 private data class TabItem(
     val route: String,
-    val label: String,
+    @StringRes val labelRes: Int,
     val icon: ImageVector,
 )
 
 private val tabs = listOf(
-    TabItem(HomeTabs.CLIENTS, "Clients", Icons.Filled.Person),
-    TabItem(HomeTabs.AGENDA, "Agenda", Icons.Filled.CalendarMonth),
-    TabItem(HomeTabs.SETTINGS, "Settings", Icons.Filled.Settings),
+    TabItem(HomeTabs.CLIENTS, R.string.home_tab_clients, Icons.Filled.Person),
+    TabItem(HomeTabs.AGENDA, R.string.home_tab_agenda, Icons.Filled.CalendarMonth),
+    TabItem(HomeTabs.SETTINGS, R.string.home_tab_settings, Icons.Filled.Settings),
 )
 
 /**
@@ -256,11 +259,12 @@ private fun CompactScaffold(
         bottomBar = {
             NavigationBar {
                 tabs.forEach { tab ->
+                    val tabLabel = stringResource(tab.labelRes)
                     NavigationBarItem(
                         selected = selectedRoute(tab.route),
                         onClick = { onTabClick(tab.route) },
-                        icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label) },
+                        icon = { Icon(tab.icon, contentDescription = tabLabel) },
+                        label = { Text(tabLabel) },
                         colors = NavigationBarItemDefaults.colors(
                             indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                             selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -307,11 +311,12 @@ private fun CenteredNavigationRail(
         // vertically in the rail's full height.
         Spacer(Modifier.weight(1f))
         tabs.forEach { tab ->
+            val tabLabel = stringResource(tab.labelRes)
             NavigationRailItem(
                 selected = selectedRoute(tab.route),
                 onClick = { onTabClick(tab.route) },
-                icon = { Icon(tab.icon, contentDescription = tab.label) },
-                label = { Text(tab.label) },
+                icon = { Icon(tab.icon, contentDescription = tabLabel) },
+                label = { Text(tabLabel) },
                 colors = NavigationRailItemDefaults.colors(
                     indicatorColor = MaterialTheme.colorScheme.primaryContainer,
                     selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -379,18 +384,21 @@ private fun StaleDataBanner(onDismiss: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = "Data may be out of date",
+                    text = stringResource(R.string.home_stale_title),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "We couldn't reach the server. Pull to refresh once you're back online.",
+                    text = stringResource(R.string.home_stale_body),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
             Spacer(Modifier.width(8.dp))
             IconButton(onClick = onDismiss) {
-                Icon(Icons.Filled.Close, contentDescription = "Dismiss")
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.common_dismiss),
+                )
             }
         }
     }

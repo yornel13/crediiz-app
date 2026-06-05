@@ -394,15 +394,36 @@ class ClientsViewModel @Inject constructor(
 
     /**
      * Start an auto-call session over the currently observed PENDING
-     * queue (in `queueOrder`). Returns the first client's id so the
-     * caller can navigate to PreCall, or null if the queue is empty.
+     * queue. Returns the first client's id so the caller can navigate
+     * to PreCall, or null if the queue is empty.
+     *
+     * **Order contract — must match the UI exactly:**
+     *  1. "Sin llamar" rendered as date-grouped sections (oldest
+     *     bucket first, newest last). When the agent isn't searching,
+     *     [pendingNeverCalledByDate] is the source of truth: its
+     *     LinkedHashMap preserves bucket order, and clients inside
+     *     each bucket keep DAO `queueOrder ASC`.
+     *  2. "Para reintentar" follows, ordered by `lastCalledAt ASC`
+     *     (same flat list the UI uses).
+     *
+     * If the queue order diverged from the UI, the orchestrator
+     * would think the agent's first-tap client was at the END of
+     * the queue and immediately complete the session (the
+     * "1/53 then SessionSummary" bug — see logcat from 2026-05-23).
      */
     fun startAutoCall(): String? {
-        // Auto-call queue: never-called first, then retry leads after.
-        // Same order the agent sees in the Pendientes list, so there
-        // are no surprises about which client comes next.
-        val ids = pendingNeverCalled.value.map { it.id } +
-            pendingForRetry.value.map { it.id }
+        // Prefer the grouped flow when available (= no active search).
+        // Falls back to the flat list when the agent is searching —
+        // in that mode the UI also renders flat (see ClientsScreen).
+        val neverCalledIds: List<String> =
+            pendingNeverCalledByDate.value
+                .takeIf { it.isNotEmpty() }
+                ?.values
+                ?.flatten()
+                ?.map { it.id }
+                ?: pendingNeverCalled.value.map { it.id }
+        val retryIds = pendingForRetry.value.map { it.id }
+        val ids = neverCalledIds + retryIds
         return autoCallOrchestrator.startSession(
             clientIds = ids,
             sourceTab = HomeTabs.CLIENTS,

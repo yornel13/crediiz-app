@@ -2,45 +2,64 @@ package com.project.vortex.callsagent.presentation.clients.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.DismissalReasonCode
+import com.project.vortex.callsagent.ui.components.FullHeightBottomSheet
 
 private const val MAX_REASON_LEN = 200
 
 /**
  * Confirmation sheet for the dismissal action. Shows the 6 preset
- * reason chips plus a free-form field. Both inputs are optional —
- * the agent can dismiss without explaining.
+ * reason chips plus a free-form `motivo` field — both inputs are
+ * optional. The selected `reasonCode` and `freeFormReason` are
+ * returned via [onConfirm]; the caller persists via the dismissal
+ * repository.
  *
- * The selected `reasonCode` and `freeFormReason` are returned via
- * [onConfirm]. Caller persists via the dismissal repository.
+ * Implementation notes
+ * ────────────────────
+ * - Built on [FullHeightBottomSheet] (consistent with every other
+ *   form sheet — opens at full height, no half-expanded state).
+ * - Scrollable body + sticky footer (Cancelar / Descartar) so the
+ *   CTAs stay visible with the IME open or long content.
+ * - All copy in Spanish (Latin American, tú-form) per
+ *   `language_style_latin_american` memory entry.
+ *
+ * The label is intentionally **"Motivo (opcional)"** and NOT
+ * "Nota (Opcional)": the value is the `reason` field of
+ * `ClientDismissalEntity`, not a first-class `Note`. See the
+ * architectural note in the dismissal repository for the trade-off.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -50,73 +69,103 @@ fun DismissClientSheet(
     onConfirm: (reasonCode: DismissalReasonCode?, freeFormReason: String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedCode by rememberSaveable { mutableStateOf<DismissalReasonCode?>(null) }
     var freeText by rememberSaveable { mutableStateOf("") }
 
-    ModalBottomSheet(
+    FullHeightBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         modifier = modifier,
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-        ) {
-            Text(
-                text = "Dismiss $clientName",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Leaves your list. Visible in Recent for 24 h in case you want to undo.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(16.dp))
-
-            Text(
-                text = "Reason (optional)",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(8.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+        // Outer column owns the full sheet height. Body scrolls in the
+        // middle, footer (Cancelar + Descartar) stays pinned so the
+        // agent never loses the CTAs even with long content or the
+        // IME open — same pattern as ScheduleFollowUpSheet.
+        Column(modifier = Modifier.fillMaxHeight()) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                DismissalReasonCode.entries.forEach { code ->
-                    FilterChip(
-                        selected = selectedCode == code,
-                        onClick = {
-                            selectedCode = if (selectedCode == code) null else code
-                        },
-                        label = { Text(code.label) },
+                // ─── Header ─────────────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = stringResource(R.string.dismiss_client_title, clientName),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = stringResource(R.string.dismiss_client_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+
+                // ─── Preset chips ──────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.dismiss_client_reason_label),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        DismissalReasonCode.entries.forEach { code ->
+                            FilterChip(
+                                selected = selectedCode == code,
+                                onClick = {
+                                    selectedCode = if (selectedCode == code) null else code
+                                },
+                                label = { Text(stringResource(code.labelRes)) },
+                            )
+                        }
+                    }
+                }
+
+                // ─── Free-form reason ──────────────────────────────
+                OutlinedTextField(
+                    value = freeText,
+                    onValueChange = { if (it.length <= MAX_REASON_LEN) freeText = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 110.dp),
+                    placeholder = { Text(stringResource(R.string.dismiss_client_free_form_placeholder)) },
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                    ),
+                    supportingText = {
+                        Text(
+                            text = stringResource(
+                                R.string.dismiss_client_char_count,
+                                freeText.length,
+                                MAX_REASON_LEN,
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    },
+                )
+
+                // Bottom breathing room so the helper line doesn't
+                // kiss the footer divider.
+                Spacer(Modifier.windowInsetsPadding(WindowInsets.navigationBars))
             }
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = freeText,
-                onValueChange = { if (it.length <= MAX_REASON_LEN) freeText = it },
+
+            // ─── Sticky footer ──────────────────────────────────────
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 90.dp),
-                placeholder = { Text("Additional detail (optional)") },
-                supportingText = { Text("${freeText.length} / $MAX_REASON_LEN") },
-            )
-
-            Spacer(Modifier.height(20.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .windowInsetsPadding(WindowInsets.navigationBars),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
-                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(R.string.common_cancel)) }
                 Button(
                     onClick = {
                         onConfirm(selectedCode, freeText.trim().ifBlank { null })
@@ -125,11 +174,11 @@ fun DismissClientSheet(
                         containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError,
                     ),
+                    modifier = Modifier.weight(1f),
                 ) {
-                    Text("Dismiss", fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.dismiss_client_confirm), fontWeight = FontWeight.SemiBold)
                 }
             }
-            Spacer(Modifier.height(16.dp))
         }
     }
 }

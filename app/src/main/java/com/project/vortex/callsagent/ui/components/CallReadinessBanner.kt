@@ -22,8 +22,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.domain.call.CallReadiness
 
 /**
@@ -58,13 +60,12 @@ fun CallReadinessBanner(
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = "No puedes realizar llamadas",
+                        text = stringResource(R.string.readiness_unassigned_title),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "No tienes una cuenta VoIP asignada. " +
-                            "Contacta al administrador para que te asigne una.",
+                        text = stringResource(R.string.readiness_unassigned_body),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -89,20 +90,19 @@ fun CallReadinessBanner(
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
                     Text(
-                        text = "Sin conexión con el servidor de llamadas",
+                        text = stringResource(R.string.readiness_disconnected_title),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "No se pudo conectar con Vozelia. " +
-                            "Revisa tu red e intenta nuevamente.",
+                        text = stringResource(R.string.readiness_disconnected_body),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
                 Spacer(Modifier.width(8.dp))
                 TextButton(onClick = onRetry) {
                     Text(
-                        text = "Reintentar",
+                        text = stringResource(R.string.common_retry),
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
@@ -125,12 +125,12 @@ fun CallReadinessBanner(
                 Spacer(Modifier.width(12.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        text = "Conectando con el servidor de llamadas…",
+                        text = stringResource(R.string.readiness_connecting_title),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "Espera unos segundos antes de llamar.",
+                        text = stringResource(R.string.readiness_connecting_body),
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }

@@ -3,7 +3,6 @@ package com.project.vortex.callsagent
 import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
@@ -19,6 +18,7 @@ import com.project.vortex.callsagent.presentation.common.LocalWindowSizeClass
 import com.project.vortex.callsagent.presentation.navigation.AppNavGraph
 import com.project.vortex.callsagent.presentation.onboarding.OnboardingActivity
 import com.project.vortex.callsagent.presentation.onboarding.OnboardingGate
+import com.project.vortex.callsagent.ui.locale.LocaleAwareActivity
 import com.project.vortex.callsagent.ui.theme.CallsAgendsTheme
 import com.project.vortex.callsagent.ui.theme.ThemeMode
 import dagger.hilt.android.AndroidEntryPoint
@@ -26,7 +26,7 @@ import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : LocaleAwareActivity() {
 
     @Inject lateinit var settingsPreferences: SettingsPreferences
     @Inject lateinit var onboardingGate: OnboardingGate
@@ -36,6 +36,7 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        observeLocaleChanges(settingsPreferences)
         enableEdgeToEdge()
         setContent {
             val themeMode by settingsPreferences.themeModeFlow

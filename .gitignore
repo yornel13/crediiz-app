@@ -13,3 +13,10 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Release signing material — never commit. The plaintext credentials
+# live here only as a temporary working copy until the user moves them
+# into a password manager.
+RELEASE_CREDENTIALS.txt
+*.jks
+*.keystore

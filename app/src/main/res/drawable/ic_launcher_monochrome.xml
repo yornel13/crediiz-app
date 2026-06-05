@@ -6,43 +6,32 @@
     android:viewportHeight="108">
 
     <!--
-      Themed-icon (Android 13+) layer. Single-color silhouette: the launcher
-      tints it with the user's wallpaper-derived color, so it must be flat.
-      We render handset + check as one tone (black; system inverts as needed).
+      Themed-icon (Android 13+) layer. Single-color silhouette of the two
+      Crediiz pillars; the launcher tints it from the user's wallpaper, so
+      it must be flat (color ignored, only the shape/alpha matters).
     -->
-
     <group
-        android:scaleX="0.58"
-        android:scaleY="0.58"
-        android:translateX="-5"
-        android:pivotX="54"
-        android:pivotY="54">
+        android:scaleX="2.85"
+        android:scaleY="2.85"
+        android:translateX="38"
+        android:translateY="38.75"
+        android:pivotX="16"
+        android:pivotY="15.25">
 
-        <!-- Handset -->
-        <group
-            android:scaleX="3.0"
-            android:scaleY="3.0"
-            android:translateX="18"
-            android:translateY="26">
-            <path
-                android:fillColor="#000000"
-                android:pathData="M6.62,10.79c1.44,2.83 3.76,5.14 6.59,6.59l2.2,-2.2c0.27,-0.27 0.67,-0.36 1.02,-0.24 1.12,0.37 2.33,0.57 3.57,0.57 0.55,0 1,0.45 1,1V20c0,0.55 -0.45,1 -1,1 -9.39,0 -17,-7.61 -17,-17 0,-0.55 0.45,-1 1,-1h3.5c0.55,0 1,0.45 1,1 0,1.25 0.2,2.45 0.57,3.57 0.11,0.35 0.03,0.74 -0.25,1.02l-2.2,2.2z" />
-        </group>
-
-        <!-- Badge ring (use a stroked outline so it's visually distinct as a separate element) -->
+        <!-- Left pillar -->
         <path
-            android:fillColor="#00000000"
-            android:strokeColor="#000000"
-            android:strokeWidth="3"
-            android:pathData="M80,28 m-13,0 a13,13 0 1,0 26,0 a13,13 0 1,0 -26,0" />
-
-        <!-- Check inside the badge -->
+            android:fillColor="#000000"
+            android:pathData="M12,9 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
         <path
-            android:fillColor="#00000000"
-            android:strokeColor="#000000"
-            android:strokeWidth="3"
-            android:strokeLineCap="round"
-            android:strokeLineJoin="round"
-            android:pathData="M73,28.5 L78,33.5 L87,22" />
+            android:fillColor="#000000"
+            android:pathData="M12,13.5 A3,3 0 0,1 15,16.5 L15,21.5 A3,3 0 0,1 12,24.5 A3,3 0 0,1 9,21.5 L9,16.5 A3,3 0 0,1 12,13.5 Z" />
+
+        <!-- Right pillar -->
+        <path
+            android:fillColor="#000000"
+            android:pathData="M20,9 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+        <path
+            android:fillColor="#000000"
+            android:pathData="M20,13.5 A3,3 0 0,1 23,16.5 L23,21.5 A3,3 0 0,1 20,24.5 A3,3 0 0,1 17,21.5 L17,16.5 A3,3 0 0,1 20,13.5 Z" />
     </group>
 </vector>

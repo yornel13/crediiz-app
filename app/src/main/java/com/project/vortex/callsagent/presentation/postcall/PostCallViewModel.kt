@@ -3,6 +3,7 @@ package com.project.vortex.callsagent.presentation.postcall
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.project.vortex.callsagent.common.BusinessConfig
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.FollowUpStatus
 import com.project.vortex.callsagent.common.enums.InterestLevel
@@ -103,7 +104,11 @@ data class PostCallUiState(
     private fun isFollowUpInFuture(): Boolean {
         val date = followUpDate ?: return false
         val time = followUpTime ?: return false
-        val instant = date.atTime(time).atZone(ZoneId.systemDefault()).toInstant()
+        // Business clock — see BusinessConfig. The picker captures a
+        // wall-clock moment ("2 pm tomorrow"); we MUST interpret that
+        // against Panama time, not the agent's device, so the future
+        // check matches what the backend will store.
+        val instant = date.atTime(time).atZone(BusinessConfig.BUSINESS_TIMEZONE).toInstant()
         return instant.isAfter(Instant.now())
     }
 }
@@ -196,7 +201,9 @@ class PostCallViewModel @Inject constructor(
         if (!state.canSave) return
         val outcome = state.selectedOutcome ?: return
         val interaction = state.interaction ?: return
-        val zone = ZoneId.systemDefault()
+        // Business clock everywhere — agent in Caracas picking "2 pm"
+        // means "2 pm Panama" (the client's wall-clock). See BusinessConfig.
+        val zone = BusinessConfig.BUSINESS_TIMEZONE
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, errorMessage = null) }
@@ -281,6 +288,27 @@ class PostCallViewModel @Inject constructor(
                         previous = InterestLevel.COLD,
                     )
                 }
+
+                // 6. Auto-close any past-due follow-ups for this client.
+                //    Policy (see FollowUpRepository.markPendingForClientCompleted):
+                //    a call that just happened satisfies the "llamar a este
+                //    cliente" obligation of every PENDING follow-up whose
+                //    scheduledAt is already past. Future-dated follow-ups
+                //    are preserved (they refer to a different intent).
+                //
+                //    Runs INSIDE the runCatching block so a DB failure here
+                //    aborts the save and the user can retry — leaving an
+                //    "Interaction saved but follow-up still PENDING" half-
+                //    state would silently re-surface this client on tomorrow's
+                //    agenda, exactly the bug we're closing.
+                //
+                //    The closed rows get completionSyncStatus = PENDING via
+                //    the DAO update, so the next sync push propagates the
+                //    closure to the backend automatically.
+                followUpRepository.markPendingForClientCompleted(
+                    clientId = clientId,
+                    asOf = Instant.now(),
+                )
             }
                 .onSuccess {
                     syncScheduler.triggerImmediateSync()

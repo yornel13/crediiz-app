@@ -97,6 +97,32 @@ interface FollowUpDao {
     )
     suspend fun markCompletedLocally(id: String, completedAt: Instant)
 
+    /**
+     * Auto-close every PENDING follow-up for [clientId] whose
+     * `scheduledAt` is at or before [asOf]. Called from PostCall.save()
+     * — the call we just persisted satisfies the "llamar a este
+     * cliente" obligation of any past-due follow-up.
+     *
+     * Future-dated follow-ups (`scheduledAt > asOf`) are deliberately
+     * left untouched: if the agent had agendado "llamar mañana" and
+     * llamó hoy por otro motivo, the future appointment is still
+     * meaningful.
+     *
+     * Returns the row count for telemetry / logging.
+     */
+    @Query(
+        """
+        UPDATE follow_ups
+        SET status = 'COMPLETED',
+            completedAt = :asOf,
+            completionSyncStatus = 'PENDING'
+        WHERE clientId = :clientId
+          AND status = 'PENDING'
+          AND scheduledAt <= :asOf
+        """,
+    )
+    suspend fun markPendingCompletedForClient(clientId: String, asOf: Instant): Int
+
     @Transaction
     suspend fun replaceAgenda(followUps: List<FollowUpEntity>) {
         deletePending()

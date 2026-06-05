@@ -29,10 +29,11 @@ import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.components.InterestLevelChip
 import com.project.vortex.callsagent.ui.components.StatusPill
+import androidx.compose.ui.res.pluralStringResource
+import com.project.vortex.callsagent.R
+import com.project.vortex.callsagent.presentation.common.relativePast
 import com.project.vortex.callsagent.ui.theme.label
 import com.project.vortex.callsagent.ui.theme.palette
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 
 /**
  * Outcome-led card variant for the Recientes view. Replaces the
@@ -94,7 +95,7 @@ fun RecentClientCard(
                 }
                 client.lastCalledAt?.let {
                     Text(
-                        text = formatRelative(it),
+                        text = relativePast(it),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Medium,
@@ -118,7 +119,11 @@ fun RecentClientCard(
                         Spacer(Modifier.width(8.dp))
                     }
                     Text(
-                        text = "${client.callAttempts} ${if (client.callAttempts == 1) "attempt" else "attempts"}",
+                        text = pluralStringResource(
+                            R.plurals.clients_attempts,
+                            client.callAttempts,
+                            client.callAttempts,
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -157,20 +162,5 @@ private fun OutcomeAvatar(name: String, outcome: CallOutcome?) {
         contentAlignment = Alignment.Center,
     ) {
         Avatar(name = name, size = 44.dp)
-    }
-}
-
-/**
- * Compact relative-time formatter aimed at the last-24h window.
- * "just now" / "12m ago" / "3h ago".
- */
-private fun formatRelative(instant: Instant): String {
-    val now = Instant.now()
-    val minutes = ChronoUnit.MINUTES.between(instant, now).coerceAtLeast(0)
-    return when {
-        minutes < 1 -> "just now"
-        minutes < 60 -> "${minutes}m ago"
-        minutes < 60 * 24 -> "${minutes / 60}h ago"
-        else -> "${minutes / (60 * 24)}d ago"
     }
 }

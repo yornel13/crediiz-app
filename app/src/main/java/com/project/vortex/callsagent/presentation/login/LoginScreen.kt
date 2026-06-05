@@ -1,5 +1,6 @@
 package com.project.vortex.callsagent.presentation.login
 
+import android.annotation.SuppressLint
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -16,9 +17,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -34,15 +40,24 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.project.vortex.callsagent.R
+import com.project.vortex.callsagent.ui.components.CrediizWordmark
 
 /**
  * Wire-level identifiers for the `reason` query arg. Mirrors
@@ -54,6 +69,10 @@ object LoginReason {
     const val EXPIRED = "EXPIRED"
 }
 
+// Snackbar text arrives from the ViewModel as a @StringRes at runtime, so it
+// must be resolved with context.getString inside the collector (no @Composable
+// scope there). The lint rule targets static resource reads, not this case.
+@SuppressLint("LocalContextGetResourceValueCall")
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
@@ -62,6 +81,10 @@ fun LoginScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Locale-overridden Activity Context — resolves the VM's @StringRes
+    // payloads in the language the agent picked in Settings.
+    val context = LocalContext.current
 
     LaunchedEffect(viewModel) {
         launch {
@@ -77,7 +100,7 @@ fun LoginScreen(
         launch {
             viewModel.snackbarMessages.collect { msg ->
                 snackbarHostState.showSnackbar(
-                    message = msg.text,
+                    message = context.getString(msg.textRes, *msg.args.toTypedArray()),
                     duration = SnackbarDuration.Short,
                 )
             }
@@ -125,13 +148,10 @@ fun LoginScreen(
                     .widthIn(max = formMaxWidth),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(
-                    text = "Calls Agent",
-                    style = MaterialTheme.typography.headlineLarge,
-                )
+                CrediizWordmark(fontSize = 36.sp)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Sign in to start working with your queue.",
+                    text = stringResource(R.string.login_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -145,7 +165,7 @@ fun LoginScreen(
                 OutlinedTextField(
                     value = state.email,
                     onValueChange = viewModel::onEmailChange,
-                    label = { Text("Email") },
+                    label = { Text(stringResource(R.string.login_email)) },
                     singleLine = true,
                     enabled = !state.isBusy,
                     keyboardOptions = KeyboardOptions(
@@ -157,13 +177,36 @@ fun LoginScreen(
 
                 Spacer(Modifier.height(12.dp))
 
+                var passwordVisible by rememberSaveable { mutableStateOf(false) }
                 OutlinedTextField(
                     value = state.password,
                     onValueChange = viewModel::onPasswordChange,
-                    label = { Text("Password") },
+                    label = { Text(stringResource(R.string.login_password)) },
                     singleLine = true,
                     enabled = !state.isBusy,
-                    visualTransformation = PasswordVisualTransformation(),
+                    visualTransformation = if (passwordVisible) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) {
+                                    Icons.Filled.VisibilityOff
+                                } else {
+                                    Icons.Filled.Visibility
+                                },
+                                contentDescription = stringResource(
+                                    if (passwordVisible) {
+                                        R.string.login_hide_password
+                                    } else {
+                                        R.string.login_show_password
+                                    },
+                                ),
+                            )
+                        }
+                    },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Password,
                         imeAction = ImeAction.Done,
@@ -205,7 +248,7 @@ fun LoginScreen(
                         )
                     } else {
                         Text(
-                            text = "Sign in",
+                            text = stringResource(R.string.login_sign_in),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                         )
@@ -216,7 +259,8 @@ fun LoginScreen(
                 if (state.isBusy) {
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        text = if (state.isHydrating) "Loading your queue..." else "Signing in...",
+                        text = if (state.isHydrating) stringResource(R.string.login_loading_queue)
+                        else stringResource(R.string.login_signing_in),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -238,11 +282,8 @@ private fun ReasonBanner(reason: String?) {
     if (reason.isNullOrBlank()) return
 
     val message = when (reason) {
-        LoginReason.INVALIDATED ->
-            "Tu sesión se cerró desde otro dispositivo o por el administrador. " +
-                "Vuelve a iniciar sesión."
-        LoginReason.EXPIRED ->
-            "Tu sesión expiró. Por favor inicia sesión nuevamente."
+        LoginReason.INVALIDATED -> stringResource(R.string.login_reason_invalidated)
+        LoginReason.EXPIRED -> stringResource(R.string.login_reason_expired)
         else -> return
     }
 

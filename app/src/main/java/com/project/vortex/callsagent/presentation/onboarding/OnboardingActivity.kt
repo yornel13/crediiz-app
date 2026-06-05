@@ -6,7 +6,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -17,6 +16,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.project.vortex.callsagent.MainActivity
+import com.project.vortex.callsagent.data.local.preferences.SettingsPreferences
+import com.project.vortex.callsagent.ui.locale.LocaleAwareActivity
 import com.project.vortex.callsagent.ui.theme.CallsAgendsTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -32,9 +33,10 @@ import javax.inject.Inject
  * any explicit action.
  */
 @AndroidEntryPoint
-class OnboardingActivity : ComponentActivity() {
+class OnboardingActivity : LocaleAwareActivity() {
 
     @Inject lateinit var gate: OnboardingGate
+    @Inject lateinit var settingsPreferences: SettingsPreferences
 
     private val viewModel: OnboardingViewModel by viewModels()
 
@@ -62,6 +64,7 @@ class OnboardingActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        observeLocaleChanges(settingsPreferences)
         enableEdgeToEdge()
 
         // Block back navigation — the user must complete onboarding to use the app.

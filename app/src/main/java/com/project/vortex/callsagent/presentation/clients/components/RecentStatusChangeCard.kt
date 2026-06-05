@@ -31,13 +31,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.project.vortex.callsagent.domain.model.AgentStatusChangeLocal
 import com.project.vortex.callsagent.domain.model.Client
+import androidx.compose.ui.res.stringResource
+import com.project.vortex.callsagent.R
+import com.project.vortex.callsagent.presentation.common.relativePast
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.components.InterestLevelChip
 import com.project.vortex.callsagent.ui.components.StatusPill
 import com.project.vortex.callsagent.ui.theme.label
 import com.project.vortex.callsagent.ui.theme.palette
-import java.time.Duration
-import java.time.Instant
 
 /**
  * Recientes row for an agent-driven status change that did NOT
@@ -85,7 +86,7 @@ fun RecentStatusChangeCard(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = "Cambio de estado · sin llamada",
+                    text = stringResource(R.string.recent_status_change_label),
                     style = MaterialTheme.typography.labelSmall,
                     color = palette.onContainer,
                     fontWeight = FontWeight.SemiBold,
@@ -122,7 +123,7 @@ fun RecentStatusChangeCard(
                     }
                 }
                 Text(
-                    text = formatRelative(change.timestamp),
+                    text = relativePast(change.timestamp),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium,
@@ -178,20 +179,5 @@ private fun StatusChangeAvatar(name: String) {
         contentAlignment = Alignment.Center,
     ) {
         Avatar(name = name, size = 40.dp)
-    }
-}
-
-/**
- * Lightweight Spanish relative-time formatter for the Recientes row.
- * Reused from RecentClientCard's local helper — keeping it private
- * here is fine, the strings are short.
- */
-private fun formatRelative(instant: Instant): String {
-    val diff = Duration.between(instant, Instant.now())
-    return when {
-        diff.toMinutes() < 1 -> "ahora"
-        diff.toMinutes() < 60 -> "hace ${diff.toMinutes()} min"
-        diff.toHours() < 24 -> "hace ${diff.toHours()} h"
-        else -> "ayer"
     }
 }

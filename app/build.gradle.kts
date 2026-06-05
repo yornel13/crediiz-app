@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -5,6 +7,22 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.android)
 }
+
+// Load release-signing material from local.properties (gitignored).
+// We intentionally do NOT hardcode keystore credentials in build files —
+// the .jks lives at `app/keystore/release.jks` (also gitignored) and the
+// passwords live next to `sdk.dir`. See `app/keystore/README.md` for the
+// disaster-recovery procedure if the keystore is ever lost.
+val signingProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val hasReleaseSigning: Boolean = listOf(
+    "RELEASE_STORE_FILE",
+    "RELEASE_STORE_PASSWORD",
+    "RELEASE_KEY_ALIAS",
+    "RELEASE_KEY_PASSWORD",
+).all { signingProps.getProperty(it)?.isNotBlank() == true }
 
 android {
     namespace = "com.project.vortex.callsagent"
@@ -31,7 +49,7 @@ android {
         buildConfigField(
             "String",
             "API_BASE_URL",
-            "\"https://crediiz-core-production.up.railway.app/api/\"",
+            "\"https://crediiz-core-production-6b02.up.railway.app/api/\"",
         )
 
         // SIP credentials are no longer baked at build-time. They come
@@ -40,18 +58,39 @@ android {
         // `docs/SESSION_AND_VOIP_INTEGRATION.md`.
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(signingProps.getProperty("RELEASE_STORE_FILE"))
+                storePassword = signingProps.getProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = signingProps.getProperty("RELEASE_KEY_ALIAS")
+                keyPassword = signingProps.getProperty("RELEASE_KEY_PASSWORD")
+                // PKCS12 is the modern default (Java 9+); enabling both
+                // v1 and v2 schemes ensures install compatibility on
+                // SDK 30+ tablets without warnings from PackageManager.
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
-            // Uncomment to use a local backend via Android emulator loopback.
-            // buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:3000/api/\"")
         }
         release {
+            isDebuggable = true
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            // Apply release signing if credentials exist in
+            // local.properties. CI / fresh clones without the keystore
+            // can still build (the APK will be unsigned).
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {

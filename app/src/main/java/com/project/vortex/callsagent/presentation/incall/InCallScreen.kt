@@ -52,9 +52,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.CallDirection
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.call.model.CallUiState
@@ -269,12 +271,12 @@ private fun InCallTabsLayout(
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
-                text = { Text("Llamada") },
+                text = { Text(stringResource(R.string.incall_tab_call)) },
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
-                text = { Text("Cliente") },
+                text = { Text(stringResource(R.string.incall_tab_client)) },
                 enabled = client != null,
             )
         }
@@ -365,34 +367,44 @@ private fun CallControlPanel(
             direction = direction,
             callState = callState,
         )
-        // Theme-color body. Notes textarea expands to fill available
-        // height; Mute/Speaker pinned right above the End CTA.
-        Column(
+        // Notes textarea — same shape as PostCall's "Nota" field and
+        // the textareas inside the bottom-sheets, so all four note
+        // surfaces feel like one component:
+        //  - `minLines = 4` → opens already as a multi-line box.
+        //  - `maxLines = 8` → grows up to ~8 lines before scrolling
+        //                     internally; never eats the whole panel.
+        //  - label includes "(opcional)" so the agent knows it's not
+        //    a required field.
+        //
+        // The `Spacer(weight=1f)` after the textfield pushes the
+        // Mute/Speaker row + End CTA against the bottom edge while
+        // keeping the textfield anchored just below the green hero —
+        // exactly mirroring PostCall's vertical rhythm.
+        OutlinedTextField(
+            value = liveNote,
+            onValueChange = onNoteChange,
+            label = { Text(stringResource(R.string.incall_note_label)) },
+            placeholder = { Text(stringResource(R.string.incall_note_placeholder)) },
             modifier = Modifier
-                .weight(1f)
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            OutlinedTextField(
-                value = liveNote,
-                onValueChange = onNoteChange,
-                label = { Text("Notas en vivo") },
-                placeholder = { Text("Captura lo que el cliente dice…") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                shape = RoundedCornerShape(20.dp),
-                enabled = callState !is CallUiState.Disconnected,
-            )
-            MuteSpeakerRow(
-                isMuted = isMuted,
-                isSpeakerOn = isSpeakerOn,
-                enabled = callState !is CallUiState.Disconnected,
-                onToggleMute = onToggleMute,
-                onToggleSpeaker = onToggleSpeaker,
-            )
-        }
+            shape = RoundedCornerShape(20.dp),
+            minLines = 4,
+            maxLines = 8,
+            enabled = callState !is CallUiState.Disconnected,
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        // Mute / Speaker controls — always visible, pinned right
+        // above the End CTA. See comment on the body Column for why
+        // they're NOT inside it.
+        MuteSpeakerRow(
+            isMuted = isMuted,
+            isSpeakerOn = isSpeakerOn,
+            enabled = callState !is CallUiState.Disconnected,
+            onToggleMute = onToggleMute,
+            onToggleSpeaker = onToggleSpeaker,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
         // Primary CTA at the bottom — symmetric to PostCall's Save
         // button (same position, same size, just red because the
         // action is destructive: terminate the call).
@@ -429,15 +441,15 @@ private fun CallActiveHero(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (direction == CallDirection.INBOUND) {
-            DirectionBadge(label = "INCOMING")
+            DirectionBadge(label = stringResource(R.string.incall_badge_incoming))
             Spacer(Modifier.height(8.dp))
         }
         Avatar(name = client?.name ?: "?", size = 56.dp)
         Spacer(Modifier.height(8.dp))
         Text(
             text = client?.name
-                ?: if (direction == CallDirection.INBOUND) "Unknown number"
-                else "Connecting...",
+                ?: if (direction == CallDirection.INBOUND) stringResource(R.string.incall_unknown_number)
+                else stringResource(R.string.incall_connecting),
             style = MaterialTheme.typography.titleLarge,
             color = Color.White,
             fontWeight = FontWeight.Bold,
@@ -469,9 +481,10 @@ private fun MuteSpeakerRow(
     enabled: Boolean,
     onToggleMute: () -> Unit,
     onToggleSpeaker: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -481,7 +494,7 @@ private fun MuteSpeakerRow(
             } else {
                 androidx.compose.material.icons.Icons.Filled.Mic
             },
-            label = if (isMuted) "Silencio" else "Mute",
+            label = stringResource(R.string.incall_control_mute),
             checked = isMuted,
             enabled = enabled,
             onClick = onToggleMute,
@@ -493,7 +506,7 @@ private fun MuteSpeakerRow(
             // deprecated in favour of the AutoMirrored variant for
             // RTL correctness.)
             icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.VolumeUp,
-            label = "Altavoz",
+            label = stringResource(R.string.incall_control_speaker),
             checked = isSpeakerOn,
             enabled = enabled,
             onClick = onToggleSpeaker,
@@ -536,7 +549,7 @@ private fun EndCallCta(enabled: Boolean, onClick: () -> Unit) {
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Colgar",
+                    text = stringResource(R.string.incall_hangup),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -576,7 +589,7 @@ private fun IncomingRingingContent(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "INCOMING CALL",
+                    text = stringResource(R.string.incall_incoming_call),
                     style = MaterialTheme.typography.labelMedium,
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
@@ -589,7 +602,7 @@ private fun IncomingRingingContent(
         Avatar(name = client?.name ?: "?", size = 112.dp)
         Spacer(Modifier.height(20.dp))
         Text(
-            text = client?.name ?: "Unknown number",
+            text = client?.name ?: stringResource(R.string.incall_unknown_number),
             style = MaterialTheme.typography.headlineMedium,
             color = Color.White,
             fontWeight = FontWeight.Bold,
@@ -611,13 +624,13 @@ private fun IncomingRingingContent(
         ) {
             CircleActionButton(
                 icon = Icons.Filled.CallEnd,
-                label = "Reject",
+                label = stringResource(R.string.incall_reject),
                 color = MaterialTheme.colorScheme.error,
                 onClick = onReject,
             )
             CircleActionButton(
                 icon = Icons.Filled.Call,
-                label = "Accept",
+                label = stringResource(R.string.incall_accept),
                 color = PhoneGreen,
                 onClick = onAccept,
             )
@@ -682,11 +695,11 @@ private fun DirectionBadge(label: String) {
 @Composable
 private fun StatusAndTimer(state: CallUiState) {
     val statusLabel = when (state) {
-        CallUiState.Idle -> "Idle"
-        CallUiState.Dialing -> "Dialing"
-        CallUiState.Ringing -> "Ringing"
-        is CallUiState.Active -> "Connected"
-        CallUiState.Disconnected -> "Call ended"
+        CallUiState.Idle -> stringResource(R.string.incall_status_idle)
+        CallUiState.Dialing -> stringResource(R.string.incall_status_dialing)
+        CallUiState.Ringing -> stringResource(R.string.incall_status_ringing)
+        is CallUiState.Active -> stringResource(R.string.incall_status_connected)
+        CallUiState.Disconnected -> stringResource(R.string.incall_status_call_ended)
     }
 
     Surface(

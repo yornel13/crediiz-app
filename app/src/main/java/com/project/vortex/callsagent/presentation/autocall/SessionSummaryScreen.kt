@@ -41,9 +41,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.ui.theme.Amber600
 import com.project.vortex.callsagent.ui.theme.Emerald600
 import com.project.vortex.callsagent.ui.theme.Rose600
@@ -97,7 +99,7 @@ fun SessionSummaryScreen(
                 ),
             ) {
                 Text(
-                    text = "Done",
+                    text = stringResource(R.string.autocall_done),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -110,7 +112,7 @@ fun SessionSummaryScreen(
 private fun HeroBlock(stats: AutoCallSessionStats?) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "Session complete",
+            text = stringResource(R.string.autocall_session_complete),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.SemiBold,
@@ -125,7 +127,7 @@ private fun HeroBlock(stats: AutoCallSessionStats?) {
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = "of ${stats?.total ?: 0} processed",
+                text = stringResource(R.string.autocall_of_processed, stats?.total ?: 0),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 8.dp),
@@ -142,14 +144,14 @@ private fun StatGrid(stats: AutoCallSessionStats) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             StatCard(
-                label = "Interested",
+                label = stringResource(R.string.autocall_stat_interested),
                 value = stats.interested,
                 icon = Icons.Filled.CheckCircle,
                 color = Emerald600,
                 modifier = Modifier.weight(1f),
             )
             StatCard(
-                label = "Not interested",
+                label = stringResource(R.string.autocall_stat_not_interested),
                 value = stats.notInterested,
                 icon = Icons.Filled.Close,
                 color = Rose600,
@@ -161,14 +163,14 @@ private fun StatGrid(stats: AutoCallSessionStats) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             StatCard(
-                label = "No answer",
+                label = stringResource(R.string.autocall_stat_no_answer),
                 value = stats.noAnswer,
                 icon = Icons.AutoMirrored.Filled.PhoneMissed,
                 color = Amber600,
                 modifier = Modifier.weight(1f),
             )
             StatCard(
-                label = "Busy",
+                label = stringResource(R.string.autocall_stat_busy),
                 value = stats.busy,
                 icon = Icons.Filled.Phone,
                 color = Amber600,
@@ -180,14 +182,14 @@ private fun StatGrid(stats: AutoCallSessionStats) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             StatCard(
-                label = "Wrong #",
+                label = stringResource(R.string.autocall_stat_wrong_number),
                 value = stats.wrongNumber,
                 icon = Icons.Filled.QuestionMark,
                 color = Rose600,
                 modifier = Modifier.weight(1f),
             )
             StatCard(
-                label = "Skipped",
+                label = stringResource(R.string.autocall_stat_skipped),
                 value = stats.skipped,
                 icon = Icons.Filled.SkipNext,
                 color = Slate600,
@@ -262,7 +264,7 @@ private fun DurationCard(startedAt: Instant) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Session duration",
+                    text = stringResource(R.string.autocall_session_duration),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
                     fontWeight = FontWeight.SemiBold,

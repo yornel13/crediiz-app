@@ -29,8 +29,14 @@ object DatabaseModule {
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME,
         )
-            // For MVP: destructive migration on schema change. Replace with real migrations later.
-            .fallbackToDestructiveMigration()
+            // **No `fallbackToDestructiveMigration()`** — production
+            // policy. v1.0 ships starting from a clean Room schema on
+            // every fresh install; we never bump `@Database.version`
+            // without writing an explicit `Migration`. If a schema
+            // mismatch ever happens at runtime, Room throws
+            // `IllegalStateException` on first open — that's the
+            // intended fail-fast signal during QA, not silent data
+            // wipe in the field.
             .build()
 
     @Provides fun provideClientDao(db: AppDatabase): ClientDao = db.clientDao()

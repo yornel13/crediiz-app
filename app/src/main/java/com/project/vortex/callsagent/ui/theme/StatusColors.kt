@@ -13,6 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.common.enums.InterestLevel
@@ -69,9 +71,9 @@ fun InterestLevel.palette(): StatusPalette = when (this) {
 @Composable
 @ReadOnlyComposable
 fun InterestLevel.label(): String = when (this) {
-    InterestLevel.COLD -> "Frío"
-    InterestLevel.WARM -> "Tibio"
-    InterestLevel.HOT -> "Caliente"
+    InterestLevel.COLD -> stringResource(R.string.enum_interest_cold)
+    InterestLevel.WARM -> stringResource(R.string.enum_interest_warm)
+    InterestLevel.HOT -> stringResource(R.string.enum_interest_hot)
 }
 
 /** Single-glyph emoji shorthand for compact badges (lists / agenda). */
@@ -88,31 +90,37 @@ fun NoteType.palette(): StatusPalette = when (this) {
     NoteType.POST_CALL -> successPalette()
     NoteType.MANUAL -> neutralPalette()
     NoteType.FOLLOW_UP -> infoPalette()
+    // Server-side auto-Notes — mobile currently does not render these
+    // (the local Note feed is agent-authored only) but the enum needs
+    // exhaustive coverage. Fall back to the neutral palette so any
+    // unexpected render is at least readable.
+    NoteType.STATUS_CHANGE -> neutralPalette()
+    NoteType.DISMISSAL -> neutralPalette()
 }
 
 @Composable
 @ReadOnlyComposable
 fun ClientStatus.label(): String = when (this) {
-    ClientStatus.PENDING -> "Pending"
-    ClientStatus.IN_PROGRESS -> "In progress"
-    ClientStatus.INTERESTED -> "Interested"
-    ClientStatus.REJECTED -> "Rejected"
-    ClientStatus.UNREACHABLE -> "Unreachable"
-    ClientStatus.CONVERTED -> "Converted"
-    ClientStatus.DO_NOT_CALL -> "Do not call"
-    ClientStatus.DISMISSED -> "Dismissed"
+    ClientStatus.PENDING -> stringResource(R.string.enum_status_pending)
+    ClientStatus.IN_PROGRESS -> stringResource(R.string.enum_status_in_progress)
+    ClientStatus.INTERESTED -> stringResource(R.string.enum_status_interested)
+    ClientStatus.REJECTED -> stringResource(R.string.enum_status_rejected)
+    ClientStatus.UNREACHABLE -> stringResource(R.string.enum_status_unreachable)
+    ClientStatus.CONVERTED -> stringResource(R.string.enum_status_converted)
+    ClientStatus.DO_NOT_CALL -> stringResource(R.string.enum_status_do_not_call)
+    ClientStatus.DISMISSED -> stringResource(R.string.enum_status_dismissed)
 }
 
 @Composable
 @ReadOnlyComposable
 fun CallOutcome.label(): String = when (this) {
-    CallOutcome.ANSWERED_INTERESTED -> "Interested"
-    CallOutcome.ANSWERED_NOT_INTERESTED -> "Not interested"
-    CallOutcome.ANSWERED_OPT_OUT -> "Opt-out"
-    CallOutcome.ANSWERED_SOLD -> "Sold"
-    CallOutcome.NO_ANSWER -> "No answer"
-    CallOutcome.BUSY -> "Busy"
-    CallOutcome.WRONG_NUMBER -> "Wrong number"
+    CallOutcome.ANSWERED_INTERESTED -> stringResource(R.string.enum_outcome_interested)
+    CallOutcome.ANSWERED_NOT_INTERESTED -> stringResource(R.string.enum_outcome_not_interested)
+    CallOutcome.ANSWERED_OPT_OUT -> stringResource(R.string.enum_outcome_opt_out)
+    CallOutcome.ANSWERED_SOLD -> stringResource(R.string.enum_outcome_sold)
+    CallOutcome.NO_ANSWER -> stringResource(R.string.enum_outcome_no_answer)
+    CallOutcome.BUSY -> stringResource(R.string.enum_outcome_busy)
+    CallOutcome.WRONG_NUMBER -> stringResource(R.string.enum_outcome_wrong_number)
 }
 
 /**
@@ -149,10 +157,13 @@ val CallOutcome.isAnswered: Boolean
 @Composable
 @ReadOnlyComposable
 fun NoteType.label(): String = when (this) {
-    NoteType.CALL -> "During call"
-    NoteType.POST_CALL -> "Post-call"
-    NoteType.MANUAL -> "Manual"
-    NoteType.FOLLOW_UP -> "Follow-up"
+    NoteType.CALL -> stringResource(R.string.enum_note_call)
+    NoteType.POST_CALL -> stringResource(R.string.enum_note_post_call)
+    NoteType.MANUAL -> stringResource(R.string.enum_note_manual)
+    NoteType.FOLLOW_UP -> stringResource(R.string.enum_note_follow_up)
+    // Server-side auto-Notes — see palette() above.
+    NoteType.STATUS_CHANGE -> stringResource(R.string.enum_note_status_change)
+    NoteType.DISMISSAL -> stringResource(R.string.enum_note_dismissal)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

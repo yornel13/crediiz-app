@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.annotation.StringRes
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -45,8 +46,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.ui.theme.Emerald600
 import com.project.vortex.callsagent.ui.theme.PhoneGreen
 
@@ -97,15 +100,14 @@ fun OnboardingScreen(
 private fun Hero() {
     Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp)) {
         Text(
-            text = "Set up Calls Agent",
+            text = stringResource(R.string.onboarding_hero_title),
             style = MaterialTheme.typography.displaySmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "We need a few permissions to place and receive calls. " +
-                "Grant them all to continue.",
+            text = stringResource(R.string.onboarding_hero_subtitle),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -115,7 +117,7 @@ private fun Hero() {
 @Composable
 private fun SubtitleBlock() {
     Text(
-        text = "Required permissions",
+        text = stringResource(R.string.onboarding_required_permissions),
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontWeight = FontWeight.SemiBold,
@@ -167,18 +169,18 @@ private fun StepCard(
                 modifier = Modifier.weight(1f).padding(start = 12.dp),
             ) {
                 Text(
-                    text = info.title,
+                    text = stringResource(info.titleRes),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = info.description,
+                    text = stringResource(info.descriptionRes),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (hardDenied && !granted) {
                     Text(
-                        text = "Denied — open Settings to grant.",
+                        text = stringResource(R.string.onboarding_permission_denied),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.Medium,
@@ -189,7 +191,7 @@ private fun StepCard(
             Spacer(Modifier.height(0.dp))
             if (granted) {
                 Text(
-                    text = "Granted",
+                    text = stringResource(R.string.onboarding_granted),
                     style = MaterialTheme.typography.labelMedium,
                     color = Emerald600,
                     fontWeight = FontWeight.Bold,
@@ -201,7 +203,10 @@ private fun StepCard(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 ) {
                     Text(
-                        text = if (hardDenied) "Settings" else "Allow",
+                        text = stringResource(
+                            if (hardDenied) R.string.onboarding_settings
+                            else R.string.onboarding_allow
+                        ),
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -227,7 +232,10 @@ private fun ContinueButton(enabled: Boolean, onClick: () -> Unit) {
         ),
     ) {
         Text(
-            text = if (enabled) "Continue" else "Grant all permissions to continue",
+            text = stringResource(
+                if (enabled) R.string.common_continue
+                else R.string.onboarding_continue_disabled
+            ),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
         )
@@ -235,33 +243,30 @@ private fun ContinueButton(enabled: Boolean, onClick: () -> Unit) {
 }
 
 private data class StepInfo(
-    val title: String,
-    val description: String,
+    @StringRes val titleRes: Int,
+    @StringRes val descriptionRes: Int,
     val icon: ImageVector,
 )
 
 private fun OnboardingStep.info(): StepInfo = when (this) {
     OnboardingStep.RECORD_AUDIO -> StepInfo(
-        title = "Microphone access",
-        description = "Required so the agent's voice reaches the client during " +
-            "SIP calls.",
+        titleRes = R.string.onboarding_step_microphone_title,
+        descriptionRes = R.string.onboarding_step_microphone_description,
         icon = Icons.Filled.Mic,
     )
     OnboardingStep.MODIFY_AUDIO_SETTINGS -> StepInfo(
-        title = "Manage audio",
-        description = "Used to route calls to the speaker so you can take notes " +
-            "hands-free.",
+        titleRes = R.string.onboarding_step_audio_title,
+        descriptionRes = R.string.onboarding_step_audio_description,
         icon = Icons.Filled.Mic,
     )
     OnboardingStep.NOTIFICATIONS -> StepInfo(
-        title = "Show notifications",
-        description = "For follow-up reminders and the in-call notification.",
+        titleRes = R.string.onboarding_step_notifications_title,
+        descriptionRes = R.string.onboarding_step_notifications_description,
         icon = Icons.Filled.Notifications,
     )
     OnboardingStep.BATTERY_OPTIMIZATION -> StepInfo(
-        title = "Run in the background",
-        description = "Prevents the system from killing the call service " +
-            "during long shifts.",
+        titleRes = R.string.onboarding_step_battery_title,
+        descriptionRes = R.string.onboarding_step_battery_description,
         icon = Icons.Filled.BatteryFull,
     )
 }

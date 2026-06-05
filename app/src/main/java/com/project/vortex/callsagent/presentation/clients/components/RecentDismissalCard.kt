@@ -33,9 +33,10 @@ import androidx.compose.ui.unit.dp
 import com.project.vortex.callsagent.common.enums.DismissalReasonCode
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.ClientDismissal
+import androidx.compose.ui.res.stringResource
+import com.project.vortex.callsagent.R
+import com.project.vortex.callsagent.presentation.common.relativePast
 import com.project.vortex.callsagent.ui.components.Avatar
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 
 /**
  * Card variant for a recently dismissed client. Distinct from the
@@ -85,7 +86,7 @@ fun RecentDismissalCard(
                     )
                 }
                 Text(
-                    text = formatRelative(dismissal.dismissedAt),
+                    text = relativePast(dismissal.dismissedAt),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Medium,
@@ -101,7 +102,7 @@ fun RecentDismissalCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "DISMISSED",
+                        text = stringResource(R.string.recent_dismissed_badge),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Bold,
@@ -127,7 +128,7 @@ fun RecentDismissalCard(
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(Modifier.width(6.dp))
-                    Text("Undo dismissal", style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(R.string.recent_undo_dismissal), style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
@@ -163,26 +164,16 @@ private fun DismissedAvatar(name: String) {
     }
 }
 
+@Composable
 private fun displayReason(dismissal: ClientDismissal): String? {
-    val codeLabel = dismissal.reasonCode?.let { code ->
-        runCatching { DismissalReasonCode.valueOf(code).label }.getOrNull()
-    }
+    val codeLabel = dismissal.reasonCode
+        ?.let { code -> runCatching { DismissalReasonCode.valueOf(code) }.getOrNull() }
+        ?.let { stringResource(it.labelRes) }
     val free = dismissal.reason?.takeIf { it.isNotBlank() }
     return when {
         codeLabel != null && free != null -> "$codeLabel — $free"
         codeLabel != null -> codeLabel
         free != null -> "\"$free\""
         else -> null
-    }
-}
-
-private fun formatRelative(instant: Instant): String {
-    val now = Instant.now()
-    val minutes = ChronoUnit.MINUTES.between(instant, now).coerceAtLeast(0)
-    return when {
-        minutes < 1 -> "just now"
-        minutes < 60 -> "${minutes}m ago"
-        minutes < 60 * 24 -> "${minutes / 60}h ago"
-        else -> "${minutes / (60 * 24)}d ago"
     }
 }

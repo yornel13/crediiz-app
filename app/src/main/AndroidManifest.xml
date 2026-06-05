@@ -42,6 +42,7 @@
 
         <activity
             android:name=".MainActivity"
+            android:configChanges="locale|layoutDirection"
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.CallsAgends"
@@ -66,6 +67,7 @@
         <!-- Mandatory onboarding gate — non-skippable while requirements are missing. -->
         <activity
             android:name=".presentation.onboarding.OnboardingActivity"
+            android:configChanges="locale|layoutDirection"
             android:exported="false"
             android:noHistory="true"
             android:excludeFromRecents="true"
@@ -77,6 +79,7 @@
              system orientation — no lock. -->
         <activity
             android:name=".presentation.incall.InCallActivity"
+            android:configChanges="locale|layoutDirection"
             android:exported="false"
             android:launchMode="singleTask"
             android:showWhenLocked="true"

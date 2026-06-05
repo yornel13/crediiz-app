@@ -8,12 +8,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -27,6 +33,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import com.project.vortex.callsagent.ui.components.FullHeightBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -40,9 +47,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.annotation.StringRes
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.ui.components.InterestLevelSelector
@@ -110,17 +120,22 @@ fun AgentStatusChangeSheet(
     val reasonProvided = effectiveReason.isNotBlank()
     val canConfirm = selectedStatus != null && (!reasonRequired || reasonProvided)
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    FullHeightBottomSheet(onDismissRequest = onDismiss) {
+        // Outer column owns the full sheet height. Body scrolls;
+        // Cancel/Confirm row stays pinned at the bottom so the
+        // agent never loses the CTAs while filling a long reason.
+        Column(modifier = Modifier.fillMaxHeight()) {
         Column(
             modifier = Modifier
+                .weight(1f)
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "Cambiar estado sin llamar",
+                    text = stringResource(R.string.status_change_title),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -130,8 +145,7 @@ fun AgentStatusChangeSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = "Usa esta acción para canales externos (WhatsApp, " +
-                        "presencial, etc.). Queda registrado en el historial.",
+                    text = stringResource(R.string.status_change_subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -139,7 +153,7 @@ fun AgentStatusChangeSheet(
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "Nuevo estado",
+                    text = stringResource(R.string.status_change_new_status_label),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -188,18 +202,27 @@ fun AgentStatusChangeSheet(
             //  - the agent picked "Other", or
             //  - there are no quick reasons for this status (e.g. INTERESTED).
             if (usingFreeText) {
+                // Textarea — `minLines = 4` opens it as a multi-line
+                // box so the agent immediately sees it's a notes field
+                // (not a single-line input). `maxLines = 8` is enough
+                // for any reasonable opt-out justification.
                 OutlinedTextField(
                 value = reason,
                 onValueChange = { if (it.length <= MAX_REASON_CHARS) reason = it },
                 label = {
-                    Text(if (reasonRequired) "Motivo *" else "Motivo (opcional)")
+                    Text(
+                        if (reasonRequired) {
+                            stringResource(R.string.status_change_reason_label_required)
+                        } else {
+                            stringResource(R.string.status_change_reason_label_optional)
+                        },
+                    )
                 },
-                placeholder = { Text("Ej: Cliente lo solicitó por WhatsApp") },
+                placeholder = { Text(stringResource(R.string.status_change_reason_placeholder)) },
                 isError = reasonRequired && !reasonProvided,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 88.dp),
-                maxLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 4,
+                maxLines = 8,
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.Sentences,
                 ),
@@ -210,9 +233,9 @@ fun AgentStatusChangeSheet(
                     ) {
                         Text(
                             text = if (reasonRequired && !reasonProvided) {
-                                "Obligatorio para este estado"
+                                stringResource(R.string.status_change_reason_required_for_status)
                             } else if (reasonRequired) {
-                                "Motivo obligatorio"
+                                stringResource(R.string.status_change_reason_required_hint)
                             } else {
                                 ""
                             },
@@ -224,7 +247,11 @@ fun AgentStatusChangeSheet(
                             },
                         )
                         Text(
-                            text = "${reason.length} / $MAX_REASON_CHARS",
+                            text = stringResource(
+                                R.string.status_change_char_counter,
+                                reason.length,
+                                MAX_REASON_CHARS,
+                            ),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -233,14 +260,19 @@ fun AgentStatusChangeSheet(
             )
             }
 
+        }
+            // ─── Sticky footer ──────────────────────────────────────
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .windowInsetsPadding(WindowInsets.navigationBars),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedButton(
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
-                ) { Text("Cancelar") }
+                ) { Text(stringResource(R.string.common_cancel)) }
                 Button(
                     onClick = {
                         val status = selectedStatus ?: return@Button
@@ -255,7 +287,7 @@ fun AgentStatusChangeSheet(
                     },
                     enabled = canConfirm,
                     modifier = Modifier.weight(1f),
-                ) { Text("Confirmar") }
+                ) { Text(stringResource(R.string.status_change_action_confirm)) }
             }
         }
     }
@@ -305,7 +337,7 @@ private fun DestinationRow(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = destination.description,
+                    text = stringResource(destination.descriptionRes),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -327,7 +359,7 @@ private fun QuickReasonGroup(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
-            text = "Motivo rápido",
+            text = stringResource(R.string.status_change_quick_reason_label),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -340,7 +372,7 @@ private fun QuickReasonGroup(
             )
         }
         QuickReasonRow(
-            label = "Otro: escribir abajo",
+            label = stringResource(R.string.status_change_quick_reason_other),
             selected = selected == QUICK_REASON_OTHER,
             onClick = { onSelect(QUICK_REASON_OTHER) },
         )
@@ -409,29 +441,29 @@ private fun destinationsFor(currentStatus: ClientStatus): List<Destination> =
 
 private data class Destination(
     val status: ClientStatus,
-    val description: String,
+    @StringRes val descriptionRes: Int,
     val icon: ImageVector,
 )
 
 private val ALL_DESTINATIONS: List<Destination> = listOf(
     Destination(
         status = ClientStatus.INTERESTED,
-        description = "Mostró interés por otro canal (WhatsApp, etc.)",
+        descriptionRes = R.string.status_change_dest_interested_desc,
         icon = Icons.Filled.SentimentSatisfied,
     ),
     Destination(
         status = ClientStatus.CONVERTED,
-        description = "Cerró la venta por otro canal.",
+        descriptionRes = R.string.status_change_dest_converted_desc,
         icon = Icons.Filled.MonetizationOn,
     ),
     Destination(
         status = ClientStatus.REJECTED,
-        description = "Dijo que no por otro canal.",
+        descriptionRes = R.string.status_change_dest_rejected_desc,
         icon = Icons.Filled.SentimentDissatisfied,
     ),
     Destination(
         status = ClientStatus.DO_NOT_CALL,
-        description = "Pidió no volver a ser contactado (opt-out).",
+        descriptionRes = R.string.status_change_dest_do_not_call_desc,
         icon = Icons.Filled.Block,
     ),
 )

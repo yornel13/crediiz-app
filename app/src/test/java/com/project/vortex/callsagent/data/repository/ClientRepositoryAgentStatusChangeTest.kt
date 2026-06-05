@@ -285,6 +285,15 @@ class ClientRepositoryAgentStatusChangeTest {
             newStatus: ClientStatus,
             now: Instant,
         ) {}
+        // Added when ClientDao.refineOutcomeAndStatus shipped — this fake
+        // is for the agent-status-change tests, which don't exercise the
+        // PostCall refine path, so a noop matches the rest of the stubs.
+        override suspend fun refineOutcomeAndStatus(
+            clientId: String,
+            outcome: CallOutcome,
+            newStatus: ClientStatus,
+            now: Instant,
+        ) {}
         override suspend fun updateLastNote(clientId: String, note: String, now: Instant) {}
     }
 

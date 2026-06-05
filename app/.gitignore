@@ -1,1 +1,13 @@
 /build
+
+# Release signing material — never commit. Back this up manually
+# in a password manager / secure storage. Losing it = bricked
+# updates on the tablet fleet (no Play Store fallback for our
+# enterprise distribution).
+# Ignore the contents of keystore/ but NOT the directory itself, so the
+# next `!` rule can re-include the disaster-recovery README. Using
+# `/keystore/` (a directory pattern) would short-circuit the negation.
+/keystore/*
+!/keystore/README.md
+*.jks
+*.keystore

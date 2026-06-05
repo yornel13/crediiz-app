@@ -10,6 +10,7 @@ import com.project.vortex.callsagent.domain.repository.AuthRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
 import com.project.vortex.callsagent.domain.repository.InteractionRepository
 import com.project.vortex.callsagent.domain.repository.NoteRepository
+import com.project.vortex.callsagent.ui.locale.AppLanguage
 import com.project.vortex.callsagent.ui.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
@@ -32,6 +33,7 @@ data class SettingsUiState(
     val lastSync: SyncResult = SyncResult.Idle,
     val isSyncing: Boolean = false,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val keepScreenOn: Boolean = false,
     val showFullActivityHistory: Boolean = true,
 )
@@ -67,6 +69,7 @@ class SettingsViewModel @Inject constructor(
         settingsPreferences.autoCallDelayFlow,
         settingsPreferences.keepScreenOnFlow,
         settingsPreferences.showFullActivityHistoryFlow,
+        settingsPreferences.appLanguageFlow,
     ) { values ->
         SettingsUiState(
             agentName = (values[0] as String?).orEmpty(),
@@ -79,6 +82,7 @@ class SettingsViewModel @Inject constructor(
             autoCallDelaySeconds = values[7] as Int,
             keepScreenOn = values[8] as Boolean,
             showFullActivityHistory = values[9] as Boolean,
+            appLanguage = values[10] as AppLanguage,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -100,6 +104,10 @@ class SettingsViewModel @Inject constructor(
 
     fun onThemeModeChange(mode: ThemeMode) {
         viewModelScope.launch { settingsPreferences.setThemeMode(mode) }
+    }
+
+    fun onAppLanguageChange(language: AppLanguage) {
+        viewModelScope.launch { settingsPreferences.setAppLanguage(language) }
     }
 
     fun onKeepScreenOnToggle(enabled: Boolean) {

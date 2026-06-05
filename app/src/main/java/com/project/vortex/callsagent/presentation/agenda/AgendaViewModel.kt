@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
+import com.project.vortex.callsagent.common.BusinessConfig
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
@@ -158,8 +159,12 @@ class AgendaViewModel @Inject constructor(
     }
 
     private fun startOfToday(): Instant =
-        LocalDate.now()
-            .atStartOfDay(ZoneId.systemDefault())
+        // "Today" = business calendar day, not the agent's calendar.
+        // An agent in Caracas at 23:30 is already on "tomorrow"
+        // locally, but the agenda's Today bucket must still mean the
+        // Panama business day. See BusinessConfig.
+        LocalDate.now(BusinessConfig.BUSINESS_TIMEZONE)
+            .atStartOfDay(BusinessConfig.BUSINESS_TIMEZONE)
             .toInstant()
 
     private fun buildSections(
@@ -183,8 +188,13 @@ class AgendaViewModel @Inject constructor(
     }
 
     private fun groupFollowUpsByDate(items: List<FollowUp>): Map<AgendaSection, List<FollowUp>> {
-        val zone = ZoneId.systemDefault()
-        val today = LocalDate.now()
+        // Bucket by the BUSINESS calendar day, not the agent's device
+        // day. A follow-up scheduled for "23 May 23:00 Panama" must
+        // appear in the Today bucket for both Panama and Venezuelan
+        // agents — under device TZ the Caracas agent would see it as
+        // "Tomorrow" (Caracas 00:00 next day). See BusinessConfig.
+        val zone = BusinessConfig.BUSINESS_TIMEZONE
+        val today = LocalDate.now(zone)
         val tomorrow = today.plusDays(1)
         val endOfWeek = today.plusDays(6) // today + 6 more days = "this week"
 
@@ -211,8 +221,12 @@ val Map<AgendaSection, List<AgendaItem>>.todayCount: Int
 val Map<AgendaSection, List<AgendaItem>>.unscheduledCount: Int
     get() = this[AgendaSection.UNSCHEDULED]?.size ?: 0
 
-/** Count of days between now and an instant, for relative display. */
-fun Instant.daysFromNow(zone: ZoneId = ZoneId.systemDefault()): Long {
+/**
+ * Count of days between now and an instant, for relative display.
+ * Defaults to the business clock so "2 days from now" means the same
+ * thing for every agent regardless of where they sit. See BusinessConfig.
+ */
+fun Instant.daysFromNow(zone: ZoneId = BusinessConfig.BUSINESS_TIMEZONE): Long {
     val today = LocalDate.now(zone)
     val target = this.atZone(zone).toLocalDate()
     return ChronoUnit.DAYS.between(today, target)

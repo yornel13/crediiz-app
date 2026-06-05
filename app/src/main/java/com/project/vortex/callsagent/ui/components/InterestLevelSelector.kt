@@ -16,11 +16,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.InterestLevel
-import com.project.vortex.callsagent.ui.theme.emoji
 import com.project.vortex.callsagent.ui.theme.label
 import com.project.vortex.callsagent.ui.theme.palette
 
@@ -49,7 +50,7 @@ fun InterestLevelSelector(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            text = "Nivel de interés",
+            text = stringResource(R.string.interest_level_header),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -78,8 +79,14 @@ private fun LevelChip(
     modifier: Modifier = Modifier,
 ) {
     val palette = level.palette()
-    val borderColor = if (selected) palette.onContainer else MaterialTheme.colorScheme.outlineVariant
-    val container = if (selected) palette.container else MaterialTheme.colorScheme.surface
+    // The level's brand color always paints the border — that's
+    // what tells the agent "this row is COLD/WARM/HOT" without
+    // needing the 🟦🟧🟥 emoji squares (which looked tacky inside
+    // a rounded chip). Selection adds a thicker border + a tinted
+    // fill so the active chip clearly wins visually.
+    val container =
+        if (selected) palette.container else MaterialTheme.colorScheme.surface
+    val borderWidth = if (selected) 2.5.dp else 1.5.dp
 
     Surface(
         modifier = modifier
@@ -87,27 +94,19 @@ private fun LevelChip(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
         color = container,
-        border = BorderStroke(
-            width = if (selected) 2.dp else 1.dp,
-            color = borderColor,
-        ),
+        border = BorderStroke(width = borderWidth, color = palette.onContainer),
     ) {
         Column(
             modifier = Modifier
                 .background(container)
-                .padding(vertical = 12.dp, horizontal = 8.dp),
+                .padding(vertical = 16.dp, horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
-                text = level.emoji(),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text(
                 text = level.label(),
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-                color = if (selected) palette.onContainer else MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                color = palette.onContainer,
                 textAlign = TextAlign.Center,
             )
         }
