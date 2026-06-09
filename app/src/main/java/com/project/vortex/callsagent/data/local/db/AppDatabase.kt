@@ -3,7 +3,6 @@ package com.project.vortex.callsagent.data.local.db
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import com.project.vortex.callsagent.data.local.entity.ClientDismissalEntity
 import com.project.vortex.callsagent.data.local.entity.ClientEntity
 import com.project.vortex.callsagent.data.local.entity.FollowUpEntity
 import com.project.vortex.callsagent.data.local.entity.InteractionEntity
@@ -18,10 +17,9 @@ import com.project.vortex.callsagent.data.local.entity.NoteEntity
         NoteEntity::class,
         FollowUpEntity::class,
         MissedCallEntity::class,
-        ClientDismissalEntity::class,
         LocalAgentStatusChangeEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -31,7 +29,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
     abstract fun followUpDao(): FollowUpDao
     abstract fun missedCallDao(): MissedCallDao
-    abstract fun clientDismissalDao(): ClientDismissalDao
     abstract fun localAgentStatusChangeDao(): LocalAgentStatusChangeDao
 
     companion object {

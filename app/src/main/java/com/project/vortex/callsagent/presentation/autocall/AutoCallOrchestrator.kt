@@ -263,7 +263,7 @@ class AutoCallOrchestrator @Inject constructor(
 
     /**
      * Auto-advance policy: the countdown fires after every outcome
-     * **except** [CallOutcome.ANSWERED_SOLD]. A closed sale is the
+     * **except** [CallOutcome.SOLD]. A closed sale is the
      * funnel's terminal state (`HOW_IT_WORKS.md §5`) and the agent
      * deserves a beat to confirm details before moving on — auto-
      * dialing the next client right after a "💰 Sold" tap feels
@@ -277,7 +277,7 @@ class AutoCallOrchestrator @Inject constructor(
      * Auto-advance policy — currently **always true** as long as the
      * agent has the global `Auto-advance` switch enabled in Settings.
      *
-     * Previous behavior excluded [CallOutcome.ANSWERED_SOLD] from the
+     * Previous behavior excluded [CallOutcome.SOLD] from the
      * countdown to give the agent a beat after closing a sale, but
      * agent feedback was clear: when auto-call is ON, the expectation
      * is "always jump to the next client, until the queue ends". Any

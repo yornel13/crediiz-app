@@ -2,10 +2,11 @@ package com.project.vortex.callsagent.domain.repository
 
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
-import com.project.vortex.callsagent.common.enums.InterestLevel
+import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.domain.error.ClientError
 import com.project.vortex.callsagent.domain.model.AgentStatusChangeLocal
 import com.project.vortex.callsagent.domain.model.Client
+import com.project.vortex.callsagent.domain.model.ClientStatusChange
 import com.project.vortex.callsagent.domain.result.OperationResult
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
@@ -56,8 +57,15 @@ interface ClientRepository {
      */
     fun observeUnscheduledInterested(now: Instant): Flow<List<Client>>
 
-    /** Find a single client by id. */
+    /** Find a single client by id (one-shot snapshot). */
     suspend fun findById(id: String): Client?
+
+    /**
+     * Observe a single client reactively. The detail screen uses this so
+     * the status pill converges automatically after an agent-status-change
+     * or a sync pull, instead of showing a stale snapshot.
+     */
+    fun observeClient(id: String): Flow<Client?>
 
     /**
      * Match by the last 8 digits of the phone number (handles country-code
@@ -67,15 +75,15 @@ interface ClientRepository {
     suspend fun findByPhone(phone: String): Client?
 
     /**
-     * Optimistically apply an interaction's side-effects on the local
-     * client row — called ONCE per call at call-end with the placeholder
-     * outcome (from the SIP-engine insight). Increments `callAttempts`,
-     * sets `lastCalledAt`, `lastOutcome`, and the corresponding status.
+     * Apply an interaction's local side-effects — called ONCE per call at
+     * call-end with the placeholder outcome (from the SIP-engine insight).
+     * Increments `callAttempts`, sets `lastCalledAt` and `lastOutcome`.
      *
-     * Call-end local-first invariant: this MUST run before any sync
-     * pull, otherwise `refreshAssigned(PENDING)` would wipe the row
-     * (status still PENDING) before the optimistic update lands. See
-     * `CallController.persistInteraction`.
+     * **Does NOT decide the status.** In the 5-state model the backend
+     * derives it from history; the app only advances it locally for the
+     * safe high-water-mark outcomes (INTERESTED→INTERESTED,
+     * SCHEDULED→CITED, SOLD→CONVERTED). Every other outcome leaves the
+     * status untouched and waits for the post-sync refresh.
      */
     suspend fun applyInteractionLocally(
         clientId: String,
@@ -88,10 +96,9 @@ interface ClientRepository {
      * applied via [applyInteractionLocally]. Called from PostCall save
      * when the agent confirms or changes the placeholder outcome.
      *
-     * **Does NOT increment `callAttempts`** — one call equals one
-     * attempt, and the increment happened at call-end. **Does NOT
-     * touch `lastCalledAt`** either; that was set to the actual call
-     * start, not "now". Only `lastOutcome` + `status` are refreshed.
+     * **Does NOT increment `callAttempts`** nor touch `lastCalledAt`.
+     * Updates `lastOutcome`; advances the status only for the safe
+     * high-water-mark outcomes (never downgrades locally).
      */
     suspend fun refineInteractionOutcome(
         clientId: String,
@@ -102,45 +109,27 @@ interface ClientRepository {
     suspend fun updateLastNoteLocally(clientId: String, note: String)
 
     /**
-     * Promote/demote the thermometer of an INTERESTED client.
-     *
-     * Optimistic write to Room first, then PATCH to the server. If the
-     * network call fails the local value is rolled back to [previous]
-     * so the UI doesn't lie, and the typed [ClientError] is
-     * returned so the caller can surface a snackbar.
-     *
-     * **Silent rollback is always a bug.** The caller MUST handle
-     * [OperationResult.Failure] explicitly.
-     */
-    suspend fun updateInterestLevel(
-        clientId: String,
-        level: InterestLevel,
-        previous: InterestLevel?,
-    ): OperationResult<Unit, ClientError>
-
-    /**
      * Move an assigned client to [toStatus] without placing a call —
      * the agent flow for out-of-band signals (WhatsApp opt-out, etc.).
-     * Optimistic local write, then `POST /clients/:id/agent-status-change`.
-     * Rolls back to [previousStatus] / [previousLevel] on failure.
      *
-     * [level] is only honored when [toStatus] is INTERESTED.
+     * **No optimistic write.** Posts to `agent-status-change`, then writes
+     * the **server-returned client** to Room (the source of truth) and
+     * returns the resulting [ClientStatus]. A blocked transition (high-
+     * water-mark / quorum) is a 200 no-op: the returned status equals the
+     * current one — the caller MUST compare it against [toStatus] and tell
+     * the agent when nothing changed (e.g. "falta confirmación de otro
+     * agente"). Not asking → the agent thinks it worked when it didn't.
      *
-     * On success, persists a local-only `AgentStatusChangeLocal` row
-     * so the action surfaces in the Recientes feed for 24 h even
-     * though no call took place.
+     * [removalReason] is **required** when [toStatus] is REMOVED.
      *
-     * **Silent rollback is always a bug.** The caller MUST handle
-     * [OperationResult.Failure] explicitly (snackbar, retry, etc.).
+     * The caller MUST handle [OperationResult.Failure] explicitly.
      */
     suspend fun agentStatusChange(
         clientId: String,
         toStatus: ClientStatus,
-        previousStatus: ClientStatus,
-        previousLevel: InterestLevel?,
+        removalReason: RemovalReason? = null,
         reason: String? = null,
-        level: InterestLevel? = null,
-    ): OperationResult<Unit, ClientError>
+    ): OperationResult<ClientStatus, ClientError>
 
     /**
      * Observe agent-initiated status changes inside the given window
@@ -148,4 +137,15 @@ interface ClientRepository {
      * status changes done from the admin panel.
      */
     fun observeRecentAgentStatusChanges(since: Instant): Flow<List<AgentStatusChangeLocal>>
+
+    /**
+     * Fetch the client's canonical status history from the backend
+     * (`GET /clients/:id/status-history`) — changes by any actor, newest
+     * first. Returns a [Result] so the caller can degrade gracefully (e.g.
+     * 403 if the client is no longer assigned) without breaking the timeline.
+     */
+    suspend fun fetchStatusHistory(
+        clientId: String,
+        limit: Int = 50,
+    ): Result<List<ClientStatusChange>>
 }

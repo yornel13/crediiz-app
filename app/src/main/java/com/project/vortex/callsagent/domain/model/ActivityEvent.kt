@@ -1,7 +1,11 @@
 package com.project.vortex.callsagent.domain.model
 
 import com.project.vortex.callsagent.common.enums.CallOutcome
+import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.common.enums.NoteType
+import com.project.vortex.callsagent.common.enums.RemovalReason
+import com.project.vortex.callsagent.common.enums.Role
+import com.project.vortex.callsagent.common.enums.StatusChangeSource
 import java.time.Instant
 
 /**
@@ -30,13 +34,23 @@ sealed interface ActivityEvent {
     val occurredAt: Instant
     val agentId: String?
 
+    /**
+     * Stable identity for the LazyColumn `key`. The server-backed
+     * [StatusChanged] uses its canonical row id; local-only variants derive
+     * a type-prefixed key from their own fields so the timeline keeps item
+     * identity stable when it re-emits (e.g. after reloading the history).
+     */
+    val stableKey: String
+
     /** A phone-call attempt — derived from [Interaction]. */
     data class Call(
         override val occurredAt: Instant,
         override val agentId: String?,
         val durationSeconds: Int,
         val outcome: CallOutcome,
-    ) : ActivityEvent
+    ) : ActivityEvent {
+        override val stableKey: String get() = "call:${occurredAt.toEpochMilli()}:${outcome.name}"
+    }
 
     /** An agent-authored or system-generated note — derived from [Note]. */
     data class NoteEntry(
@@ -44,7 +58,31 @@ sealed interface ActivityEvent {
         override val agentId: String?,
         val content: String,
         val type: NoteType,
-    ) : ActivityEvent
+    ) : ActivityEvent {
+        override val stableKey: String
+            get() = "note:${occurredAt.toEpochMilli()}:${content.hashCode()}"
+    }
+
+    /**
+     * A status transition from the canonical history (any actor). Derived
+     * from [com.project.vortex.callsagent.domain.model.ClientStatusChange].
+     * Shows who/how the client moved between states over time. [id] is the
+     * backend row id, used as the timeline key.
+     */
+    data class StatusChanged(
+        val id: String,
+        override val occurredAt: Instant,
+        override val agentId: String?,
+        val fromStatus: ClientStatus?,
+        val toStatus: ClientStatus,
+        val removalReason: RemovalReason?,
+        val source: StatusChangeSource?,
+        val reason: String?,
+        val changedByName: String?,
+        val changedByRole: Role?,
+    ) : ActivityEvent {
+        override val stableKey: String get() = "status:$id"
+    }
 
     /**
      * A scheduled follow-up — derived from [FollowUp]. We surface only
@@ -55,7 +93,10 @@ sealed interface ActivityEvent {
         override val occurredAt: Instant,
         override val agentId: String?,
         val scheduledFor: Instant,
-    ) : ActivityEvent
+    ) : ActivityEvent {
+        override val stableKey: String
+            get() = "fu:${occurredAt.toEpochMilli()}:${scheduledFor.toEpochMilli()}"
+    }
 
     /**
      * Marker that the client was originally imported into the system.
@@ -66,6 +107,7 @@ sealed interface ActivityEvent {
         override val occurredAt: Instant,
     ) : ActivityEvent {
         override val agentId: String? = null
+        override val stableKey: String get() = "lead:${occurredAt.toEpochMilli()}"
     }
 
     /**
@@ -83,5 +125,6 @@ sealed interface ActivityEvent {
         override val occurredAt: Instant,
     ) : ActivityEvent {
         override val agentId: String? = null
+        override val stableKey: String get() = "assigned:${occurredAt.toEpochMilli()}"
     }
 }

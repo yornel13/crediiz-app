@@ -3,7 +3,8 @@ package com.project.vortex.callsagent.presentation.precall
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.R
-import com.project.vortex.callsagent.common.enums.DismissalReasonCode
+import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
 import kotlinx.coroutines.flow.firstOrNull
@@ -16,7 +17,6 @@ import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
 import com.project.vortex.callsagent.domain.model.Note
 import com.project.vortex.callsagent.domain.model.ActivityEvent
-import com.project.vortex.callsagent.domain.repository.ClientDismissalRepository
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
 import com.project.vortex.callsagent.domain.repository.InteractionRepository
@@ -78,7 +78,6 @@ sealed interface PreCallEvent {
 class PreCallViewModel @AssistedInject constructor(
     @Assisted private val clientIdArg: String,
     private val clientRepository: ClientRepository,
-    private val clientDismissalRepository: ClientDismissalRepository,
     private val noteRepository: NoteRepository,
     private val followUpRepository: FollowUpRepository,
     private val interactionRepository: InteractionRepository,
@@ -104,63 +103,49 @@ class PreCallViewModel @AssistedInject constructor(
     fun retrySipRegistration() = callReadinessProvider.retry()
 
     /**
-     * Promote/demote the thermometer of the currently displayed
-     * INTERESTED client. No-op if the client isn't INTERESTED
-     * (button is hidden in that case but a stale tap could race).
-     */
-    fun updateInterestLevel(level: com.project.vortex.callsagent.common.enums.InterestLevel) {
-        val client = _uiState.value.client ?: return
-        if (client.status != com.project.vortex.callsagent.common.enums.ClientStatus.INTERESTED) return
-        viewModelScope.launch {
-            val result = clientRepository.updateInterestLevel(
-                clientId = client.id,
-                level = level,
-                previous = client.interestLevel,
-            )
-            when (result) {
-                is com.project.vortex.callsagent.domain.result.OperationResult.Success ->
-                    _snackbar.send(
-                        com.project.vortex.callsagent.presentation.common.SnackbarMessage(
-                            textRes = R.string.precall_snack_interest_updated,
-                            tone = com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.SUCCESS,
-                        ),
-                    )
-                is com.project.vortex.callsagent.domain.result.OperationResult.Failure ->
-                    _snackbar.send(snackbarFor(result.error))
-            }
-        }
-    }
-
-    /**
-     * Out-of-band status change (HOW_IT_WORKS §7). The agent moves the
-     * current client to [toStatus] without placing a call. Optimistic
-     * via [ClientRepository.agentStatusChange] (rollback on network
-     * failure). Every result emits a snackbar — success or failure.
+     * Out-of-band status change. The agent moves the current client to
+     * [toStatus] without placing a call. [removalReason] is required when
+     * [toStatus] is REMOVED.
+     *
+     * Reconciles the 200 no-op (`flujo-de-estados-cliente §8`): the repo
+     * returns the **resulting** status. If it differs from [toStatus] the
+     * backend blocked the transition (high-water mark) or it is pending a
+     * second agent (quorum) — the agent is told it did not change, instead
+     * of being misled into thinking it worked.
      */
     fun agentStatusChange(
-        toStatus: com.project.vortex.callsagent.common.enums.ClientStatus,
+        toStatus: ClientStatus,
+        removalReason: RemovalReason?,
         reason: String?,
-        level: com.project.vortex.callsagent.common.enums.InterestLevel?,
     ) {
         val client = _uiState.value.client ?: return
         viewModelScope.launch {
             val result = clientRepository.agentStatusChange(
                 clientId = client.id,
                 toStatus = toStatus,
-                previousStatus = client.status,
-                previousLevel = client.interestLevel,
+                removalReason = removalReason,
                 reason = reason,
-                level = level,
             )
             when (result) {
-                is com.project.vortex.callsagent.domain.result.OperationResult.Success ->
+                is com.project.vortex.callsagent.domain.result.OperationResult.Success -> {
+                    val changed = result.value == toStatus
                     _snackbar.send(
                         com.project.vortex.callsagent.presentation.common.SnackbarMessage(
-                            textRes = R.string.precall_snack_client_updated,
-                            args = listOf(client.name),
-                            tone = com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.SUCCESS,
+                            textRes = if (changed) {
+                                R.string.precall_snack_client_updated
+                            } else {
+                                R.string.precall_snack_status_unchanged
+                            },
+                            args = if (changed) listOf(client.name) else emptyList(),
+                            tone = if (changed) {
+                                com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.SUCCESS
+                            } else {
+                                com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.WARN
+                            },
                         ),
                     )
+                    loadStatusHistory()
+                }
                 is com.project.vortex.callsagent.domain.result.OperationResult.Failure ->
                     _snackbar.send(snackbarFor(result.error))
             }
@@ -181,36 +166,25 @@ class PreCallViewModel @AssistedInject constructor(
     fun scheduleFollowUp(
         scheduledAt: java.time.Instant,
         reason: String?,
-        level: com.project.vortex.callsagent.common.enums.InterestLevel,
         replacePending: Boolean,
     ) {
         val client = _uiState.value.client ?: return
         viewModelScope.launch {
-            // 1. Promote to INTERESTED if needed. agent-status-change
-            //    needs no reason for INTERESTED targets; we default
-            //    one for the audit trail so the admin sees context.
-            if (client.status != com.project.vortex.callsagent.common.enums.ClientStatus.INTERESTED) {
+            // 1. Promote to INTERESTED if needed (a scheduled follow-up
+            //    implies interest). agent-status-change needs no reason for
+            //    INTERESTED targets; we default one for the audit trail.
+            //    A blocked promotion (200 no-op) is fine — the client is
+            //    already at or above INTERESTED — so we don't short-circuit
+            //    on a non-matching resulting status, only on an actual error.
+            if (client.status != ClientStatus.INTERESTED) {
                 val promotion = clientRepository.agentStatusChange(
                     clientId = client.id,
-                    toStatus = com.project.vortex.callsagent.common.enums.ClientStatus.INTERESTED,
-                    previousStatus = client.status,
-                    previousLevel = client.interestLevel,
+                    toStatus = ClientStatus.INTERESTED,
+                    removalReason = null,
                     reason = reason ?: "Agendado para seguimiento",
-                    level = level,
                 )
                 if (promotion is com.project.vortex.callsagent.domain.result.OperationResult.Failure) {
                     _snackbar.send(snackbarFor(promotion.error))
-                    return@launch
-                }
-            } else if (level != client.interestLevel) {
-                // Same-status promotion — only PATCH the thermometer.
-                val levelResult = clientRepository.updateInterestLevel(
-                    clientId = client.id,
-                    level = level,
-                    previous = client.interestLevel,
-                )
-                if (levelResult is com.project.vortex.callsagent.domain.result.OperationResult.Failure) {
-                    _snackbar.send(snackbarFor(levelResult.error))
                     return@launch
                 }
             }
@@ -254,6 +228,7 @@ class PreCallViewModel @AssistedInject constructor(
                     tone = com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.SUCCESS,
                 ),
             )
+            loadStatusHistory()
         }
     }
 
@@ -272,8 +247,6 @@ class PreCallViewModel @AssistedInject constructor(
                 R.string.precall_err_not_assigned
             is com.project.vortex.callsagent.domain.error.ClientError.TargetNotAllowed ->
                 R.string.precall_err_target_not_allowed
-            com.project.vortex.callsagent.domain.error.ClientError.InterestLevelNotApplicable ->
-                R.string.precall_err_interest_not_applicable
             com.project.vortex.callsagent.domain.error.ClientError.NotFound ->
                 R.string.precall_err_not_found
             com.project.vortex.callsagent.domain.error.ClientError.Conflict ->
@@ -350,15 +323,42 @@ class PreCallViewModel @AssistedInject constructor(
     fun cancelAutoCall() = autoCallOrchestrator.cancelAutoCall()
 
     /**
-     * Dismiss the client currently shown in the detail. Records the
-     * dismissal locally (status mutation + audit event), cancels any
-     * pending auto-call countdown, and signals the screen to pop back.
+     * Remove the client currently shown in the detail — routed through
+     * `agent-status-change` to REMOVED with the chosen [removalReason]
+     * (the 5-state model has no separate dismissal channel).
+     *
+     * Quorum-aware: a hard reason needs a 2nd agent, so the backend may
+     * keep the client active (200 no-op). Only pop back when it actually
+     * became REMOVED; otherwise tell the agent the removal is pending
+     * confirmation and keep them on the detail.
      */
-    fun dismissClient(reasonCode: DismissalReasonCode?, freeFormReason: String?) {
+    fun dismissClient(removalReason: RemovalReason?, freeFormReason: String?) {
+        val client = _uiState.value.client ?: return
         autoCallOrchestrator.cancelAutoCall()
         viewModelScope.launch {
-            clientDismissalRepository.dismiss(clientId, reasonCode, freeFormReason)
-            _events.send(PreCallEvent.Dismissed)
+            val result = clientRepository.agentStatusChange(
+                clientId = client.id,
+                toStatus = ClientStatus.REMOVED,
+                removalReason = removalReason,
+                reason = freeFormReason,
+            )
+            when (result) {
+                is com.project.vortex.callsagent.domain.result.OperationResult.Success -> {
+                    if (result.value == ClientStatus.REMOVED) {
+                        _events.send(PreCallEvent.Dismissed)
+                    } else {
+                        _snackbar.send(
+                            com.project.vortex.callsagent.presentation.common.SnackbarMessage(
+                                textRes = R.string.precall_snack_removal_pending,
+                                tone = com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.WARN,
+                            ),
+                        )
+                        loadStatusHistory()
+                    }
+                }
+                is com.project.vortex.callsagent.domain.result.OperationResult.Failure ->
+                    _snackbar.send(snackbarFor(result.error))
+            }
         }
     }
 
@@ -388,6 +388,14 @@ class PreCallViewModel @AssistedInject constructor(
 
     private val _uiState = MutableStateFlow(PreCallUiState())
     val uiState: StateFlow<PreCallUiState> = _uiState.asStateFlow()
+
+    /**
+     * Canonical status history (any actor) fetched from the backend, mapped
+     * to timeline events. Refreshed on open and after an agent action.
+     * Failures (e.g. 403 / offline) leave it empty — the timeline degrades
+     * to the local sources without breaking.
+     */
+    private val _statusHistory = MutableStateFlow<List<ActivityEvent.StatusChanged>>(emptyList())
 
     private val _events = Channel<PreCallEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
@@ -463,7 +471,8 @@ class PreCallViewModel @AssistedInject constructor(
             // unrelated `_uiState` mutations (sheets opening, etc.)
             // don't churn the combine.
             _uiState.map { it.client?.assignedAt }.distinctUntilChanged(),
-        ) { notes, calls, assignedAt ->
+            _statusHistory,
+        ) { notes, calls, assignedAt, statusChanges ->
             val noteEvents = notes.map { note ->
                 ActivityEvent.NoteEntry(
                     occurredAt = note.deviceCreatedAt,
@@ -493,7 +502,7 @@ class PreCallViewModel @AssistedInject constructor(
             // "1 REGISTRO" / empty-timeline mismatch). The
             // AssignedToAgent anchor above replaces it where data
             // exists — and counts as a real registro.
-            (noteEvents + callEvents + assignedEvents)
+            (noteEvents + callEvents + assignedEvents + statusChanges)
                 .sortedByDescending { it.occurredAt }
         }.stateIn(
             scope = viewModelScope,
@@ -502,7 +511,34 @@ class PreCallViewModel @AssistedInject constructor(
         )
 
     init {
-        loadClient()
+        observeClient()
+        loadStatusHistory()
+    }
+
+    /**
+     * Pull the canonical status history (any actor) and project it onto the
+     * timeline. Best-effort: on failure (403 / offline) the timeline keeps
+     * its local sources. Re-invoked after agent actions for instant feedback.
+     */
+    private fun loadStatusHistory() {
+        viewModelScope.launch {
+            clientRepository.fetchStatusHistory(clientId).onSuccess { changes ->
+                _statusHistory.value = changes.map { c ->
+                    ActivityEvent.StatusChanged(
+                        id = c.id,
+                        occurredAt = c.createdAt,
+                        agentId = null,
+                        fromStatus = c.fromStatus,
+                        toStatus = c.toStatus,
+                        removalReason = c.removalReason,
+                        source = c.source,
+                        reason = c.reason,
+                        changedByName = c.changedByName,
+                        changedByRole = c.changedByRole,
+                    )
+                }
+            }
+        }
     }
 
     fun saveManualNote(content: String) {
@@ -551,16 +587,31 @@ class PreCallViewModel @AssistedInject constructor(
 
     fun clearError() = _uiState.update { it.copy(errorMessage = null) }
 
-    private fun loadClient() {
+    /**
+     * Observe the client reactively so the detail pane converges on its own
+     * after an agent-status-change / sync pull (no more stale "Pendiente"
+     * pill while Recientes already shows the new status).
+     *
+     * If the row temporarily vanishes from the local cache (e.g. it left the
+     * active set after sync) we keep the last known client rather than
+     * flashing "not found" on an open detail; "not found" only surfaces when
+     * the client never loaded at all.
+     */
+    private fun observeClient() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val found = runCatching { clientRepository.findById(clientId) }.getOrNull()
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    client = found,
-                    errorMessage = if (found == null) "Client not found" else null,
-                )
+            clientRepository.observeClient(clientId).collect { client ->
+                _uiState.update { state ->
+                    state.copy(
+                        isLoading = false,
+                        client = client ?: state.client,
+                        errorMessage = if (client == null && state.client == null) {
+                            "Client not found"
+                        } else {
+                            state.errorMessage
+                        },
+                    )
+                }
             }
         }
     }

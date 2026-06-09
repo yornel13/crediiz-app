@@ -1,13 +1,19 @@
 package com.project.vortex.callsagent.ui.theme
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.PersonOff
+import androidx.compose.material.icons.filled.PhoneDisabled
 import androidx.compose.material.icons.filled.PhoneMissed
 import androidx.compose.material.icons.filled.QuestionMark
+import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.RingVolume
 import androidx.compose.material.icons.filled.SentimentDissatisfied
 import androidx.compose.material.icons.filled.SentimentSatisfied
+import androidx.compose.material.icons.filled.Voicemail
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
@@ -17,8 +23,8 @@ import androidx.compose.ui.res.stringResource
 import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
-import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.common.enums.NoteType
+import com.project.vortex.callsagent.common.enums.RemovalReason
 
 /**
  * A semantic color pair (background + foreground) used for badges, chips,
@@ -30,57 +36,37 @@ data class StatusPalette(
     val onContainer: Color,
 )
 
+/**
+ * Funnel progression colors: neutral → amber → blue → green, with red for
+ * the off-funnel REMOVED state. The gradient lets the agent read "how far"
+ * a client is at a glance.
+ */
 @Composable
 @ReadOnlyComposable
 fun ClientStatus.palette(): StatusPalette = when (this) {
     ClientStatus.PENDING -> neutralPalette()
-    ClientStatus.IN_PROGRESS -> warningPalette()
-    ClientStatus.INTERESTED -> successPalette()
-    ClientStatus.REJECTED -> errorPalette()
-    ClientStatus.UNREACHABLE -> errorPalette()
-    ClientStatus.CONVERTED -> infoPalette()
-    ClientStatus.DO_NOT_CALL -> errorPalette()
-    ClientStatus.DISMISSED -> neutralPalette()
+    ClientStatus.INTERESTED -> warningPalette()
+    ClientStatus.CITED -> infoPalette()
+    ClientStatus.CONVERTED -> successPalette()
+    ClientStatus.REMOVED -> errorPalette()
 }
 
 @Composable
 @ReadOnlyComposable
 fun CallOutcome.palette(): StatusPalette = when (this) {
-    CallOutcome.ANSWERED_INTERESTED -> successPalette()
-    CallOutcome.ANSWERED_NOT_INTERESTED -> errorPalette()
-    CallOutcome.ANSWERED_OPT_OUT -> errorPalette()
-    CallOutcome.ANSWERED_SOLD -> infoPalette()
-    CallOutcome.NO_ANSWER -> warningPalette()
-    CallOutcome.BUSY -> warningPalette()
-    CallOutcome.WRONG_NUMBER -> errorPalette()
-}
-
-/**
- * Thermometer palette for an INTERESTED client (HOW_IT_WORKS §4).
- * Cold = info blue, Warm = amber, Hot = error red — same brand colors
- * the rest of the app uses, so badges read consistently.
- */
-@Composable
-@ReadOnlyComposable
-fun InterestLevel.palette(): StatusPalette = when (this) {
-    InterestLevel.COLD -> infoPalette()
-    InterestLevel.WARM -> warningPalette()
-    InterestLevel.HOT -> errorPalette()
-}
-
-@Composable
-@ReadOnlyComposable
-fun InterestLevel.label(): String = when (this) {
-    InterestLevel.COLD -> stringResource(R.string.enum_interest_cold)
-    InterestLevel.WARM -> stringResource(R.string.enum_interest_warm)
-    InterestLevel.HOT -> stringResource(R.string.enum_interest_hot)
-}
-
-/** Single-glyph emoji shorthand for compact badges (lists / agenda). */
-fun InterestLevel.emoji(): String = when (this) {
-    InterestLevel.COLD -> "🟦"
-    InterestLevel.WARM -> "🟧"
-    InterestLevel.HOT -> "🟥"
+    CallOutcome.INTERESTED -> successPalette()
+    CallOutcome.SCHEDULED -> infoPalette()
+    CallOutcome.SOLD -> successPalette()
+    CallOutcome.NO_ANSWER,
+    CallOutcome.BUSY,
+    CallOutcome.OUT_OF_SERVICE,
+    CallOutcome.VOICEMAIL -> warningPalette()
+    CallOutcome.NOT_INTERESTED,
+    CallOutcome.DO_NOT_CALL,
+    CallOutcome.WRONG_NUMBER,
+    CallOutcome.HAS_LOAN,
+    CallOutcome.DECEASED,
+    CallOutcome.NOT_APPLICABLE -> errorPalette()
 }
 
 @Composable
@@ -102,55 +88,82 @@ fun NoteType.palette(): StatusPalette = when (this) {
 @ReadOnlyComposable
 fun ClientStatus.label(): String = when (this) {
     ClientStatus.PENDING -> stringResource(R.string.enum_status_pending)
-    ClientStatus.IN_PROGRESS -> stringResource(R.string.enum_status_in_progress)
     ClientStatus.INTERESTED -> stringResource(R.string.enum_status_interested)
-    ClientStatus.REJECTED -> stringResource(R.string.enum_status_rejected)
-    ClientStatus.UNREACHABLE -> stringResource(R.string.enum_status_unreachable)
+    ClientStatus.CITED -> stringResource(R.string.enum_status_cited)
     ClientStatus.CONVERTED -> stringResource(R.string.enum_status_converted)
-    ClientStatus.DO_NOT_CALL -> stringResource(R.string.enum_status_do_not_call)
-    ClientStatus.DISMISSED -> stringResource(R.string.enum_status_dismissed)
+    ClientStatus.REMOVED -> stringResource(R.string.enum_status_removed)
 }
 
 @Composable
 @ReadOnlyComposable
 fun CallOutcome.label(): String = when (this) {
-    CallOutcome.ANSWERED_INTERESTED -> stringResource(R.string.enum_outcome_interested)
-    CallOutcome.ANSWERED_NOT_INTERESTED -> stringResource(R.string.enum_outcome_not_interested)
-    CallOutcome.ANSWERED_OPT_OUT -> stringResource(R.string.enum_outcome_opt_out)
-    CallOutcome.ANSWERED_SOLD -> stringResource(R.string.enum_outcome_sold)
     CallOutcome.NO_ANSWER -> stringResource(R.string.enum_outcome_no_answer)
     CallOutcome.BUSY -> stringResource(R.string.enum_outcome_busy)
+    CallOutcome.OUT_OF_SERVICE -> stringResource(R.string.enum_outcome_out_of_service)
+    CallOutcome.VOICEMAIL -> stringResource(R.string.enum_outcome_voicemail)
+    CallOutcome.INTERESTED -> stringResource(R.string.enum_outcome_interested)
+    CallOutcome.SCHEDULED -> stringResource(R.string.enum_outcome_scheduled)
+    CallOutcome.SOLD -> stringResource(R.string.enum_outcome_sold)
+    CallOutcome.NOT_INTERESTED -> stringResource(R.string.enum_outcome_not_interested)
+    CallOutcome.DO_NOT_CALL -> stringResource(R.string.enum_outcome_do_not_call)
     CallOutcome.WRONG_NUMBER -> stringResource(R.string.enum_outcome_wrong_number)
+    CallOutcome.HAS_LOAN -> stringResource(R.string.enum_outcome_has_loan)
+    CallOutcome.DECEASED -> stringResource(R.string.enum_outcome_deceased)
+    CallOutcome.NOT_APPLICABLE -> stringResource(R.string.enum_outcome_not_applicable)
+}
+
+@Composable
+@ReadOnlyComposable
+fun RemovalReason.label(): String = when (this) {
+    RemovalReason.NOT_INTERESTED -> stringResource(R.string.enum_removal_not_interested)
+    RemovalReason.UNREACHABLE -> stringResource(R.string.enum_removal_unreachable)
+    RemovalReason.DO_NOT_CALL -> stringResource(R.string.enum_removal_do_not_call)
+    RemovalReason.WRONG_NUMBER -> stringResource(R.string.enum_removal_wrong_number)
+    RemovalReason.HAS_LOAN -> stringResource(R.string.enum_removal_has_loan)
+    RemovalReason.DECEASED -> stringResource(R.string.enum_removal_deceased)
+    RemovalReason.NOT_APPLICABLE -> stringResource(R.string.enum_removal_not_applicable)
+    RemovalReason.OTHER -> stringResource(R.string.enum_removal_other)
 }
 
 /**
- * Distinctive icon for each [CallOutcome]. Used in the PostCall grid
- * so the agent recognizes the 7 buttons at a glance without having to
- * read the label every time. Matches the emoji set in
- * `calls-core/docs/HOW_IT_WORKS.md §5`.
+ * Distinctive icon for each [CallOutcome]. Used in the PostCall grid so
+ * the agent recognizes the buttons at a glance without reading the label.
  */
 fun CallOutcome.icon(): ImageVector = when (this) {
-    CallOutcome.ANSWERED_INTERESTED -> Icons.Filled.SentimentSatisfied   // 😊
-    CallOutcome.ANSWERED_NOT_INTERESTED -> Icons.Filled.SentimentDissatisfied // 😐
-    CallOutcome.ANSWERED_OPT_OUT -> Icons.Filled.Block                   // 🚫
-    CallOutcome.ANSWERED_SOLD -> Icons.Filled.MonetizationOn             // 💰
-    CallOutcome.NO_ANSWER -> Icons.Filled.PhoneMissed                    // 📵
-    CallOutcome.BUSY -> Icons.Filled.RingVolume                          // 📞
-    CallOutcome.WRONG_NUMBER -> Icons.Filled.QuestionMark                // ❓
+    CallOutcome.NO_ANSWER -> Icons.Filled.PhoneMissed
+    CallOutcome.BUSY -> Icons.Filled.RingVolume
+    CallOutcome.OUT_OF_SERVICE -> Icons.Filled.PhoneDisabled
+    CallOutcome.VOICEMAIL -> Icons.Filled.Voicemail
+    CallOutcome.INTERESTED -> Icons.Filled.SentimentSatisfied
+    CallOutcome.SCHEDULED -> Icons.Filled.Event
+    CallOutcome.SOLD -> Icons.Filled.MonetizationOn
+    CallOutcome.NOT_INTERESTED -> Icons.Filled.SentimentDissatisfied
+    CallOutcome.DO_NOT_CALL -> Icons.Filled.Block
+    CallOutcome.WRONG_NUMBER -> Icons.Filled.QuestionMark
+    CallOutcome.HAS_LOAN -> Icons.Filled.AccountBalance
+    CallOutcome.DECEASED -> Icons.Filled.PersonOff
+    CallOutcome.NOT_APPLICABLE -> Icons.Filled.RemoveCircleOutline
 }
 
 /**
- * High-level grouping used by the PostCall UI: `ANSWERED_*` outcomes
- * live under "Respondió", the rest under "No respondió" (see HOW_IT_WORKS §5).
+ * High-level grouping used by the PostCall UI: outcomes that imply the
+ * agent actually talked to (or reached) the target live under "Respondió",
+ * the no-contact ones under "No respondió".
  */
 val CallOutcome.isAnswered: Boolean
     get() = when (this) {
-        CallOutcome.ANSWERED_INTERESTED,
-        CallOutcome.ANSWERED_NOT_INTERESTED,
-        CallOutcome.ANSWERED_OPT_OUT,
-        CallOutcome.ANSWERED_SOLD -> true
+        CallOutcome.INTERESTED,
+        CallOutcome.SCHEDULED,
+        CallOutcome.SOLD,
+        CallOutcome.NOT_INTERESTED,
+        CallOutcome.DO_NOT_CALL,
+        CallOutcome.HAS_LOAN,
+        CallOutcome.DECEASED,
+        CallOutcome.NOT_APPLICABLE -> true
         CallOutcome.NO_ANSWER,
         CallOutcome.BUSY,
+        CallOutcome.OUT_OF_SERVICE,
+        CallOutcome.VOICEMAIL,
         CallOutcome.WRONG_NUMBER -> false
     }
 

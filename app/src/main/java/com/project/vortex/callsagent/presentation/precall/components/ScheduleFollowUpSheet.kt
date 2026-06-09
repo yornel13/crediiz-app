@@ -26,7 +26,6 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import com.project.vortex.callsagent.ui.components.FullHeightBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -48,11 +47,10 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.BusinessConfig
-import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.domain.model.FollowUp
-import com.project.vortex.callsagent.ui.components.InterestLevelSelector
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -63,17 +61,15 @@ import java.time.format.DateTimeFormatter
 /**
  * Payload emitted when the agent confirms the schedule sheet.
  *
- * - [interestLevel] is **always** set even if the client wasn't
- *   INTERESTED before — see HOW_IT_WORKS §4: scheduling implies
- *   INTERESTED. The ViewModel uses it to drive the
- *   agent-status-change transition if needed.
+ * - Scheduling a follow-up implies the client is INTERESTED — the
+ *   ViewModel drives that status transition on commit (5-state model;
+ *   no per-client thermometer anymore).
  * - [replacePending] tells the caller "yes, I already saw the
  *   conflict warning and want to override the existing follow-up".
  */
 data class ScheduleFollowUpResult(
     val scheduledAt: Instant,
     val reason: String?,
-    val interestLevel: InterestLevel,
     val replacePending: Boolean,
 )
 
@@ -84,8 +80,6 @@ data class ScheduleFollowUpResult(
  *
  * Behavior contract:
  *  - Picks date + time, both required.
- *  - Shows [InterestLevelSelector] always (default COLD). Picking a
- *    higher level promotes the client when ViewModel commits.
  *  - [existingFollowUp] (when non-null) renders a warning + forces
  *    the agent to acknowledge replacement before Confirm enables.
  *  - Reason is optional; the agent already has the date/time in the
@@ -101,7 +95,6 @@ fun ScheduleFollowUpSheet(
 ) {
     var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
     var selectedTime by remember { mutableStateOf<LocalTime?>(null) }
-    var selectedLevel by remember { mutableStateOf(InterestLevel.COLD) }
     var reason by remember { mutableStateOf("") }
     var replaceAcknowledged by remember { mutableStateOf(existingFollowUp == null) }
 
@@ -191,12 +184,6 @@ fun ScheduleFollowUpSheet(
                     )
                 }
 
-                // ─── Interest level (always visible) ────────────────
-                InterestLevelSelector(
-                    selected = selectedLevel,
-                    onSelect = { selectedLevel = it },
-                )
-
                 // ─── Reason (optional) — textarea ───────────────────
                 OutlinedTextField(
                     value = reason,
@@ -250,7 +237,6 @@ fun ScheduleFollowUpSheet(
                             ScheduleFollowUpResult(
                                 scheduledAt = instant,
                                 reason = reason.trim().ifBlank { null },
-                                interestLevel = selectedLevel,
                                 replacePending = existingFollowUp != null,
                             ),
                         )
@@ -316,23 +302,34 @@ fun ScheduleFollowUpSheet(
             initialMinute = selectedTime?.minute ?: now.minute,
             is24Hour = false,
         )
-        ModalBottomSheet(onDismissRequest = { showTimePicker = false }) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+        // A centered Dialog (like the date picker) instead of a bottom
+        // sheet: the analog clock is tall, and inside a sheet the Cancel/OK
+        // row got pushed off-screen / under the nav bar on tablets. A dialog
+        // floats centered with its actions always visible.
+        Dialog(onDismissRequest = { showTimePicker = false }) {
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
             ) {
-                TimePicker(state = state)
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = { showTimePicker = false }) {
-                        Text(stringResource(R.string.common_cancel))
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    TimePicker(state = state)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        OutlinedButton(onClick = { showTimePicker = false }) {
+                            Text(stringResource(R.string.common_cancel))
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Button(onClick = {
+                            selectedTime = LocalTime.of(state.hour, state.minute)
+                            showTimePicker = false
+                        }) { Text(stringResource(R.string.common_ok)) }
                     }
-                    Button(onClick = {
-                        selectedTime = LocalTime.of(state.hour, state.minute)
-                        showTimePicker = false
-                    }) { Text(stringResource(R.string.common_ok)) }
                 }
             }
         }

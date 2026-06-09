@@ -35,7 +35,6 @@ import androidx.compose.ui.res.stringResource
 import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.presentation.common.relativePast
 import com.project.vortex.callsagent.ui.components.Avatar
-import com.project.vortex.callsagent.ui.components.InterestLevelChip
 import com.project.vortex.callsagent.ui.components.StatusPill
 import com.project.vortex.callsagent.ui.theme.label
 import com.project.vortex.callsagent.ui.theme.palette
@@ -116,9 +115,12 @@ fun RecentStatusChangeCard(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        change.interestLevel?.let { level ->
+                        change.removalReason?.let { reason ->
                             Spacer(Modifier.width(8.dp))
-                            InterestLevelChip(level = level)
+                            StatusPill(
+                                label = reason.label(),
+                                palette = palette,
+                            )
                         }
                     }
                 }

@@ -22,7 +22,7 @@
     <string name="common_dismiss">Descartar</string>
 
     <!-- ============================== Relative time (compact) ============================== -->
-    <string name="reltime_just_now">hace un momento</string>
+    <string name="reltime_just_now">ahora</string>
     <string name="reltime_minutes_ago">hace %1$dm</string>
     <string name="reltime_hours_ago">hace %1$dh</string>
     <string name="reltime_days_ago">hace %1$dd</string>
@@ -43,19 +43,10 @@
     <string name="precall_field_social_security">SEG. SOCIAL</string>
     <string name="precall_field_reference">REF</string>
     <string name="precall_field_label_format">%1$s: </string>
-    <string name="precall_status_pending">Pendiente</string>
-    <string name="precall_status_in_progress">En proceso</string>
-    <string name="precall_status_interested">Interesado</string>
-    <string name="precall_status_rejected">Rechazado</string>
-    <string name="precall_status_unreachable">Inalcanzable</string>
-    <string name="precall_status_converted">Convertido</string>
-    <string name="precall_status_do_not_call">No llamar</string>
-    <string name="precall_status_dismissed">Descartado</string>
     <string name="precall_banner_converted_title">Este cliente ha sido convertido</string>
     <string name="precall_banner_converted_subtitle">No se requiere más contacto.</string>
     <string name="precall_banner_do_not_call_title">No contactar</string>
     <string name="precall_banner_do_not_call_subtitle">El cliente pidió no ser contactado — las llamadas están bloqueadas.</string>
-    <string name="precall_banner_unreachable_title">El número podría no pertenecer a este cliente</string>
     <string name="precall_banner_scheduled_callback_title">Devolución de llamada agendada %1$s</string>
     <string name="precall_banner_new_lead_title">Nuevo prospecto · Primer contacto</string>
     <string name="precall_banner_new_lead_subtitle">No hay actividad previa para este cliente.</string>
@@ -64,6 +55,16 @@
     <string name="precall_relative_tomorrow">mañana</string>
     <string name="precall_activity_call">Llamada</string>
     <string name="precall_activity_note">Nota</string>
+    <string name="precall_activity_status_change">Cambio de estado</string>
+    <string name="precall_role_admin">Admin</string>
+    <string name="precall_role_agent">Agente</string>
+    <string name="precall_source_initial_load">Carga inicial</string>
+    <string name="precall_source_call_outcome">Por resultado de llamada</string>
+    <string name="precall_source_agent_out_of_band">Manual (agente)</string>
+    <string name="precall_source_admin_manual">Manual (admin)</string>
+    <string name="precall_source_admin_reactivate">Reactivado por admin</string>
+    <string name="precall_source_agent_dismissal">Baja por agente</string>
+    <string name="precall_source_agent_dismissal_undone">Baja revertida</string>
     <string name="precall_followup_scheduled">Seguimiento agendado</string>
     <string name="precall_lead_imported">Prospecto importado</string>
     <string name="precall_activity_assigned_title">Asignado a ti</string>
@@ -81,23 +82,11 @@
     <string name="precall_note_saving">GUARDANDO…</string>
     <string name="precall_note_save">GUARDAR NOTA</string>
     <string name="precall_go_back">Volver</string>
-    <string name="precall_interest_level_title">Actualizar nivel de interés</string>
-    <string name="precall_outcome_interested">Respondió — interesado</string>
-    <string name="precall_outcome_not_interested">Respondió — no interesado</string>
-    <string name="precall_outcome_opt_out">Respondió — pidió no ser contactado</string>
-    <string name="precall_outcome_sold">Respondió — venta cerrada</string>
-    <string name="precall_outcome_no_answer">Sin respuesta</string>
-    <string name="precall_outcome_busy">Línea ocupada</string>
-    <string name="precall_outcome_wrong_number">Número equivocado</string>
     <string name="precall_ts_today_format">HOY, %1$s</string>
     <string name="precall_ts_yesterday_format">AYER, %1$s</string>
     <plurals name="precall_activity_record_count">
         <item quantity="one">%1$d REGISTRO</item>
         <item quantity="other">%1$d REGISTROS</item>
-    </plurals>
-    <plurals name="precall_banner_unreachable_subtitle">
-        <item quantity="one">%1$d marca de número equivocado registrada.</item>
-        <item quantity="other">%1$d marcas de número equivocado registradas.</item>
     </plurals>
     <plurals name="precall_relative_in_days">
         <item quantity="one">en %1$d día</item>
@@ -127,19 +116,16 @@
     <string name="status_change_title">Cambiar estado sin llamar</string>
     <string name="status_change_subtitle">Usa esta acción para canales externos (WhatsApp, presencial, etc.). Queda registrado en el historial.</string>
     <string name="status_change_new_status_label">Nuevo estado</string>
-    <string name="status_change_reason_label_required">Motivo *</string>
     <string name="status_change_reason_label_optional">Motivo (opcional)</string>
     <string name="status_change_reason_placeholder">Ej: Cliente lo solicitó por WhatsApp</string>
-    <string name="status_change_reason_required_for_status">Obligatorio para este estado</string>
-    <string name="status_change_reason_required_hint">Motivo obligatorio</string>
     <string name="status_change_char_counter">%1$d / %2$d</string>
     <string name="status_change_action_confirm">Confirmar</string>
-    <string name="status_change_quick_reason_label">Motivo rápido</string>
-    <string name="status_change_quick_reason_other">Otro: escribir abajo</string>
     <string name="status_change_dest_interested_desc">Mostró interés por otro canal (WhatsApp, etc.)</string>
+    <string name="status_change_dest_cited_desc">Tiene una cita formal agendada.</string>
     <string name="status_change_dest_converted_desc">Cerró la venta por otro canal.</string>
-    <string name="status_change_dest_rejected_desc">Dijo que no por otro canal.</string>
-    <string name="status_change_dest_do_not_call_desc">Pidió no volver a ser contactado (opt-out).</string>
+    <string name="status_change_dest_removed_desc">Sale del proceso (elige un motivo).</string>
+    <string name="status_change_removal_reason_label">Motivo de la baja</string>
+    <string name="status_change_removal_reason_required">Elige un motivo de baja.</string>
 
     <!-- ============================== Post-Call ============================== -->
     <string name="postcall_load_error">No se pudieron cargar los detalles de la llamada</string>
@@ -172,7 +158,6 @@
     <string name="clients_subheader_retry_hint">Ya intentado; sigue pendiente hasta cerrarse.</string>
     <string name="clients_menu_dismiss_client">Descartar cliente</string>
     <string name="clients_attempts_none">Sin intentos</string>
-    <string name="clients_wrong_number_chip">❓ Núm. errado ×%1$d</string>
     <string name="clients_search_summary">Mostrando %1$d de %2$d</string>
     <string name="clients_empty_loading_title">Cargando clientes…</string>
     <string name="clients_empty_loading_subtitle">Espera un momento</string>
@@ -325,10 +310,10 @@
     <string name="autocall_session_complete">Sesión completada</string>
     <string name="autocall_of_processed">de %1$d procesados</string>
     <string name="autocall_stat_interested">Interesado</string>
-    <string name="autocall_stat_not_interested">No interesado</string>
-    <string name="autocall_stat_no_answer">Sin respuesta</string>
-    <string name="autocall_stat_busy">Ocupado</string>
-    <string name="autocall_stat_wrong_number">Número erróneo</string>
+    <string name="autocall_stat_cited">Citado</string>
+    <string name="autocall_stat_sold">Vendido</string>
+    <string name="autocall_stat_no_contact">Sin contacto</string>
+    <string name="autocall_stat_removed">Removido</string>
     <string name="autocall_stat_skipped">Omitido</string>
     <string name="autocall_session_duration">Duración de la sesión</string>
     <string name="autocall_done">Listo</string>
@@ -351,13 +336,13 @@
     <string name="readiness_connecting_body">Espera unos segundos antes de llamar.</string>
 
     <!-- ============================== Pre-Call · Snackbars & errors ============================== -->
-    <string name="precall_snack_interest_updated">Nivel de interés actualizado</string>
     <string name="precall_snack_client_updated">%1$s actualizado</string>
+    <string name="precall_snack_status_unchanged">El estado no cambió; puede faltar la confirmación de otro agente.</string>
+    <string name="precall_snack_removal_pending">Tu marca quedó registrada; el cliente se dará de baja cuando otro agente la confirme.</string>
     <string name="precall_snack_followup_scheduled">Seguimiento agendado</string>
     <string name="precall_err_reason_required">El motivo es obligatorio para este cambio.</string>
     <string name="precall_err_not_assigned">Este cliente ya no está asignado a ti.</string>
     <string name="precall_err_target_not_allowed">No se permite mover a ese estado sin llamar.</string>
-    <string name="precall_err_interest_not_applicable">El termómetro solo aplica a clientes interesados.</string>
     <string name="precall_err_not_found">El cliente ya no existe en el servidor.</string>
     <string name="precall_err_conflict">El cliente cambió mientras editabas. Refresca y reintenta.</string>
     <string name="precall_err_session_expired">Tu sesión expiró. Vuelve a iniciar sesión.</string>
@@ -375,36 +360,42 @@
     <string name="login_err_unknown">Ocurrió un error inesperado. Reintenta en unos momentos.</string>
 
     <!-- ============================== Domain enum labels ============================== -->
-    <string name="enum_interest_cold">Frío</string>
-    <string name="enum_interest_warm">Tibio</string>
-    <string name="enum_interest_hot">Caliente</string>
+    <!-- Estado del cliente (modelo de 5 estados) -->
     <string name="enum_status_pending">Pendiente</string>
-    <string name="enum_status_in_progress">En proceso</string>
     <string name="enum_status_interested">Interesado</string>
-    <string name="enum_status_rejected">Rechazado</string>
-    <string name="enum_status_unreachable">Inalcanzable</string>
-    <string name="enum_status_converted">Convertido</string>
-    <string name="enum_status_do_not_call">No llamar</string>
-    <string name="enum_status_dismissed">Descartado</string>
-    <string name="enum_outcome_interested">Interesado</string>
-    <string name="enum_outcome_not_interested">No interesado</string>
-    <string name="enum_outcome_opt_out">No contactar</string>
-    <string name="enum_outcome_sold">Vendido</string>
-    <string name="enum_outcome_no_answer">Sin respuesta</string>
+    <string name="enum_status_cited">Citado</string>
+    <string name="enum_status_converted">Firmado</string>
+    <string name="enum_status_removed">Desistido</string>
+    <!-- Resultados de llamada -->
+    <string name="enum_outcome_no_answer">No contestó</string>
     <string name="enum_outcome_busy">Ocupado</string>
+    <string name="enum_outcome_out_of_service">Fuera de servicio</string>
+    <string name="enum_outcome_voicemail">Contestadora</string>
+    <string name="enum_outcome_interested">Interesado</string>
+    <string name="enum_outcome_scheduled">Citó</string>
+    <string name="enum_outcome_sold">Firmó</string>
+    <string name="enum_outcome_not_interested">No le interesa</string>
+    <string name="enum_outcome_do_not_call">No llamar</string>
     <string name="enum_outcome_wrong_number">Número equivocado</string>
+    <string name="enum_outcome_has_loan">Ya tiene préstamo</string>
+    <string name="enum_outcome_deceased">Fallecido</string>
+    <string name="enum_outcome_not_applicable">No aplica</string>
+    <!-- Tipos de nota -->
     <string name="enum_note_call">Durante llamada</string>
     <string name="enum_note_post_call">Posllamada</string>
     <string name="enum_note_manual">Manual</string>
     <string name="enum_note_follow_up">Seguimiento</string>
     <string name="enum_note_status_change">Cambio de estado</string>
-    <string name="enum_note_dismissal">Descarte</string>
-    <string name="enum_dismissal_corporate">Corporativo</string>
-    <string name="enum_dismissal_invalid_data">Datos incorrectos</string>
-    <string name="enum_dismissal_duplicate">Duplicado</string>
-    <string name="enum_dismissal_optout">No contactar</string>
-    <string name="enum_dismissal_out_of_scope">Fuera de alcance</string>
-    <string name="enum_dismissal_other">Otro</string>
+    <string name="enum_note_dismissal">Baja</string>
+    <!-- Motivos de baja -->
+    <string name="enum_removal_not_interested">No le interesa</string>
+    <string name="enum_removal_unreachable">No localizable</string>
+    <string name="enum_removal_do_not_call">No llamar</string>
+    <string name="enum_removal_wrong_number">Número equivocado</string>
+    <string name="enum_removal_has_loan">Ya tiene préstamo</string>
+    <string name="enum_removal_deceased">Fallecido</string>
+    <string name="enum_removal_not_applicable">No aplica</string>
+    <string name="enum_removal_other">Otro</string>
 
     <!-- ============================== Clients · Recent / detail / views ============================== -->
     <string name="recent_dismissed_badge">DESCARTADO</string>

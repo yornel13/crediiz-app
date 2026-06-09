@@ -1,7 +1,7 @@
 package com.project.vortex.callsagent.domain.model
 
 import com.project.vortex.callsagent.common.enums.ClientStatus
-import com.project.vortex.callsagent.common.enums.InterestLevel
+import com.project.vortex.callsagent.common.enums.RemovalReason
 import java.time.Instant
 
 /**
@@ -17,7 +17,7 @@ data class AgentStatusChangeLocal(
     val clientId: String,
     val fromStatus: ClientStatus,
     val toStatus: ClientStatus,
-    val interestLevel: InterestLevel?,
+    val removalReason: RemovalReason?,
     val reason: String?,
     val timestamp: Instant,
 )

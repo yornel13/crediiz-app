@@ -7,7 +7,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
-import com.project.vortex.callsagent.common.enums.InterestLevel
+import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.data.local.entity.ClientEntity
 import kotlinx.coroutines.flow.Flow
 import java.time.Instant
@@ -21,16 +21,15 @@ interface ClientDao {
     /**
      * Pendientes feed — clients the agent has **never** called.
      *
-     * After the 2026-05 backend refactor, the source of truth for
-     * "untouched" is the status itself: PENDING means literally
-     * "never called". The first NO_ANSWER / BUSY / WRONG_NUMBER
-     * transitions the client to IN_PROGRESS server-side — at which
-     * point it moves to the [observePendingForRetry] feed.
+     * In the 5-state model "new" is derived: `PENDING` with
+     * `callAttempts == 0`. The first no-contact outcome keeps the client
+     * `PENDING` (the backend never promotes to a separate state) but
+     * bumps `callAttempts`, moving it to the [observePendingForRetry] feed.
      */
     @Query(
         """
         SELECT * FROM clients
-        WHERE status = 'PENDING'
+        WHERE status = 'PENDING' AND callAttempts = 0
         ORDER BY queueOrder ASC
         """,
     )
@@ -39,7 +38,7 @@ interface ClientDao {
     @Query(
         """
         SELECT * FROM clients
-        WHERE status = 'PENDING'
+        WHERE status = 'PENDING' AND callAttempts = 0
           AND (name LIKE '%' || :query || '%' OR phone LIKE '%' || :query || '%')
         ORDER BY queueOrder ASC
         """,
@@ -47,18 +46,16 @@ interface ClientDao {
     fun searchPendingNeverCalled(query: String): Flow<List<ClientEntity>>
 
     /**
-     * "Para reintentar" feed — clients with `status = IN_PROGRESS`
-     * (called at least once without a closing outcome). Sort by
-     * `lastCalledAt` ascending so the oldest attempt floats to the
-     * top: those are the most ready to dial again.
-     *
-     * Rows without `lastCalledAt` (admin-reassigned IN_PROGRESS leads
-     * from another agent) sort first thanks to SQLite's NULL ordering.
+     * "Para reintentar" feed — `PENDING` clients already called at least
+     * once without a closing outcome (`callAttempts > 0`). Sort by
+     * `lastCalledAt` ascending so the oldest attempt floats to the top:
+     * those are the most ready to dial again. NULL `lastCalledAt` sorts
+     * first thanks to SQLite's NULL ordering.
      */
     @Query(
         """
         SELECT * FROM clients
-        WHERE status = 'IN_PROGRESS'
+        WHERE status = 'PENDING' AND callAttempts > 0
         ORDER BY lastCalledAt ASC
         """,
     )
@@ -67,7 +64,7 @@ interface ClientDao {
     @Query(
         """
         SELECT * FROM clients
-        WHERE status = 'IN_PROGRESS'
+        WHERE status = 'PENDING' AND callAttempts > 0
           AND (name LIKE '%' || :query || '%' OR phone LIKE '%' || :query || '%')
         ORDER BY lastCalledAt ASC
         """,
@@ -76,6 +73,10 @@ interface ClientDao {
 
     @Query("SELECT * FROM clients WHERE id = :id")
     suspend fun findById(id: String): ClientEntity?
+
+    /** Reactive single-client stream — re-emits whenever the row changes. */
+    @Query("SELECT * FROM clients WHERE id = :id")
+    fun observeById(id: String): Flow<ClientEntity?>
 
     /**
      * Match by the last 8 digits of the (digits-only) phone number, so a
@@ -113,9 +114,8 @@ interface ClientDao {
      * whose `lastCalledAt` falls inside the rolling window (24 h is the
      * v1.0 default — caller passes the cutoff). Ordered newest first.
      *
-     * Outcome-agnostic: ANSWERED_*, NO_ANSWER, BUSY and WRONG_NUMBER
-     * all show up. The card variant in the UI picks different visuals
-     * based on `lastOutcome`.
+     * Outcome-agnostic: every [CallOutcome] shows up. The card variant in
+     * the UI picks different visuals based on `lastOutcome`.
      */
     @Query(
         """
@@ -203,7 +203,11 @@ interface ClientDao {
     suspend fun deleteAll()
 
     /**
-     * Optimistic local update after a call — mirrors server side-effects.
+     * Local bookkeeping after a call. Bumps the attempt counter and
+     * records the outcome — but **does NOT decide the status**. In the
+     * 5-state model the backend derives the status from history; the app
+     * only advances it locally for the safe high-water-mark outcomes
+     * (INTERESTED/SCHEDULED/SOLD) via a separate [setStatus] call.
      */
     @Query(
         """
@@ -211,7 +215,6 @@ interface ClientDao {
         SET callAttempts = callAttempts + 1,
             lastCalledAt = :lastCalledAt,
             lastOutcome = :lastOutcome,
-            status = :newStatus,
             updatedAt = :now
         WHERE id = :clientId
         """,
@@ -220,30 +223,25 @@ interface ClientDao {
         clientId: String,
         lastCalledAt: Instant,
         lastOutcome: CallOutcome,
-        newStatus: ClientStatus,
         now: Instant,
     )
 
     /**
-     * Refine the outcome of a call that was already applied locally.
-     * Used in PostCall save when the agent confirms or changes the
-     * placeholder outcome that [applyInteractionUpdate] set at call
-     * end. Does NOT touch `callAttempts` (one call = one increment)
-     * nor `lastCalledAt` (was set at call end, not now).
+     * Refine the outcome of a call already applied locally (PostCall
+     * save, when the agent confirms or changes the placeholder outcome).
+     * Does NOT touch `callAttempts` / `lastCalledAt`, nor the status.
      */
     @Query(
         """
         UPDATE clients
         SET lastOutcome = :outcome,
-            status = :newStatus,
             updatedAt = :now
         WHERE id = :clientId
         """,
     )
-    suspend fun refineOutcomeAndStatus(
+    suspend fun refineOutcome(
         clientId: String,
         outcome: CallOutcome,
-        newStatus: ClientStatus,
         now: Instant,
     )
 
@@ -254,11 +252,14 @@ interface ClientDao {
     suspend fun setStatus(clientId: String, status: ClientStatus, now: Instant)
 
     /**
-     * Optimistic write of the thermometer level. The repository calls
-     * this before the PATCH and rolls back on network failure.
+     * Set the removal reason alongside a move to [ClientStatus.REMOVED].
+     * Caller is responsible for also calling [setStatus]; kept separate
+     * so the two writes share one transaction at the repository layer.
      */
-    @Query(
-        "UPDATE clients SET interestLevel = :level, updatedAt = :now WHERE id = :clientId",
+    @Query("UPDATE clients SET removalReason = :reason, updatedAt = :now WHERE id = :clientId")
+    suspend fun setRemovalReason(
+        clientId: String,
+        reason: RemovalReason?,
+        now: Instant,
     )
-    suspend fun setInterestLevel(clientId: String, level: InterestLevel?, now: Instant)
 }

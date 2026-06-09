@@ -3,16 +3,14 @@ package com.project.vortex.callsagent.presentation.clients
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.common.enums.ClientStatus
-import com.project.vortex.callsagent.common.enums.DismissalReasonCode
+import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.data.sync.ConnectivityObserver
 import com.project.vortex.callsagent.data.sync.SyncManager
 import com.project.vortex.callsagent.data.sync.SyncResult
 import com.project.vortex.callsagent.data.sync.SyncScheduler
 import com.project.vortex.callsagent.domain.model.AgentStatusChangeLocal
 import com.project.vortex.callsagent.domain.model.Client
-import com.project.vortex.callsagent.domain.model.ClientDismissal
 import com.project.vortex.callsagent.domain.model.MissedCall
-import com.project.vortex.callsagent.domain.repository.ClientDismissalRepository
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
 import com.project.vortex.callsagent.domain.repository.InteractionRepository
@@ -48,7 +46,6 @@ data class ClientsUiState(
 @HiltViewModel
 class ClientsViewModel @Inject constructor(
     private val clientRepository: ClientRepository,
-    private val clientDismissalRepository: ClientDismissalRepository,
     private val missedCallRepository: MissedCallRepository,
     private val interactionRepository: InteractionRepository,
     private val noteRepository: NoteRepository,
@@ -222,19 +219,17 @@ class ClientsViewModel @Inject constructor(
     /**
      * Recientes feed — unified list of:
      *  - recent calls (`lastCalledAt` in window),
-     *  - recent dismissals (still active),
-     *  - recent agent-driven status changes (no call).
+     *  - recent agent-driven status changes (no call, removals included).
      *
      * Deduped by clientId — the most recent agent intent wins.
      * Sorted by timestamp desc.
      */
     val recentEntries: StateFlow<List<RecentEntry>> = combine(
         clientRepository.observeRecent(recentSince),
-        clientDismissalRepository.observeActiveSince(recentSince),
         clientRepository.observeRecentAgentStatusChanges(recentSince),
         _searchQuery,
-    ) { calledClients, dismissals, statusChanges, query ->
-        buildRecentEntries(calledClients, dismissals, statusChanges, query.trim())
+    ) { calledClients, statusChanges, query ->
+        buildRecentEntries(calledClients, statusChanges, query.trim())
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -243,15 +238,13 @@ class ClientsViewModel @Inject constructor(
 
     /**
      * Search-independent count for the pill. Recientes count = unique
-     * client IDs across calls + dismissals + status changes.
+     * client IDs across calls + status changes.
      */
     val totalRecentCount: StateFlow<Int> = combine(
         clientRepository.observeRecent(recentSince),
-        clientDismissalRepository.observeActiveSince(recentSince),
         clientRepository.observeRecentAgentStatusChanges(recentSince),
-    ) { calledClients, dismissals, statusChanges ->
+    ) { calledClients, statusChanges ->
         val ids = calledClients.map { it.id }.toMutableSet()
-        dismissals.forEach { ids += it.clientId }
         statusChanges.forEach { ids += it.clientId }
         ids.size
     }.stateIn(
@@ -262,7 +255,6 @@ class ClientsViewModel @Inject constructor(
 
     private suspend fun buildRecentEntries(
         calledClients: List<Client>,
-        dismissals: List<ClientDismissal>,
         statusChanges: List<AgentStatusChangeLocal>,
         query: String,
     ): List<RecentEntry> {
@@ -273,9 +265,9 @@ class ClientsViewModel @Inject constructor(
                 byClientId[client.id] = RecentEntry.Called(client, it)
             }
         }
-        // 2. Status changes — override calls when more recent.
-        //    Clients moved without a call may not be in `calledClients`
-        //    so we fetch them on miss.
+        // 2. Status changes (removals included) — override calls when
+        //    more recent. Clients moved without a call may not be in
+        //    `calledClients` so we fetch them on miss.
         for (change in statusChanges) {
             val existing = byClientId[change.clientId]
             val client = (existing?.client) ?: clientRepository.findById(change.clientId)
@@ -286,20 +278,6 @@ class ClientsViewModel @Inject constructor(
                     client = client,
                     timestamp = change.timestamp,
                     change = change,
-                )
-            }
-        }
-        // 3. Dismissals — most recent intent wins again.
-        for (dismissal in dismissals) {
-            val existing = byClientId[dismissal.clientId]
-            val client = (existing?.client) ?: clientRepository.findById(dismissal.clientId)
-            if (client == null) continue
-            val existingTs = existing?.timestamp
-            if (existingTs == null || dismissal.dismissedAt.isAfter(existingTs)) {
-                byClientId[dismissal.clientId] = RecentEntry.Dismissed(
-                    client = client,
-                    timestamp = dismissal.dismissedAt,
-                    dismissal = dismissal,
                 )
             }
         }
@@ -439,21 +417,27 @@ class ClientsViewModel @Inject constructor(
         autoCallOrchestrator.exit()
     }
 
-    // ─── Dismissal actions ─────────────────────────────────────────────────
+    // ─── Removal action ─────────────────────────────────────────────────────
 
+    /**
+     * Remove a client from the list — routed through `agent-status-change`
+     * to REMOVED with the chosen [removalReason] (no separate dismissal
+     * channel in the 5-state model). Quorum-aware on the backend: a hard
+     * reason may keep the client active until a 2nd agent confirms, in
+     * which case the reactive flow simply leaves it in place.
+     */
     fun dismissClient(
         clientId: String,
-        reasonCode: DismissalReasonCode?,
+        removalReason: RemovalReason,
         freeFormReason: String?,
     ) {
         viewModelScope.launch {
-            clientDismissalRepository.dismiss(clientId, reasonCode, freeFormReason)
-        }
-    }
-
-    fun undoDismissal(clientId: String) {
-        viewModelScope.launch {
-            clientDismissalRepository.undo(clientId)
+            clientRepository.agentStatusChange(
+                clientId = clientId,
+                toStatus = ClientStatus.REMOVED,
+                removalReason = removalReason,
+                reason = freeFormReason,
+            )
         }
     }
 }

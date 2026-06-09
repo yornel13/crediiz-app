@@ -20,10 +20,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PhoneMissed
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.QuestionMark
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,7 +49,9 @@ import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.ui.theme.Amber600
 import com.project.vortex.callsagent.ui.theme.Emerald600
 import com.project.vortex.callsagent.ui.theme.Rose600
+import com.project.vortex.callsagent.ui.theme.Sky600
 import com.project.vortex.callsagent.ui.theme.Slate600
+import com.project.vortex.callsagent.ui.theme.Teal700
 import java.time.Duration
 import java.time.Instant
 
@@ -151,10 +153,10 @@ private fun StatGrid(stats: AutoCallSessionStats) {
                 modifier = Modifier.weight(1f),
             )
             StatCard(
-                label = stringResource(R.string.autocall_stat_not_interested),
-                value = stats.notInterested,
-                icon = Icons.Filled.Close,
-                color = Rose600,
+                label = stringResource(R.string.autocall_stat_cited),
+                value = stats.cited,
+                icon = Icons.Filled.EventAvailable,
+                color = Sky600,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -163,28 +165,28 @@ private fun StatGrid(stats: AutoCallSessionStats) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             StatCard(
-                label = stringResource(R.string.autocall_stat_no_answer),
-                value = stats.noAnswer,
+                label = stringResource(R.string.autocall_stat_sold),
+                value = stats.sold,
+                icon = Icons.Filled.AttachMoney,
+                color = Teal700,
+                modifier = Modifier.weight(1f),
+            )
+            StatCard(
+                label = stringResource(R.string.autocall_stat_no_contact),
+                value = stats.noContact,
                 icon = Icons.AutoMirrored.Filled.PhoneMissed,
                 color = Amber600,
                 modifier = Modifier.weight(1f),
             )
-            StatCard(
-                label = stringResource(R.string.autocall_stat_busy),
-                value = stats.busy,
-                icon = Icons.Filled.Phone,
-                color = Amber600,
-                modifier = Modifier.weight(1f),
-            )
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             StatCard(
-                label = stringResource(R.string.autocall_stat_wrong_number),
-                value = stats.wrongNumber,
-                icon = Icons.Filled.QuestionMark,
+                label = stringResource(R.string.autocall_stat_removed),
+                value = stats.removed,
+                icon = Icons.Filled.Block,
                 color = Rose600,
                 modifier = Modifier.weight(1f),
             )

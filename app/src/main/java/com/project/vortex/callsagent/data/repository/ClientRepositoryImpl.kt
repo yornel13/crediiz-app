@@ -3,7 +3,7 @@ package com.project.vortex.callsagent.data.repository
 import android.util.Log
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
-import com.project.vortex.callsagent.common.enums.InterestLevel
+import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.data.local.db.ClientDao
 import com.project.vortex.callsagent.data.local.db.LocalAgentStatusChangeDao
 import com.project.vortex.callsagent.data.local.entity.LocalAgentStatusChangeEntity
@@ -12,10 +12,10 @@ import com.project.vortex.callsagent.data.mapper.toEntity
 import com.project.vortex.callsagent.data.error.ErrorMapper
 import com.project.vortex.callsagent.data.remote.api.ClientsApi
 import com.project.vortex.callsagent.data.remote.dto.AgentStatusChangeDto
-import com.project.vortex.callsagent.data.remote.dto.UpdateInterestLevelDto
 import com.project.vortex.callsagent.domain.error.ClientError
 import com.project.vortex.callsagent.domain.model.AgentStatusChangeLocal
 import com.project.vortex.callsagent.domain.model.Client
+import com.project.vortex.callsagent.domain.model.ClientStatusChange
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.result.OperationResult
 import java.util.UUID
@@ -28,35 +28,28 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Optimistic local status guess applied right after the call ends, so the
- * UI moves the client out of "Pendientes — Untouched" before the sync
- * round-trip resolves. This is **NOT** authoritative — the backend is the
- * source of truth and the post-sync refresh overwrites with the real value.
- *
- * In particular: `WRONG_NUMBER` may end up as either `IN_PROGRESS` or
- * `UNREACHABLE` depending on the server-side `wrongNumberCount` threshold,
- * which the mobile cannot see. We guess `IN_PROGRESS` (the common case)
- * and let the refresh correct to `UNREACHABLE` on the 3rd strike.
+ * The only outcomes the app may advance a client to **locally**. They are
+ * all monotonic high-water-mark advances (the agent can only move up), so
+ * applying them optimistically can never contradict the backend's
+ * precedence rules. Every other outcome (no-contact, not-interested, hard
+ * reasons) is left to the backend: thresholds and quorum mean a single
+ * mobile guess would be wrong, so we wait for the post-sync refresh.
  */
-private val OPTIMISTIC_OUTCOME_TO_STATUS: Map<CallOutcome, ClientStatus> = mapOf(
-    CallOutcome.ANSWERED_INTERESTED to ClientStatus.INTERESTED,
-    CallOutcome.ANSWERED_NOT_INTERESTED to ClientStatus.REJECTED,
-    CallOutcome.ANSWERED_OPT_OUT to ClientStatus.DO_NOT_CALL,
-    CallOutcome.ANSWERED_SOLD to ClientStatus.CONVERTED,
-    CallOutcome.NO_ANSWER to ClientStatus.IN_PROGRESS,
-    CallOutcome.BUSY to ClientStatus.IN_PROGRESS,
-    CallOutcome.WRONG_NUMBER to ClientStatus.IN_PROGRESS,
+private val SAFE_ADVANCE_OUTCOME_TO_STATUS: Map<CallOutcome, ClientStatus> = mapOf(
+    CallOutcome.INTERESTED to ClientStatus.INTERESTED,
+    CallOutcome.SCHEDULED to ClientStatus.CITED,
+    CallOutcome.SOLD to ClientStatus.CONVERTED,
 )
 
 /**
  * Default [ClientRepository] backed by Room + Retrofit.
  *
  * **Project invariant — read before adding new methods:**
- * Any operation that performs a local optimistic write and rolls back
- * on HTTP failure MUST return an [OperationResult] with a typed error
- * (see [updateInterestLevel], [agentStatusChange]). Silent rollback
- * is always a bug — the agent must see a snackbar explaining what
- * happened (R2 in `HOW_IT_WORKS_ALIGNMENT.md`).
+ * In the 5-state model the backend is the source of truth for status.
+ * The app never decides a status from an outcome except for the safe
+ * high-water-mark advances in [SAFE_ADVANCE_OUTCOME_TO_STATUS]. Writes
+ * that depend on a server decision (see [agentStatusChange]) reconcile
+ * against the returned client instead of guessing.
  */
 @Singleton
 class ClientRepositoryImpl @Inject constructor(
@@ -110,6 +103,9 @@ class ClientRepositoryImpl @Inject constructor(
         dao.findById(id)?.toDomain()
     }
 
+    override fun observeClient(id: String): Flow<Client?> =
+        dao.observeById(id).map { it?.toDomain() }
+
     override suspend fun findByPhone(phone: String): Client? = withContext(Dispatchers.IO) {
         dao.findByNormalizedPhone(phone)?.toDomain()
     }
@@ -119,25 +115,25 @@ class ClientRepositoryImpl @Inject constructor(
         outcome: CallOutcome,
         callStartedAt: Instant,
     ) = withContext(Dispatchers.IO) {
+        val now = Instant.now()
         dao.applyInteractionUpdate(
             clientId = clientId,
             lastCalledAt = callStartedAt,
             lastOutcome = outcome,
-            newStatus = OPTIMISTIC_OUTCOME_TO_STATUS.getValue(outcome),
-            now = Instant.now(),
+            now = now,
         )
+        val advance = SAFE_ADVANCE_OUTCOME_TO_STATUS[outcome]
+        if (advance != null) dao.setStatus(clientId, advance, now)
     }
 
     override suspend fun refineInteractionOutcome(
         clientId: String,
         outcome: CallOutcome,
     ) = withContext(Dispatchers.IO) {
-        dao.refineOutcomeAndStatus(
-            clientId = clientId,
-            outcome = outcome,
-            newStatus = OPTIMISTIC_OUTCOME_TO_STATUS.getValue(outcome),
-            now = Instant.now(),
-        )
+        val now = Instant.now()
+        dao.refineOutcome(clientId = clientId, outcome = outcome, now = now)
+        val advance = SAFE_ADVANCE_OUTCOME_TO_STATUS[outcome]
+        if (advance != null) dao.setStatus(clientId, advance, now)
     }
 
     override suspend fun updateLastNoteLocally(clientId: String, note: String) =
@@ -145,79 +141,57 @@ class ClientRepositoryImpl @Inject constructor(
             dao.updateLastNote(clientId, note, Instant.now())
         }
 
-    override suspend fun updateInterestLevel(
+    override suspend fun agentStatusChange(
         clientId: String,
-        level: InterestLevel,
-        previous: InterestLevel?,
-    ): OperationResult<Unit, ClientError> = withContext(Dispatchers.IO) {
-        // 1. Optimistic write — the UI reflects the new level instantly.
-        dao.setInterestLevel(clientId, level, Instant.now())
-        // 2. Server PATCH. Server returns 400 if the client isn't
-        //    INTERESTED; we map every failure to a typed error so the
-        //    ViewModel can surface a snackbar. Silent rollback is a bug.
+        toStatus: ClientStatus,
+        removalReason: RemovalReason?,
+        reason: String?,
+    ): OperationResult<ClientStatus, ClientError> = withContext(Dispatchers.IO) {
+        val fromStatus = dao.findById(clientId)?.status
         try {
-            api.updateInterestLevel(clientId, UpdateInterestLevelDto(level = level.name))
-            OperationResult.Success(Unit)
+            // No optimistic write: the result may be a 200 no-op (blocked
+            // transition / quorum). We apply the server-returned client as
+            // the single source of truth and report the resulting status.
+            val response = api.agentStatusChange(
+                clientId,
+                AgentStatusChangeDto(
+                    toStatus = toStatus.name,
+                    removalReason = removalReason?.name?.takeIf { toStatus == ClientStatus.REMOVED },
+                    reason = reason?.takeIf { it.isNotBlank() },
+                ),
+            )
+            val entity = response.data.toEntity()
+            dao.upsert(listOf(entity))
+
+            // Record the action for the Recientes feed only when it
+            // actually moved the client (a no-op shouldn't show up there).
+            if (fromStatus != null && entity.status != fromStatus) {
+                statusChangeDao.insert(
+                    LocalAgentStatusChangeEntity(
+                        id = UUID.randomUUID().toString(),
+                        clientId = clientId,
+                        fromStatus = fromStatus,
+                        toStatus = entity.status,
+                        removalReason = entity.removalReason,
+                        reason = reason?.takeIf { it.isNotBlank() },
+                        timestamp = Instant.now(),
+                    ),
+                )
+            }
+            OperationResult.Success(entity.status)
         } catch (err: Throwable) {
-            Log.w(TAG, "updateInterestLevel($clientId, $level) failed, rolling back", err)
-            dao.setInterestLevel(clientId, previous, Instant.now())
+            Log.w(TAG, "agentStatusChange($clientId, $toStatus) failed", err)
             OperationResult.Failure(errorMapper.toClientError(err))
         }
     }
 
-    override suspend fun agentStatusChange(
+    override suspend fun fetchStatusHistory(
         clientId: String,
-        toStatus: ClientStatus,
-        previousStatus: ClientStatus,
-        previousLevel: InterestLevel?,
-        reason: String?,
-        level: InterestLevel?,
-    ): OperationResult<Unit, ClientError> = withContext(Dispatchers.IO) {
-        val now = Instant.now()
-        // Optimistic: status + (maybe) level. Backend resets level to
-        // null on non-INTERESTED targets; we mirror that here so the
-        // chip disappears immediately when moving to e.g. DO_NOT_CALL.
-        dao.setStatus(clientId, toStatus, now)
-        dao.setInterestLevel(
-            clientId,
-            if (toStatus == ClientStatus.INTERESTED) level else null,
-            now,
-        )
-        try {
-            api.agentStatusChange(
-                clientId,
-                AgentStatusChangeDto(
-                    toStatus = toStatus.name,
-                    reason = reason?.takeIf { it.isNotBlank() },
-                    interestLevel = level?.name?.takeIf { toStatus == ClientStatus.INTERESTED },
-                ),
-            )
-            // Persist a local-only record of the action so the
-            // Recientes feed can surface "this client moved without a
-            // call" inside the 24 h window. Survives across app
-            // restarts; only purged by the destructive migration in
-            // dev or by `deleteAll` on logout.
-            statusChangeDao.insert(
-                LocalAgentStatusChangeEntity(
-                    id = UUID.randomUUID().toString(),
-                    clientId = clientId,
-                    fromStatus = previousStatus,
-                    toStatus = toStatus,
-                    interestLevel = if (toStatus == ClientStatus.INTERESTED) level else null,
-                    reason = reason?.takeIf { it.isNotBlank() },
-                    timestamp = Instant.now(),
-                ),
-            )
-            OperationResult.Success(Unit)
-        } catch (err: Throwable) {
-            Log.w(
-                TAG,
-                "agentStatusChange($clientId, $toStatus) failed, rolling back",
-                err,
-            )
-            dao.setStatus(clientId, previousStatus, Instant.now())
-            dao.setInterestLevel(clientId, previousLevel, Instant.now())
-            OperationResult.Failure(errorMapper.toClientError(err))
+        limit: Int,
+    ): Result<List<ClientStatusChange>> = withContext(Dispatchers.IO) {
+        runCatching {
+            api.getStatusHistory(clientId, page = 1, limit = limit)
+                .data.data.mapNotNull { it.toDomain() }
         }
     }
 
@@ -231,7 +205,7 @@ class ClientRepositoryImpl @Inject constructor(
                     clientId = e.clientId,
                     fromStatus = e.fromStatus,
                     toStatus = e.toStatus,
-                    interestLevel = e.interestLevel,
+                    removalReason = e.removalReason,
                     reason = e.reason,
                     timestamp = e.timestamp,
                 )

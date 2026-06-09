@@ -186,21 +186,20 @@ class LoginViewModel @Inject constructor(
      *
      * All pulls run in parallel — KI-02 is closed (the DAO uses
      * `replaceAllByStatus`, status-scoped, so they don't clobber each
-     * other). After the 2026-05 backend refactor (HOW_IT_WORKS §3),
-     * the funnel splits PENDING ("never called") from IN_PROGRESS
-     * ("called, no closing outcome yet"), so the Retry section needs
-     * the IN_PROGRESS pull to populate on first launch. INTERESTED is
+     * other). The active agenda funnel covers PENDING ("never called"),
+     * INTERESTED and CITED ("scheduled for a follow-up"); these are the
+     * only working states the agent acts on. INTERESTED and CITED are
      * required for Agenda's INNER JOIN against `clients`.
      */
     private suspend fun hydrate(): Boolean = coroutineScope {
         val pending = async { clientRepository.refreshAssigned(ClientStatus.PENDING) }
-        val inProgress = async { clientRepository.refreshAssigned(ClientStatus.IN_PROGRESS) }
         val interested = async { clientRepository.refreshAssigned(ClientStatus.INTERESTED) }
+        val cited = async { clientRepository.refreshAssigned(ClientStatus.CITED) }
         val agenda = async { followUpRepository.refreshAgenda() }
         val results = listOf(
             pending.await(),
-            inProgress.await(),
             interested.await(),
+            cited.await(),
             agenda.await(),
         )
         results.any { it.isFailure }

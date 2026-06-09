@@ -26,9 +26,8 @@ interface FollowUpDao {
      * local cache — those rows would crash with "Client not found"
      * when the agent taps them.
      *
-     * Follow-up rows can become orphaned when the client moves to a
-     * status mobile doesn't sync (REJECTED / INVALID_NUMBER /
-     * CONVERTED / DISMISSED / DO_NOT_CALL): the next
+     * Follow-up rows can become orphaned when the client leaves the
+     * active set (CONVERTED or REMOVED): the next
      * `replaceAllByStatus(INTERESTED, ...)` deletes the client locally
      * but `replaceAgenda` keeps the follow-up.
      *

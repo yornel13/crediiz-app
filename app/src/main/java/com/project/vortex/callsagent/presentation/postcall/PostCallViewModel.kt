@@ -6,7 +6,6 @@ import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.common.BusinessConfig
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.FollowUpStatus
-import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
 import com.project.vortex.callsagent.domain.call.CallEndingInsight
@@ -41,14 +40,6 @@ data class PostCallUiState(
     val client: Client? = null,
     val interaction: Interaction? = null,
     val selectedOutcome: CallOutcome? = null,
-    /**
-     * Thermometer the agent picks when [selectedOutcome] is
-     * [CallOutcome.ANSWERED_INTERESTED]. Defaults to [InterestLevel.COLD]
-     * (mirroring the backend's default at INTERESTED transition). If
-     * the agent picks WARM or HOT, the save path fires a follow-up
-     * PATCH after the sync so the server reflects the level.
-     */
-    val selectedInterestLevel: InterestLevel = InterestLevel.COLD,
     val noteText: String = "",
     val followUpDate: LocalDate? = null,
     val followUpTime: LocalTime? = null,
@@ -79,13 +70,13 @@ data class PostCallUiState(
     val reasonLabel: String? = null,
 ) {
     val showFollowUpForm: Boolean
-        get() = selectedOutcome == CallOutcome.ANSWERED_INTERESTED
+        get() = selectedOutcome == CallOutcome.INTERESTED
 
     val canSave: Boolean
         get() {
             if (isSaving || isLoading) return false
             if (selectedOutcome == null) return false
-            return if (selectedOutcome == CallOutcome.ANSWERED_INTERESTED) {
+            return if (selectedOutcome == CallOutcome.INTERESTED) {
                 followUpDate != null &&
                     followUpTime != null &&
                     isFollowUpInFuture()
@@ -93,7 +84,7 @@ data class PostCallUiState(
         }
 
     val followUpDateTimeError: String?
-        get() = if (selectedOutcome == CallOutcome.ANSWERED_INTERESTED &&
+        get() = if (selectedOutcome == CallOutcome.INTERESTED &&
             followUpDate != null &&
             followUpTime != null &&
             !isFollowUpInFuture()
@@ -174,19 +165,7 @@ class PostCallViewModel @Inject constructor(
     }
 
     fun selectOutcome(outcome: CallOutcome) =
-        _uiState.update {
-            // Switching outcome away from INTERESTED resets the
-            // thermometer back to COLD so the agent doesn't ship a
-            // stale level on the next save.
-            val keepLevel = outcome == CallOutcome.ANSWERED_INTERESTED
-            it.copy(
-                selectedOutcome = outcome,
-                selectedInterestLevel = if (keepLevel) it.selectedInterestLevel else InterestLevel.COLD,
-            )
-        }
-
-    fun selectInterestLevel(level: InterestLevel) =
-        _uiState.update { it.copy(selectedInterestLevel = level) }
+        _uiState.update { it.copy(selectedOutcome = outcome) }
 
     fun onNoteChange(text: String) = _uiState.update { it.copy(noteText = text) }
 
@@ -249,7 +228,7 @@ class PostCallViewModel @Inject constructor(
                 }
 
                 // 4. Schedule a follow-up if Interested.
-                if (outcome == CallOutcome.ANSWERED_INTERESTED) {
+                if (outcome == CallOutcome.INTERESTED) {
                     val date = state.followUpDate ?: error("date required")
                     val time = state.followUpTime ?: error("time required")
                     val scheduledAt = date.atTime(time).atZone(zone).toInstant()
@@ -274,22 +253,8 @@ class PostCallViewModel @Inject constructor(
                     )
                     followUpRepository.save(followUp)
                 }
-                // 5. If the outcome moved the client to INTERESTED and
-                //    the agent picked WARM or HOT, fire the thermometer
-                //    PATCH after the sync trigger. Fire-and-forget — if
-                //    it fails the agent can re-pick from PreCall later;
-                //    the backend default (COLD) is still a valid value.
-                if (outcome == CallOutcome.ANSWERED_INTERESTED &&
-                    state.selectedInterestLevel != InterestLevel.COLD
-                ) {
-                    clientRepository.updateInterestLevel(
-                        clientId = clientId,
-                        level = state.selectedInterestLevel,
-                        previous = InterestLevel.COLD,
-                    )
-                }
 
-                // 6. Auto-close any past-due follow-ups for this client.
+                // 5. Auto-close any past-due follow-ups for this client.
                 //    Policy (see FollowUpRepository.markPendingForClientCompleted):
                 //    a call that just happened satisfies the "llamar a este
                 //    cliente" obligation of every PENDING follow-up whose

@@ -76,7 +76,7 @@ val Emerald100 = Color(0xFFD1FAE5)
 val Amber600 = Color(0xFFD97706)
 val Amber100 = Color(0xFFFEF3C7)
 
-// Error (REJECTED, INVALID_NUMBER)
+// Error (REMOVED, hard outcomes)
 val Rose600 = Color(0xFFE11D48)
 val Rose100 = Color(0xFFFFE4E6)
 

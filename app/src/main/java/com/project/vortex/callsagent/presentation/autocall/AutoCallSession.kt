@@ -24,28 +24,34 @@ data class AutoCallSession(
 
 data class AutoCallSessionStats(
     val total: Int,
+    /** Funnel advances. */
     val interested: Int = 0,
-    val notInterested: Int = 0,
-    val optOut: Int = 0,
+    val cited: Int = 0,
     val sold: Int = 0,
-    val noAnswer: Int = 0,
-    val busy: Int = 0,
-    val wrongNumber: Int = 0,
+    /** No-contact bucket (no answer / busy / out of service / voicemail / wrong number). */
+    val noContact: Int = 0,
+    /** Removed bucket (not interested / do-not-call / has-loan / deceased / not-applicable). */
+    val removed: Int = 0,
     val skipped: Int = 0,
     val startedAt: Instant,
 ) {
     val processed: Int
-        get() = interested + notInterested + optOut + sold +
-            noAnswer + busy + wrongNumber + skipped
+        get() = interested + cited + sold + noContact + removed + skipped
 
     fun recordOutcome(outcome: CallOutcome): AutoCallSessionStats = when (outcome) {
-        CallOutcome.ANSWERED_INTERESTED -> copy(interested = interested + 1)
-        CallOutcome.ANSWERED_NOT_INTERESTED -> copy(notInterested = notInterested + 1)
-        CallOutcome.ANSWERED_OPT_OUT -> copy(optOut = optOut + 1)
-        CallOutcome.ANSWERED_SOLD -> copy(sold = sold + 1)
-        CallOutcome.NO_ANSWER -> copy(noAnswer = noAnswer + 1)
-        CallOutcome.BUSY -> copy(busy = busy + 1)
-        CallOutcome.WRONG_NUMBER -> copy(wrongNumber = wrongNumber + 1)
+        CallOutcome.INTERESTED -> copy(interested = interested + 1)
+        CallOutcome.SCHEDULED -> copy(cited = cited + 1)
+        CallOutcome.SOLD -> copy(sold = sold + 1)
+        CallOutcome.NO_ANSWER,
+        CallOutcome.BUSY,
+        CallOutcome.OUT_OF_SERVICE,
+        CallOutcome.VOICEMAIL,
+        CallOutcome.WRONG_NUMBER -> copy(noContact = noContact + 1)
+        CallOutcome.NOT_INTERESTED,
+        CallOutcome.DO_NOT_CALL,
+        CallOutcome.HAS_LOAN,
+        CallOutcome.DECEASED,
+        CallOutcome.NOT_APPLICABLE -> copy(removed = removed + 1)
     }
 
     fun recordSkip(): AutoCallSessionStats = copy(skipped = skipped + 1)

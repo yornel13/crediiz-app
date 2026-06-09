@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material.icons.filled.Star
@@ -105,7 +106,7 @@ import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.BusinessConfig
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
-import com.project.vortex.callsagent.common.enums.InterestLevel
+import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.domain.call.CallReadiness
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
@@ -118,10 +119,8 @@ import com.project.vortex.callsagent.presentation.precall.components.AgentStatus
 import com.project.vortex.callsagent.presentation.precall.components.ScheduleFollowUpSheet
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.components.CallReadinessBanner
-import com.project.vortex.callsagent.ui.components.InterestLevelSelector
 import com.project.vortex.callsagent.ui.components.SectionHeader
 import com.project.vortex.callsagent.ui.components.StatusPill
-import com.project.vortex.callsagent.ui.theme.emoji
 import com.project.vortex.callsagent.ui.theme.PhoneGreen
 import com.project.vortex.callsagent.ui.theme.PillShape
 import com.project.vortex.callsagent.ui.theme.StatusPalette
@@ -163,7 +162,6 @@ private val NoteInputDashedColor = Color(0xFF34D399)
 private sealed interface ActiveSheet {
     data object None : ActiveSheet
     data object Dismiss : ActiveSheet
-    data object InterestLevel : ActiveSheet
     data object StatusChange : ActiveSheet
     data object Schedule : ActiveSheet
 }
@@ -350,7 +348,6 @@ fun PreCallScreen(
                 onRetrySip = viewModel::retrySipRegistration,
                 onSaveNote = viewModel::saveManualNote,
                 onBack = effectiveOnBack,
-                onChangeInterestLevel = { activeSheet = ActiveSheet.InterestLevel },
                 onRequestStatusChange = { activeSheet = ActiveSheet.StatusChange },
                 onRequestSchedule = { activeSheet = ActiveSheet.Schedule },
                 contentPadding = padding,
@@ -363,16 +360,6 @@ fun PreCallScreen(
         // ever happened.
         when (activeSheet) {
             ActiveSheet.None -> Unit
-            ActiveSheet.InterestLevel -> if (uiState.client?.status == ClientStatus.INTERESTED) {
-                InterestLevelSheet(
-                    current = uiState.client?.interestLevel,
-                    onDismiss = { activeSheet = ActiveSheet.None },
-                    onSelect = { level ->
-                        viewModel.updateInterestLevel(level)
-                        activeSheet = ActiveSheet.None
-                    },
-                )
-            }
             ActiveSheet.StatusChange -> uiState.client?.let { client ->
                 AgentStatusChangeSheet(
                     clientName = client.name,
@@ -381,8 +368,8 @@ fun PreCallScreen(
                     onConfirm = { change ->
                         viewModel.agentStatusChange(
                             toStatus = change.status,
+                            removalReason = change.removalReason,
                             reason = change.reason,
-                            level = change.level,
                         )
                         activeSheet = ActiveSheet.None
                     },
@@ -391,8 +378,8 @@ fun PreCallScreen(
             ActiveSheet.Dismiss -> DismissClientSheet(
                 clientName = uiState.client?.name.orEmpty(),
                 onDismiss = { activeSheet = ActiveSheet.None },
-                onConfirm = { code, free ->
-                    viewModel.dismissClient(code, free)
+                onConfirm = { removalReason, free ->
+                    viewModel.dismissClient(removalReason, free)
                     activeSheet = ActiveSheet.None
                 },
             )
@@ -408,7 +395,6 @@ fun PreCallScreen(
                         viewModel.scheduleFollowUp(
                             scheduledAt = result.scheduledAt,
                             reason = result.reason,
-                            level = result.interestLevel,
                             replacePending = result.replacePending,
                         )
                         activeSheet = ActiveSheet.None
@@ -508,7 +494,6 @@ fun PreCallReadOnlyPanel(
                             client = uiState.client!!,
                             onBack = null,
                             onStatusClick = { /* read-only — no sheet */ },
-                            onInterestClick = { /* read-only — no sheet */ },
                         )
                     }
                     item("readonly_activity_header") {
@@ -568,7 +553,6 @@ private fun PreCallContent(
     onRetrySip: () -> Unit,
     onSaveNote: (String) -> Unit,
     onBack: (() -> Unit)?,
-    onChangeInterestLevel: () -> Unit,
     onRequestStatusChange: () -> Unit,
     onRequestSchedule: () -> Unit,
     contentPadding: PaddingValues,
@@ -591,7 +575,6 @@ private fun PreCallContent(
                 client = client,
                 onBack = onBack,
                 onStatusClick = onRequestStatusChange,
-                onInterestClick = onChangeInterestLevel,
                 onScheduleClick = onRequestSchedule,
             )
         }
@@ -707,7 +690,7 @@ private fun LazyListScope.renderActivityTimeline(events: List<ActivityEvent>) {
     // continuous left rail + connector dots provides the temporal
     // grouping affordance.
     events.forEachIndexed { index, event ->
-        item("activity_event_$index") {
+        item(event.stableKey) {
             ActivityRail(
                 event = event,
                 isFirst = index == 0,
@@ -842,17 +825,16 @@ private fun ActivityRailGutter(
 
 /**
  * Compact identity strip — replaces the old gradient mega-hero. One
- * row with avatar + name + phone + status pill + interest pill (when
- * INTERESTED). The stats line below summarises attempts/last-call/
- * outcome in plain text so the agent gets the at-a-glance summary
- * without a 340dp gradient block stealing the viewport.
+ * row with avatar + name + phone + status pill. The stats line below
+ * summarises attempts/last-call/outcome in plain text so the agent
+ * gets the at-a-glance summary without a 340dp gradient block stealing
+ * the viewport.
  */
 @Composable
 private fun CompactHeader(
     client: Client,
     onBack: (() -> Unit)?,
     onStatusClick: () -> Unit,
-    onInterestClick: () -> Unit,
     onScheduleClick: (() -> Unit)? = null,
 ) {
     // Compact-width adaptation: on phones, the header would otherwise
@@ -912,19 +894,12 @@ private fun CompactHeader(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         StatusPillCompact(client = client, onClick = onStatusClick)
-                        if (client.status == ClientStatus.INTERESTED) {
-                            InterestLevelPillCompact(
-                                level = client.interestLevel ?: InterestLevel.COLD,
-                                onClick = onInterestClick,
-                            )
-                        }
                     }
                 }
                 // Calendar action — only shown when scheduling makes
                 // sense for the current client. Terminal statuses
-                // (CONVERTED, DO_NOT_CALL, UNREACHABLE, REJECTED,
-                // DISMISSED) hide the button — those clients can't
-                // be scheduled (D1).
+                // (CONVERTED, REMOVED) hide the button — those clients
+                // can't be scheduled (D1).
                 if (onScheduleClick != null && client.status.canBeScheduled()) {
                     IconButton(onClick = onScheduleClick) {
                         Icon(
@@ -1109,13 +1084,14 @@ private fun DataField(
  */
 @Composable
 private fun StatusPillCompact(client: Client, onClick: () -> Unit) {
-    // Override the global status palette + label LOCALLY to match
-    // the mockup, without affecting how status pills look on the
-    // list / agenda screens. PENDING here renders in amber (the
-    // mockup convention "needs attention"); labels are in Spanish.
-    // Other states fall back to the global theme palette.
+    // Override the global status palette LOCALLY to match the mockup,
+    // without affecting how status pills look on the list / agenda
+    // screens. PENDING here renders in amber (the mockup convention
+    // "needs attention"); other states fall back to the global theme
+    // palette. Label comes from the shared [ClientStatus.label] helper
+    // so the 5-state vocabulary stays consistent app-wide.
     val palette = precallStatusPalette(client.status)
-    val label = client.status.precallLabel()
+    val label = client.status.label()
     Surface(
         onClick = onClick,
         shape = PillShape,
@@ -1149,24 +1125,6 @@ private fun StatusPillCompact(client: Client, onClick: () -> Unit) {
 }
 
 /**
- * Local Spanish labels for the status pill — keeps the global
- * [ClientStatus.label] in English (used by other screens) and lets
- * PreCall display the localised text the mockup specifies.
- */
-@Composable
-@androidx.compose.runtime.ReadOnlyComposable
-private fun ClientStatus.precallLabel(): String = when (this) {
-    ClientStatus.PENDING -> stringResource(R.string.precall_status_pending)
-    ClientStatus.IN_PROGRESS -> stringResource(R.string.precall_status_in_progress)
-    ClientStatus.INTERESTED -> stringResource(R.string.precall_status_interested)
-    ClientStatus.REJECTED -> stringResource(R.string.precall_status_rejected)
-    ClientStatus.UNREACHABLE -> stringResource(R.string.precall_status_unreachable)
-    ClientStatus.CONVERTED -> stringResource(R.string.precall_status_converted)
-    ClientStatus.DO_NOT_CALL -> stringResource(R.string.precall_status_do_not_call)
-    ClientStatus.DISMISSED -> stringResource(R.string.precall_status_dismissed)
-}
-
-/**
  * Local PENDING-amber palette override for PreCall — matches the
  * mockup's "needs attention" pill colour without touching the global
  * status palette (which other screens rely on for neutral pills).
@@ -1196,36 +1154,17 @@ private fun precallAmberPalette(): StatusPalette =
 private fun Color.precallLuminance(): Float =
     0.2126f * red + 0.7152f * green + 0.0722f * blue
 
-@Composable
-private fun InterestLevelPillCompact(level: InterestLevel, onClick: () -> Unit) {
-    val palette = level.palette()
-    Surface(
-        onClick = onClick,
-        shape = PillShape,
-        color = palette.container,
-        contentColor = palette.onContainer,
-    ) {
-        Text(
-            text = level.label(),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-        )
-    }
-}
-
 // ─── Contextual banner ────────────────────────────────────────────────
 
 /**
  * Computed banner state. Picks the FIRST applicable context so we
  * never stack banners. Priority order is intentional — terminal
- * statuses dominate (an UNREACHABLE client's scheduled callback is
+ * statuses dominate (a REMOVED client's scheduled callback is
  * meaningless).
  */
 private sealed interface BannerContext {
     data object Converted : BannerContext
-    data object DoNotCall : BannerContext
-    data class Unreachable(val strikes: Int) : BannerContext
+    data class Removed(val reason: RemovalReason?) : BannerContext
     data class ScheduledCallback(val at: Instant) : BannerContext
     data object NewLead : BannerContext
 }
@@ -1236,9 +1175,7 @@ private fun computeBannerContext(
     activityCount: Int,
 ): BannerContext? = when {
     client.status == ClientStatus.CONVERTED -> BannerContext.Converted
-    client.status == ClientStatus.DO_NOT_CALL -> BannerContext.DoNotCall
-    client.status == ClientStatus.UNREACHABLE ->
-        BannerContext.Unreachable(client.wrongNumberCount)
+    client.status == ClientStatus.REMOVED -> BannerContext.Removed(client.removalReason)
     nextFollowUp != null -> BannerContext.ScheduledCallback(nextFollowUp.scheduledAt)
     activityCount == 0 && client.callAttempts == 0 -> BannerContext.NewLead
     else -> null
@@ -1254,23 +1191,17 @@ private fun ContextualBanner(context: BannerContext, modifier: Modifier = Modifi
             title = stringResource(R.string.precall_banner_converted_title),
             subtitle = stringResource(R.string.precall_banner_converted_subtitle),
         )
-        BannerContext.DoNotCall -> BannerStyle(
+        is BannerContext.Removed -> BannerStyle(
             icon = Icons.Filled.Block,
             container = MaterialTheme.colorScheme.errorContainer,
             onContainer = MaterialTheme.colorScheme.onErrorContainer,
             title = stringResource(R.string.precall_banner_do_not_call_title),
-            subtitle = stringResource(R.string.precall_banner_do_not_call_subtitle),
-        )
-        is BannerContext.Unreachable -> BannerStyle(
-            icon = Icons.Filled.Block,
-            container = MaterialTheme.colorScheme.errorContainer,
-            onContainer = MaterialTheme.colorScheme.onErrorContainer,
-            title = stringResource(R.string.precall_banner_unreachable_title),
-            subtitle = pluralStringResource(
-                R.plurals.precall_banner_unreachable_subtitle,
-                context.strikes,
-                context.strikes,
-            ),
+            // Subtitle surfaces the concrete removal reason when the
+            // backend supplied one (REMOVED always carries a
+            // RemovalReason in the new model); falls back to the
+            // generic opt-out copy if it's ever null.
+            subtitle = context.reason?.label()
+                ?: stringResource(R.string.precall_banner_do_not_call_subtitle),
         )
         is BannerContext.ScheduledCallback -> BannerStyle(
             icon = Icons.Filled.Schedule,
@@ -1434,10 +1365,78 @@ private fun ActivityRow(event: ActivityEvent, modifier: Modifier = Modifier) {
         is ActivityEvent.Call -> CallActivityRow(event, modifier)
         is ActivityEvent.NoteEntry -> NoteActivityRow(event, modifier)
         is ActivityEvent.FollowUpScheduled -> FollowUpActivityRow(event, modifier)
+        is ActivityEvent.StatusChanged -> StatusChangeActivityRow(event, modifier)
         is ActivityEvent.LeadImported -> LeadImportedRow(modifier)
         is ActivityEvent.AssignedToAgent -> AssignedToAgentRow(event, modifier)
     }
 }
+
+/**
+ * Status transition from the canonical history (any actor). Reuses the
+ * shared [ActivityRowPlain] shell: title "Cambio de estado", the author /
+ * source as meta, and "from → to" (+ optional reason) as the body — so the
+ * agent can see who moved the client and why, mixed into the timeline.
+ */
+@Composable
+private fun StatusChangeActivityRow(event: ActivityEvent.StatusChanged, modifier: Modifier) {
+    // When the client was removed, append the reason ("Desistido · No
+    // localizable") so the agent sees *why* — not just *that* it dropped.
+    val toLabel = event.removalReason
+        ?.let { "${event.toStatus.label()} · ${it.label()}" }
+        ?: event.toStatus.label()
+    val transition = if (event.fromStatus != null) {
+        "${event.fromStatus.label()} → $toLabel"
+    } else {
+        toLabel
+    }
+    val body = event.reason?.let { "$transition\n\"$it\"" } ?: transition
+    val author = event.changedByName
+    val role = event.changedByRole?.let { statusChangeRoleLabel(it) }
+    val meta = when {
+        author != null && role != null -> "$author · $role"
+        author != null -> author
+        else -> event.source?.let { statusChangeSourceLabel(it) }
+    }
+    ActivityRowPlain(
+        title = stringResource(R.string.precall_activity_status_change),
+        meta = meta,
+        timestamp = formatActivityTimestamp(event.occurredAt),
+        body = body,
+        icon = Icons.Filled.SwapHoriz,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun statusChangeRoleLabel(role: com.project.vortex.callsagent.common.enums.Role): String =
+    stringResource(
+        when (role) {
+            com.project.vortex.callsagent.common.enums.Role.ADMIN -> R.string.precall_role_admin
+            com.project.vortex.callsagent.common.enums.Role.AGENT -> R.string.precall_role_agent
+        },
+    )
+
+@Composable
+private fun statusChangeSourceLabel(
+    source: com.project.vortex.callsagent.common.enums.StatusChangeSource,
+): String = stringResource(
+    when (source) {
+        com.project.vortex.callsagent.common.enums.StatusChangeSource.INITIAL_LOAD ->
+            R.string.precall_source_initial_load
+        com.project.vortex.callsagent.common.enums.StatusChangeSource.CALL_OUTCOME ->
+            R.string.precall_source_call_outcome
+        com.project.vortex.callsagent.common.enums.StatusChangeSource.AGENT_OUT_OF_BAND ->
+            R.string.precall_source_agent_out_of_band
+        com.project.vortex.callsagent.common.enums.StatusChangeSource.ADMIN_MANUAL ->
+            R.string.precall_source_admin_manual
+        com.project.vortex.callsagent.common.enums.StatusChangeSource.ADMIN_REACTIVATE ->
+            R.string.precall_source_admin_reactivate
+        com.project.vortex.callsagent.common.enums.StatusChangeSource.AGENT_DISMISSAL ->
+            R.string.precall_source_agent_dismissal
+        com.project.vortex.callsagent.common.enums.StatusChangeSource.AGENT_DISMISSAL_UNDONE ->
+            R.string.precall_source_agent_dismissal_undone
+    },
+)
 
 /**
  * Single call event rendered as plain text on the screen background
@@ -1459,7 +1458,10 @@ private fun CallActivityRow(event: ActivityEvent.Call, modifier: Modifier) {
         title = stringResource(R.string.precall_activity_call),
         meta = formatDuration(event.durationSeconds),
         timestamp = formatActivityTimestamp(event.occurredAt),
-        body = outcomeNarrative(event.outcome),
+        // Use the centralized [CallOutcome.label] helper so the call
+        // log speaks the same 13-value vocabulary as the rest of the
+        // app (PostCall grid, agenda) instead of a local narrative map.
+        body = event.outcome.label(),
         icon = Icons.Filled.Phone,
         modifier = modifier,
     )
@@ -2362,43 +2364,6 @@ private fun ErrorState(message: String, onBack: (() -> Unit)?, modifier: Modifie
     }
 }
 
-/**
- * Short Spanish label used in compact slots (header stats line in the
- * old design, hovers, etc.). Kept terse — 1-2 words.
- */
-private fun outcomeLabel(outcome: CallOutcome): String = when (outcome) {
-    CallOutcome.ANSWERED_INTERESTED -> "Interesado"
-    CallOutcome.ANSWERED_NOT_INTERESTED -> "No interesado"
-    CallOutcome.ANSWERED_OPT_OUT -> "Opt-out"
-    CallOutcome.ANSWERED_SOLD -> "Vendido"
-    CallOutcome.NO_ANSWER -> "No contestó"
-    CallOutcome.BUSY -> "Ocupado"
-    CallOutcome.WRONG_NUMBER -> "Número errado"
-}
-
-/**
- * Human-readable Spanish sentence describing what happened in a call.
- * Used as the primary body of a `CallActivityRow` so the agent reads
- * a narrative rather than a raw enum.
- */
-@Composable
-private fun outcomeNarrative(outcome: CallOutcome): String = when (outcome) {
-    CallOutcome.ANSWERED_INTERESTED ->
-        stringResource(R.string.precall_outcome_interested)
-    CallOutcome.ANSWERED_NOT_INTERESTED ->
-        stringResource(R.string.precall_outcome_not_interested)
-    CallOutcome.ANSWERED_OPT_OUT ->
-        stringResource(R.string.precall_outcome_opt_out)
-    CallOutcome.ANSWERED_SOLD ->
-        stringResource(R.string.precall_outcome_sold)
-    CallOutcome.NO_ANSWER ->
-        stringResource(R.string.precall_outcome_no_answer)
-    CallOutcome.BUSY ->
-        stringResource(R.string.precall_outcome_busy)
-    CallOutcome.WRONG_NUMBER ->
-        stringResource(R.string.precall_outcome_wrong_number)
-}
-
 // 12-hour clock with AM/PM suffix — matches the rest of the app
 // (AgendaScreen, PostCallScreen, ScheduleFollowUpSheet all use
 // `h:mm a`). Built per-call with the process locale so AM/PM and
@@ -2452,56 +2417,21 @@ private fun formatTimestamp(instant: Instant): String =
     timestampFormatter().format(instant.atZone(BusinessConfig.BUSINESS_TIMEZONE))
 
 /**
- * Bottom sheet that lets the agent re-classify the thermometer
- * (COLD / WARM / HOT) of the current INTERESTED client.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun InterestLevelSheet(
-    current: InterestLevel?,
-    onDismiss: () -> Unit,
-    onSelect: (InterestLevel) -> Unit,
-) {
-    com.project.vortex.callsagent.ui.components.FullHeightBottomSheet(
-        onDismissRequest = onDismiss,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.precall_interest_level_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            InterestLevelSelector(
-                selected = current,
-                onSelect = onSelect,
-            )
-        }
-    }
-}
-
-/**
  * Whether the agent can schedule a follow-up for a client in this
- * status. Scheduling implies INTERESTED (`HOW_IT_WORKS §4`), so
- * terminal/closed statuses are excluded — the agent has to reactivate
- * first (admin path) before scheduling.
+ * status. Scheduling only makes sense while the client is still active
+ * in the funnel — the terminal states (CONVERTED, REMOVED) are
+ * excluded; the agent has to reactivate first (admin path) before
+ * scheduling.
  *
- * D1 from the design discussion: only PENDING / IN_PROGRESS / INTERESTED
- * are schedulable from the mobile agent's perspective.
+ * D1 from the design discussion: only the active states
+ * (PENDING / INTERESTED / CITED) are schedulable from the mobile
+ * agent's perspective.
  */
 private fun ClientStatus.canBeScheduled(): Boolean = when (this) {
     ClientStatus.PENDING,
-    ClientStatus.IN_PROGRESS,
-    ClientStatus.INTERESTED -> true
+    ClientStatus.INTERESTED,
+    ClientStatus.CITED -> true
     ClientStatus.CONVERTED,
-    ClientStatus.REJECTED,
-    ClientStatus.UNREACHABLE,
-    ClientStatus.DO_NOT_CALL,
-    ClientStatus.DISMISSED -> false
+    ClientStatus.REMOVED -> false
 }
 

@@ -2,9 +2,9 @@ package com.project.vortex.callsagent.domain.error
 
 /**
  * Typed failure modes for client-write operations
- * (`agent-status-change`, `update-interest-level`) and related
- * client-scoped reads. Lets the ViewModel emit a contextual snackbar
- * without parsing strings or HTTP codes in the UI layer.
+ * (`agent-status-change`) and related client-scoped reads. Lets the
+ * ViewModel emit a contextual snackbar without parsing strings or HTTP
+ * codes in the UI layer.
  *
  * Mapping from `Throwable` happens in
  * [com.project.vortex.callsagent.data.error.HttpErrorMapper].
@@ -31,12 +31,6 @@ sealed interface ClientError {
      * [toStatus] is the rejected destination.
      */
     data class TargetNotAllowed(val toStatus: String) : ClientError
-
-    /**
-     * `CLIENT_INTEREST_LEVEL_NOT_APPLICABLE` — tried to set the
-     * thermometer on a client that isn't INTERESTED anymore.
-     */
-    data object InterestLevelNotApplicable : ClientError
 
     /** `CLIENT_NOT_FOUND` — server-side the client id no longer exists. */
     data object NotFound : ClientError

@@ -23,31 +23,29 @@ data class CallEndingInsight(
     val reasonLabel: String?,
 ) {
     companion object {
-        /** All 7 outcomes the backend accepts (HOW_IT_WORKS §5). */
-        private val ALL_OUTCOMES = listOf(
-            CallOutcome.ANSWERED_INTERESTED,
-            CallOutcome.ANSWERED_NOT_INTERESTED,
-            CallOutcome.ANSWERED_OPT_OUT,
-            CallOutcome.ANSWERED_SOLD,
-            CallOutcome.NO_ANSWER,
-            CallOutcome.BUSY,
-            CallOutcome.WRONG_NUMBER,
-        )
-
         /** Outcomes that only make sense after a real conversation. */
         private val CONVERSATIONAL_OUTCOMES = listOf(
-            CallOutcome.ANSWERED_INTERESTED,
-            CallOutcome.ANSWERED_NOT_INTERESTED,
-            CallOutcome.ANSWERED_OPT_OUT,
-            CallOutcome.ANSWERED_SOLD,
+            CallOutcome.INTERESTED,
+            CallOutcome.SCHEDULED,
+            CallOutcome.SOLD,
+            CallOutcome.NOT_INTERESTED,
+            CallOutcome.DO_NOT_CALL,
+            CallOutcome.HAS_LOAN,
+            CallOutcome.DECEASED,
+            CallOutcome.NOT_APPLICABLE,
         )
 
         /** Outcomes that only make sense when the call never connected. */
         private val NON_CONVERSATIONAL_OUTCOMES = listOf(
             CallOutcome.NO_ANSWER,
             CallOutcome.BUSY,
+            CallOutcome.OUT_OF_SERVICE,
+            CallOutcome.VOICEMAIL,
             CallOutcome.WRONG_NUMBER,
         )
+
+        /** All 13 outcomes the backend accepts (FRONTEND-ESTADOS, CallOutcome). */
+        private val ALL_OUTCOMES = CONVERSATIONAL_OUTCOMES + NON_CONVERSATIONAL_OUTCOMES
 
         fun from(ending: SipCallEnding): CallEndingInsight = when (ending) {
             SipCallEnding.Answered -> CallEndingInsight(

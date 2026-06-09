@@ -73,7 +73,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.CallOutcome
-import com.project.vortex.callsagent.common.enums.InterestLevel
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.presentation.common.WindowSize
 import com.project.vortex.callsagent.presentation.precall.PreCallReadOnlyPanel
@@ -81,7 +80,6 @@ import com.project.vortex.callsagent.domain.model.Interaction
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.theme.Teal700
 import com.project.vortex.callsagent.ui.theme.Teal900
-import com.project.vortex.callsagent.ui.components.InterestLevelSelector
 import com.project.vortex.callsagent.ui.components.StatusPill
 import com.project.vortex.callsagent.ui.theme.PillShape
 import com.project.vortex.callsagent.ui.theme.icon
@@ -170,7 +168,6 @@ fun PostCallScreen(
                             state = state,
                             onBack = onBack,
                             onSelectOutcome = viewModel::selectOutcome,
-                            onSelectLevel = viewModel::selectInterestLevel,
                             onNoteChange = viewModel::onNoteChange,
                             onDateChange = viewModel::onFollowUpDateChange,
                             onTimeChange = viewModel::onFollowUpTimeChange,
@@ -189,7 +186,6 @@ fun PostCallScreen(
                         state = state,
                         onBack = onBack,
                         onSelectOutcome = viewModel::selectOutcome,
-                        onSelectLevel = viewModel::selectInterestLevel,
                         onNoteChange = viewModel::onNoteChange,
                         onDateChange = viewModel::onFollowUpDateChange,
                         onTimeChange = viewModel::onFollowUpTimeChange,
@@ -228,7 +224,6 @@ private fun PostCallLeftPanel(
     state: PostCallUiState,
     onBack: () -> Unit,
     onSelectOutcome: (CallOutcome) -> Unit,
-    onSelectLevel: (InterestLevel) -> Unit,
     onNoteChange: (String) -> Unit,
     onDateChange: (LocalDate) -> Unit,
     onTimeChange: (LocalTime) -> Unit,
@@ -262,7 +257,6 @@ private fun PostCallLeftPanel(
             client = state.client!!,
             interaction = state.interaction!!,
             onSelectOutcome = onSelectOutcome,
-            onSelectLevel = onSelectLevel,
             onNoteChange = onNoteChange,
             onDateChange = onDateChange,
             onTimeChange = onTimeChange,
@@ -287,7 +281,6 @@ private fun PostCallContent(
     client: Client,
     interaction: Interaction,
     onSelectOutcome: (CallOutcome) -> Unit,
-    onSelectLevel: (InterestLevel) -> Unit,
     onNoteChange: (String) -> Unit,
     onDateChange: (LocalDate) -> Unit,
     onTimeChange: (LocalTime) -> Unit,
@@ -335,7 +328,6 @@ private fun PostCallContent(
             CompactOutcomeSelector(
                 state = state,
                 onSelect = onSelectOutcome,
-                onSelectLevel = onSelectLevel,
                 onDateChange = onDateChange,
                 onTimeChange = onTimeChange,
             )
@@ -430,16 +422,15 @@ private fun CallSummaryCard(client: Client, interaction: Interaction) {
  * already says "smile" vs "phone-missed" etc., and the agent
  * scans the chip set, not section headers.
  *
- * When `ANSWERED_INTERESTED` is selected, the interest level and
- * follow-up form expand inline below the chip grid — same UX as
- * the old [OutcomeSelector] but compact.
+ * When `INTERESTED` is selected, the follow-up form expands inline
+ * below the chip grid — same UX as the old [OutcomeSelector] but
+ * compact.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CompactOutcomeSelector(
     state: PostCallUiState,
     onSelect: (CallOutcome) -> Unit,
-    onSelectLevel: (InterestLevel) -> Unit,
     onDateChange: (LocalDate) -> Unit,
     onTimeChange: (LocalTime) -> Unit,
 ) {
@@ -468,7 +459,7 @@ private fun CompactOutcomeSelector(
                         // When selected, the chip adopts the outcome's
                         // semantic palette so the agent gets the same
                         // visual feedback (green for INTERESTED, red
-                        // for OPT_OUT, etc.) without us drawing a full
+                        // for DO_NOT_CALL, etc.) without us drawing a full
                         // colour-coded card.
                         selectedContainerColor = outcome.palette().container,
                         selectedLabelColor = outcome.palette().onContainer,
@@ -477,16 +468,13 @@ private fun CompactOutcomeSelector(
                 )
             }
         }
-        // Interest level + follow-up appear inline ONLY when the
-        // agent picks ANSWERED_INTERESTED — preserves the original
-        // OutcomeSelector behaviour.
-        if (state.selectedOutcome == CallOutcome.ANSWERED_INTERESTED &&
+        // Follow-up form appears inline ONLY when the agent picks
+        // INTERESTED — preserves the original OutcomeSelector behaviour.
+        // No interest-level selector: the backend derives the client
+        // state from the outcome alone.
+        if (state.selectedOutcome == CallOutcome.INTERESTED &&
             state.showFollowUpForm
         ) {
-            InterestLevelSelector(
-                selected = state.selectedInterestLevel,
-                onSelect = onSelectLevel,
-            )
             FollowUpForm(
                 state = state,
                 onDateChange = onDateChange,
@@ -500,14 +488,14 @@ private fun CompactOutcomeSelector(
 private fun OutcomeSelector(
     state: PostCallUiState,
     onSelect: (CallOutcome) -> Unit,
-    onSelectLevel: (InterestLevel) -> Unit,
     onDateChange: (LocalDate) -> Unit,
     onTimeChange: (LocalTime) -> Unit,
 ) {
     val outcomesToShow = state.allowedOutcomes.takeIf { it.isNotEmpty() }
         ?: CallOutcome.values().toList()
     // Stable order: backend enum declaration order is already the order
-    // HOW_IT_WORKS §5 prescribes (ANSWERED_* first, then non-answered).
+    // HOW_IT_WORKS §5 prescribes (answered outcomes first, then the
+    // non-answered ones).
     val answered = outcomesToShow.filter { it.isAnswered }
     val notAnswered = outcomesToShow.filterNot { it.isAnswered }
 
@@ -521,16 +509,11 @@ private fun OutcomeSelector(
                         selected = state.selectedOutcome == outcome,
                         onSelect = { onSelect(outcome) },
                     )
-                    // When ANSWERED_INTERESTED is picked, expand inline:
-                    //   1) thermometer selector (COLD default, agent can promote),
-                    //   2) follow-up date/time form.
-                    // Both live under the row so the agent doesn't scroll.
-                    if (outcome == CallOutcome.ANSWERED_INTERESTED && state.showFollowUpForm) {
-                        InterestLevelSelector(
-                            selected = state.selectedInterestLevel,
-                            onSelect = onSelectLevel,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
+                    // When INTERESTED is picked, expand the follow-up
+                    // date/time form inline under the row so the agent
+                    // doesn't scroll. No interest-level selector — the
+                    // backend derives the client state from the outcome.
+                    if (outcome == CallOutcome.INTERESTED && state.showFollowUpForm) {
                         FollowUpForm(
                             state = state,
                             onDateChange = onDateChange,

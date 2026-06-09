@@ -86,8 +86,6 @@ class ErrorMapper @Inject constructor(
             ErrorCodes.CLIENT_NOT_ASSIGNED -> ClientError.NotAssigned
             ErrorCodes.CLIENT_TARGET_NOT_ALLOWED ->
                 ClientError.TargetNotAllowed(toStatus = problem.toStatus ?: "")
-            ErrorCodes.CLIENT_INTEREST_LEVEL_NOT_APPLICABLE ->
-                ClientError.InterestLevelNotApplicable
             ErrorCodes.CLIENT_NOT_FOUND,
             ErrorCodes.RESOURCE_NOT_FOUND -> ClientError.NotFound
             ErrorCodes.RESOURCE_CONFLICT,

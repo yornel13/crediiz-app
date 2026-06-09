@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.room.Room
 import com.project.vortex.callsagent.data.local.db.AppDatabase
 import com.project.vortex.callsagent.data.local.db.ClientDao
-import com.project.vortex.callsagent.data.local.db.ClientDismissalDao
 import com.project.vortex.callsagent.data.local.db.FollowUpDao
 import com.project.vortex.callsagent.data.local.db.InteractionDao
 import com.project.vortex.callsagent.data.local.db.LocalAgentStatusChangeDao
@@ -29,14 +28,12 @@ object DatabaseModule {
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME,
         )
-            // **No `fallbackToDestructiveMigration()`** — production
-            // policy. v1.0 ships starting from a clean Room schema on
-            // every fresh install; we never bump `@Database.version`
-            // without writing an explicit `Migration`. If a schema
-            // mismatch ever happens at runtime, Room throws
-            // `IllegalStateException` on first open — that's the
-            // intended fail-fast signal during QA, not silent data
-            // wipe in the field.
+            // DEV policy during the 5-state model migration: the local DB
+            // is a disposable cache of server state, so we wipe and rebuild
+            // it on any schema change instead of writing data migrations.
+            // Re-evaluate before the production cutover — a release build
+            // must NOT destroy unsynced queue rows in the field.
+            .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
 
     @Provides fun provideClientDao(db: AppDatabase): ClientDao = db.clientDao()
@@ -44,7 +41,6 @@ object DatabaseModule {
     @Provides fun provideNoteDao(db: AppDatabase): NoteDao = db.noteDao()
     @Provides fun provideFollowUpDao(db: AppDatabase): FollowUpDao = db.followUpDao()
     @Provides fun provideMissedCallDao(db: AppDatabase): MissedCallDao = db.missedCallDao()
-    @Provides fun provideClientDismissalDao(db: AppDatabase): ClientDismissalDao = db.clientDismissalDao()
     @Provides
     fun provideLocalAgentStatusChangeDao(db: AppDatabase): LocalAgentStatusChangeDao =
         db.localAgentStatusChangeDao()

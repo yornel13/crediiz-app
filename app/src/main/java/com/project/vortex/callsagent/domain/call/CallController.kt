@@ -330,24 +330,19 @@ class CallController @Inject constructor(
             return
         }
 
-        // Local-first: apply the optimistic update to the client row
-        // RIGHT NOW with the placeholder outcome, before any sync runs.
+        // Local-first: record the call's local side-effects RIGHT NOW
+        // with the placeholder outcome (bump callAttempts, set
+        // lastCalledAt/lastOutcome), before any sync runs.
         //
-        // Why this ordering matters: the sync push that fires below
-        // uploads the interaction; the server transitions the client
-        // to IN_PROGRESS (or whichever target the outcome maps to);
-        // the sync pull then re-fetches `assigned?status=PENDING`
-        // and runs `replaceAllByStatus(PENDING)`. That delete step
-        // wipes any local row whose status is still PENDING — so
-        // if we hadn't already flipped the status here, the client
-        // would vanish from the local DB before PostCallViewModel.save
-        // could update it, and Recientes would never see it.
-        //
-        // With this call in place, the row is `IN_PROGRESS` (or
-        // matching the placeholder outcome's mapping) before the
-        // pull runs. `deleteByStatus(PENDING)` no longer touches it.
-        // The local DB is the source of truth from the moment the
-        // call ends, regardless of network availability.
+        // In the 5-state model the app does NOT decide the status here —
+        // a placeholder no-contact outcome leaves the client PENDING. The
+        // sync push below uploads the interaction first; the pull then
+        // re-fetches `assigned?status=PENDING` and `replaceAllByStatus`
+        // converges the row to the server snapshot, which already
+        // reflects that push (incremented attempts, canonical status).
+        // No "vanish" risk: the client comes back in the PENDING snapshot.
+        // Only the safe high-water-mark advances (INTERESTED/SCHEDULED/
+        // SOLD) move the status locally, and those land in PostCall.
         runCatching {
             clientRepository.applyInteractionLocally(
                 clientId = client.id,

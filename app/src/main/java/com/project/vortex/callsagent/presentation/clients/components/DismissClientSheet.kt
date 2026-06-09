@@ -35,8 +35,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.project.vortex.callsagent.R
-import com.project.vortex.callsagent.common.enums.DismissalReasonCode
+import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.ui.components.FullHeightBottomSheet
+import com.project.vortex.callsagent.ui.theme.label
 
 private const val MAX_REASON_LEN = 200
 
@@ -66,10 +67,10 @@ private const val MAX_REASON_LEN = 200
 fun DismissClientSheet(
     clientName: String,
     onDismiss: () -> Unit,
-    onConfirm: (reasonCode: DismissalReasonCode?, freeFormReason: String?) -> Unit,
+    onConfirm: (removalReason: RemovalReason, freeFormReason: String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var selectedCode by rememberSaveable { mutableStateOf<DismissalReasonCode?>(null) }
+    var selectedReason by rememberSaveable { mutableStateOf<RemovalReason?>(null) }
     var freeText by rememberSaveable { mutableStateOf("") }
 
     FullHeightBottomSheet(
@@ -114,13 +115,13 @@ fun DismissClientSheet(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        DismissalReasonCode.entries.forEach { code ->
+                        RemovalReason.entries.forEach { reason ->
                             FilterChip(
-                                selected = selectedCode == code,
+                                selected = selectedReason == reason,
                                 onClick = {
-                                    selectedCode = if (selectedCode == code) null else code
+                                    selectedReason = if (selectedReason == reason) null else reason
                                 },
-                                label = { Text(stringResource(code.labelRes)) },
+                                label = { Text(reason.label()) },
                             )
                         }
                     }
@@ -168,8 +169,10 @@ fun DismissClientSheet(
                 ) { Text(stringResource(R.string.common_cancel)) }
                 Button(
                     onClick = {
-                        onConfirm(selectedCode, freeText.trim().ifBlank { null })
+                        val reason = selectedReason ?: return@Button
+                        onConfirm(reason, freeText.trim().ifBlank { null })
                     },
+                    enabled = selectedReason != null,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError,

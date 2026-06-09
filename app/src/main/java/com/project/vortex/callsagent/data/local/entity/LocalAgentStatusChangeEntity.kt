@@ -3,7 +3,7 @@ package com.project.vortex.callsagent.data.local.entity
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.project.vortex.callsagent.common.enums.ClientStatus
-import com.project.vortex.callsagent.common.enums.InterestLevel
+import com.project.vortex.callsagent.common.enums.RemovalReason
 import java.time.Instant
 
 /**
@@ -31,7 +31,7 @@ data class LocalAgentStatusChangeEntity(
     val clientId: String,
     val fromStatus: ClientStatus,
     val toStatus: ClientStatus,
-    val interestLevel: InterestLevel?,
+    val removalReason: RemovalReason?,
     val reason: String?,
     val timestamp: Instant,
 )

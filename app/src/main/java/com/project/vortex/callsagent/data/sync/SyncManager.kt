@@ -2,8 +2,6 @@ package com.project.vortex.callsagent.data.sync
 
 import android.util.Log
 import com.project.vortex.callsagent.common.enums.ClientStatus
-import com.project.vortex.callsagent.common.enums.SyncStatus
-import com.project.vortex.callsagent.data.local.db.ClientDismissalDao
 import com.project.vortex.callsagent.data.mapper.toCompletedSyncDto
 import com.project.vortex.callsagent.data.mapper.toSyncDto
 import com.project.vortex.callsagent.data.remote.api.SyncApi
@@ -45,7 +43,6 @@ class SyncManager @Inject constructor(
     private val noteRepo: NoteRepository,
     private val followUpRepo: FollowUpRepository,
     private val clientRepo: ClientRepository,
-    private val dismissalDao: ClientDismissalDao,
     private val inCallGate: InCallGate,
 ) {
     private val mutex = Mutex()
@@ -81,13 +78,11 @@ class SyncManager @Inject constructor(
         val notes = noteRepo.pendingSync()
         val newFollowUps = followUpRepo.pendingCreationSync()
         val completedFollowUps = followUpRepo.pendingCompletionSync()
-        val dismissals = dismissalDao.findBySyncStatus(SyncStatus.PENDING)
 
         val hasAnything = interactions.isNotEmpty() ||
             notes.isNotEmpty() ||
             newFollowUps.isNotEmpty() ||
-            completedFollowUps.isNotEmpty() ||
-            dismissals.isNotEmpty()
+            completedFollowUps.isNotEmpty()
 
         if (!hasAnything) {
             // Even with nothing to push, we still want to pull fresh server state.
@@ -102,7 +97,6 @@ class SyncManager @Inject constructor(
             completedFollowUps = completedFollowUps
                 .mapNotNull { it.toCompletedSyncDto() }
                 .takeIf { it.isNotEmpty() },
-            dismissals = dismissals.map { it.toSyncDto() }.takeIf { it.isNotEmpty() },
         )
 
         val envelope = syncApi.sync(request)
@@ -112,16 +106,12 @@ class SyncManager @Inject constructor(
         val (interactionIds, interactionDups) = extractSyncedAndDuplicateIds(response.interactions)
         val (noteIds, noteDups) = extractSyncedAndDuplicateIds(response.notes)
         val (followUpIds, followUpDups) = extractSyncedAndDuplicateIds(response.followUps)
-        val (dismissalIds, dismissalDups) = extractSyncedAndDuplicateIds(response.dismissals)
         val completionIds = extractUpdatedIds(response.completedFollowUps)
 
         interactionRepo.markSynced(interactionIds)
         noteRepo.markSynced(noteIds)
         followUpRepo.markCreationSynced(followUpIds)
         followUpRepo.markCompletionSynced(completionIds)
-        if (dismissalIds.isNotEmpty()) {
-            dismissalDao.markSyncStatus(dismissalIds, SyncStatus.SYNCED)
-        }
 
         refreshServerState()
 
@@ -130,7 +120,7 @@ class SyncManager @Inject constructor(
             syncedNotes = response.notes.syncedCount,
             syncedFollowUps = response.followUps.syncedCount,
             syncedCompletions = response.completedFollowUps.updatedCount,
-            duplicates = interactionDups + noteDups + followUpDups + dismissalDups,
+            duplicates = interactionDups + noteDups + followUpDups,
         )
     }
 
@@ -151,21 +141,22 @@ class SyncManager @Inject constructor(
             return
         }
 
-        // No wrap-up window guard needed any more.
+        // In the 5-state model the backend is the source of truth for
+        // status, and sync always pushes before it pulls. So even when a
+        // no-contact outcome leaves the row PENDING (callAttempts bumped
+        // but status unchanged), the server snapshot pulled here already
+        // reflects that push — `replaceAllByStatus(PENDING, …)` converges
+        // the row to the canonical value. A push that failed just retries
+        // on the next tick (eventual consistency).
         //
-        // The previous race ("local row still PENDING when pull runs,
-        // deleteByStatus(PENDING) wipes it") is solved at its root:
-        // CallController.persistInteraction now calls
-        // applyInteractionLocally with the placeholder outcome
-        // BEFORE this sync runs. By the time the pull arrives here,
-        // the row is already in its post-call status (IN_PROGRESS
-        // or whatever the placeholder maps to), so deleteByStatus(PENDING)
-        // doesn't touch it.
+        // Refresh every active (in-agenda) state: PENDING, INTERESTED, CITED.
 
         runCatching { clientRepo.refreshAssigned(ClientStatus.PENDING) }
             .onFailure { Log.w(TAG, "refreshAssigned PENDING failed", it) }
         runCatching { clientRepo.refreshAssigned(ClientStatus.INTERESTED) }
             .onFailure { Log.w(TAG, "refreshAssigned INTERESTED failed", it) }
+        runCatching { clientRepo.refreshAssigned(ClientStatus.CITED) }
+            .onFailure { Log.w(TAG, "refreshAssigned CITED failed", it) }
         runCatching { followUpRepo.refreshAgenda() }
             .onFailure { Log.w(TAG, "refreshAgenda failed", it) }
     }
