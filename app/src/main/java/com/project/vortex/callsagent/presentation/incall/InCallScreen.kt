@@ -117,27 +117,26 @@ fun InCallScreen(
         }
     }
 
-    // Responsive layout decision — matrix of width × height instead
-    // of the previous "wide vs compact width" one-dimensional check.
+    // Responsive layout decision — two modes keyed off whether the
+    // window is compact on EITHER axis:
     //
     //                  │ Compact height  │ Non-compact height
     //   ───────────────┼─────────────────┼────────────────────
-    //   Compact width  │ Tabs            │ Vertical split
+    //   Compact width  │ Tabs            │ Tabs
     //   Non-compact W  │ Tabs            │ Horizontal split (Row)
     //
     // - Horizontal split: tablet portrait/landscape, foldable open.
     //   Plenty of horizontal AND vertical room — two panes fit
-    //   comfortably.
-    // - Vertical split: phone portrait. Tall + narrow → stack the
-    //   call panel on top, scrollable info below. Each pane gets
-    //   real vertical space.
-    // - Tabs: short screens (phone landscape, tablet with IME up).
-    //   Neither horizontal nor vertical split would give either
-    //   pane a usable size. Tabs let the agent switch between
-    //   "Llamada" and "Cliente" without compromising either view.
+    //   comfortably side by side.
+    // - Tabs: anything compact on either axis (phone portrait, phone
+    //   landscape, tablet with IME up). A side-by-side OR stacked
+    //   split can't give the call panel enough room — its fixed-height
+    //   content (hero + note + Mute/Speaker + End CTA) overflows and
+    //   the bottom controls get clipped off-screen. Tabs hand the
+    //   ACTIVE pane the full window, so the End/Mute controls are
+    //   always visible; "Cliente" is one tap away.
     val layoutMode = when {
-        WindowSize.isCompactHeight -> InCallLayoutMode.Tabs
-        WindowSize.isCompactWidth -> InCallLayoutMode.VerticalSplit
+        WindowSize.isCompactHeight || WindowSize.isCompactWidth -> InCallLayoutMode.Tabs
         else -> InCallLayoutMode.HorizontalSplit
     }
 
@@ -189,36 +188,6 @@ fun InCallScreen(
                 )
             }
 
-            InCallLayoutMode.VerticalSplit -> Column(modifier = Modifier.fillMaxSize()) {
-                // Call panel takes the top ~45% — enough for status
-                // hero, the LiveNote textarea (shorter than wide-mode
-                // since vertical space is split now), and the row of
-                // controls. The info panel takes the remaining ~55%
-                // with its own scroll for the timeline.
-                CallControlPanel(
-                    client = client,
-                    fallbackPhone = incomingPhone.orEmpty(),
-                    direction = direction,
-                    callState = callState,
-                    liveNote = liveNote,
-                    isMuted = isMuted,
-                    isSpeakerOn = isSpeaker,
-                    onNoteChange = viewModel::onNoteChange,
-                    onToggleMute = viewModel::toggleMute,
-                    onToggleSpeaker = viewModel::toggleSpeaker,
-                    onEndCall = viewModel::endCall,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.45f),
-                )
-                PreCallReadOnlyPanel(
-                    clientId = client!!.id,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(0.55f),
-                )
-            }
-
             InCallLayoutMode.Tabs -> InCallTabsLayout(
                 client = client,
                 fallbackPhone = incomingPhone.orEmpty(),
@@ -241,7 +210,7 @@ fun InCallScreen(
  * size class along both axes. See the matrix comment at the call
  * site for the full decision table.
  */
-private enum class InCallLayoutMode { HorizontalSplit, VerticalSplit, Tabs }
+private enum class InCallLayoutMode { HorizontalSplit, Tabs }
 
 /**
  * Tabbed in-call layout for short screens (phone landscape, tablet

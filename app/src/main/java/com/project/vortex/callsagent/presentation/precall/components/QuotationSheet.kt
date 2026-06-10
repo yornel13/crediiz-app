@@ -16,9 +16,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -72,7 +76,11 @@ fun QuotationCard(
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        // Asymmetric padding: the trailing edit IconButton carries its own
+        // 48dp touch target, so we trim the end/top padding to keep the
+        // pencil visually aligned with the 16dp content margin instead of
+        // floating far from the edge.
+        Column(modifier = Modifier.padding(start = 16.dp, top = 4.dp, end = 4.dp, bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = stringResource(R.string.quotation_title),
@@ -82,22 +90,30 @@ fun QuotationCard(
                 )
                 if (quotation != null) {
                     ValidationBadge(quotation.validation)
+                    Spacer(Modifier.width(8.dp))
+                }
+                // Single pencil affordance for both create and edit — replaces
+                // the old full-width buttons that dominated the card.
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        imageVector = Icons.Filled.Edit,
+                        contentDescription = stringResource(
+                            if (quotation == null) R.string.quotation_action_add
+                            else R.string.quotation_action_edit,
+                        ),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
             if (quotation == null) {
-                Spacer(Modifier.padding(top = 8.dp))
                 Text(
                     text = stringResource(R.string.quotation_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.padding(top = 12.dp))
-                Button(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.quotation_action_add))
-                }
             } else {
-                Spacer(Modifier.padding(top = 12.dp))
+                Spacer(Modifier.padding(top = 4.dp))
                 QuotationField(R.string.quotation_field_bank, quotation.bank)
                 QuotationField(R.string.quotation_field_amount, formatUsd(quotation.quotedAmount))
                 QuotationField(
@@ -106,10 +122,6 @@ fun QuotationCard(
                 )
                 quotation.notes?.takeIf { it.isNotBlank() }?.let {
                     QuotationField(R.string.quotation_field_notes, it)
-                }
-                Spacer(Modifier.padding(top = 12.dp))
-                OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.quotation_action_edit))
                 }
             }
         }
