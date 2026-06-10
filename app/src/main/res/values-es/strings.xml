@@ -396,6 +396,23 @@
     <string name="enum_removal_deceased">Fallecido</string>
     <string name="enum_removal_not_applicable">No aplica</string>
     <string name="enum_removal_other">Otro</string>
+    <!-- Validación de cotización -->
+    <string name="enum_quotation_pending">Pendiente</string>
+    <string name="enum_quotation_approved">Aprobada</string>
+    <string name="enum_quotation_rejected">Rechazada</string>
+    <!-- Cotización -->
+    <string name="quotation_title">Cotización</string>
+    <string name="quotation_empty">Aún no hay cotización registrada.</string>
+    <string name="quotation_action_add">Agregar cotización</string>
+    <string name="quotation_action_edit">Editar cotización</string>
+    <string name="quotation_sheet_title">Cotización</string>
+    <string name="quotation_field_validation">Validación</string>
+    <string name="quotation_field_bank">Banco</string>
+    <string name="quotation_field_amount">Monto cotizado</string>
+    <string name="quotation_field_biweekly">Letra quincenal</string>
+    <string name="quotation_field_notes">Notas</string>
+    <string name="quotation_field_notes_optional">Notas (opcional)</string>
+    <string name="precall_snack_quotation_saved">Cotización guardada</string>
 
     <!-- ============================== Clients · Recent / detail / views ============================== -->
     <string name="recent_dismissed_badge">DESCARTADO</string>

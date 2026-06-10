@@ -2,6 +2,7 @@ package com.project.vortex.callsagent.domain.repository
 
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.QuotationValidation
 import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.domain.error.ClientError
 import com.project.vortex.callsagent.domain.model.AgentStatusChangeLocal
@@ -148,4 +149,19 @@ interface ClientRepository {
         clientId: String,
         limit: Int = 50,
     ): Result<List<ClientStatusChange>>
+
+    /**
+     * Upsert the client's quotation (`PUT /clients/:id/quotation`,
+     * idempotent full replace). Writes the server-returned client to Room so
+     * the detail reflects it. The caller MUST handle [OperationResult.Failure]
+     * (403 if unassigned, 400 invalid, etc.).
+     */
+    suspend fun upsertQuotation(
+        clientId: String,
+        validation: QuotationValidation,
+        bank: String,
+        quotedAmount: Double,
+        biweeklyPayment: Double,
+        notes: String?,
+    ): OperationResult<Unit, ClientError>
 }

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.QuotationValidation
 import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
@@ -229,6 +230,59 @@ class PreCallViewModel @AssistedInject constructor(
                 ),
             )
             loadStatusHistory()
+        }
+    }
+
+    /**
+     * Register/update the client's quotation. Quoting implies interest, so a
+     * PENDING client is first promoted to INTERESTED (high-water mark keeps
+     * CITED/CONVERTED as-is). Then the quotation is upserted; the detail
+     * refreshes on its own (the client is observed).
+     */
+    fun saveQuotation(
+        validation: QuotationValidation,
+        bank: String,
+        quotedAmount: Double,
+        biweeklyPayment: Double,
+        notes: String?,
+    ) {
+        val client = _uiState.value.client ?: return
+        viewModelScope.launch {
+            if (client.status == ClientStatus.PENDING) {
+                val promotion = clientRepository.agentStatusChange(
+                    clientId = client.id,
+                    toStatus = ClientStatus.INTERESTED,
+                    removalReason = null,
+                    reason = "Cotización registrada",
+                )
+                if (promotion is com.project.vortex.callsagent.domain.result.OperationResult.Failure) {
+                    _snackbar.send(snackbarFor(promotion.error))
+                    return@launch
+                }
+            }
+            when (
+                val result = clientRepository.upsertQuotation(
+                    clientId = client.id,
+                    validation = validation,
+                    bank = bank,
+                    quotedAmount = quotedAmount,
+                    biweeklyPayment = biweeklyPayment,
+                    notes = notes,
+                )
+            ) {
+                is com.project.vortex.callsagent.domain.result.OperationResult.Success -> {
+                    _snackbar.send(
+                        com.project.vortex.callsagent.presentation.common.SnackbarMessage(
+                            textRes = R.string.precall_snack_quotation_saved,
+                            tone = com.project.vortex.callsagent.presentation.common.SnackbarMessage.Tone.SUCCESS,
+                        ),
+                    )
+                    // The promotion may have produced a new status event.
+                    loadStatusHistory()
+                }
+                is com.project.vortex.callsagent.domain.result.OperationResult.Failure ->
+                    _snackbar.send(snackbarFor(result.error))
+            }
         }
     }
 

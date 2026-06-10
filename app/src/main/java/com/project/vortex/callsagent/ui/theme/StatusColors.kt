@@ -24,6 +24,7 @@ import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.common.enums.NoteType
+import com.project.vortex.callsagent.common.enums.QuotationValidation
 import com.project.vortex.callsagent.common.enums.RemovalReason
 
 /**
@@ -110,6 +111,22 @@ fun CallOutcome.label(): String = when (this) {
     CallOutcome.HAS_LOAN -> stringResource(R.string.enum_outcome_has_loan)
     CallOutcome.DECEASED -> stringResource(R.string.enum_outcome_deceased)
     CallOutcome.NOT_APPLICABLE -> stringResource(R.string.enum_outcome_not_applicable)
+}
+
+@Composable
+@ReadOnlyComposable
+fun QuotationValidation.palette(): StatusPalette = when (this) {
+    QuotationValidation.PENDING -> warningPalette()
+    QuotationValidation.APPROVED -> successPalette()
+    QuotationValidation.REJECTED -> errorPalette()
+}
+
+@Composable
+@ReadOnlyComposable
+fun QuotationValidation.label(): String = when (this) {
+    QuotationValidation.PENDING -> stringResource(R.string.enum_quotation_pending)
+    QuotationValidation.APPROVED -> stringResource(R.string.enum_quotation_approved)
+    QuotationValidation.REJECTED -> stringResource(R.string.enum_quotation_rejected)
 }
 
 @Composable

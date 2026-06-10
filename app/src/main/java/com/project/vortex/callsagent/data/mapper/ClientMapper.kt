@@ -2,10 +2,12 @@ package com.project.vortex.callsagent.data.mapper
 
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.QuotationValidation
 import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.data.local.entity.ClientEntity
 import com.project.vortex.callsagent.data.remote.dto.ClientResponse
 import com.project.vortex.callsagent.domain.model.Client
+import com.project.vortex.callsagent.domain.model.Quotation
 import java.time.Instant
 
 /**
@@ -41,6 +43,15 @@ fun ClientResponse.toEntity(): ClientEntity = ClientEntity(
     lastNote = lastNote,
     queueOrder = queueOrder,
     extraData = extraData,
+    quotationValidation = quotation?.validation?.let {
+        runCatching { QuotationValidation.valueOf(it) }.getOrNull()
+    },
+    quotationBank = quotation?.bank,
+    quotationQuotedAmount = quotation?.quotedAmount,
+    quotationBiweeklyPayment = quotation?.biweeklyPayment,
+    quotationNotes = quotation?.notes,
+    quotationUpdatedBy = quotation?.updatedBy,
+    quotationUpdatedAt = quotation?.updatedAt.toInstantOrNull(),
     uploadBatchId = uploadBatchId,
     createdAt = createdAt.toInstant(),
     updatedAt = updatedAt.toInstant(),
@@ -64,4 +75,15 @@ fun ClientEntity.toDomain(): Client = Client(
     lastNote = lastNote,
     queueOrder = queueOrder,
     extraData = extraData ?: emptyMap(),
+    quotation = quotationValidation?.let { v ->
+        Quotation(
+            validation = v,
+            bank = quotationBank.orEmpty(),
+            quotedAmount = quotationQuotedAmount ?: 0.0,
+            biweeklyPayment = quotationBiweeklyPayment ?: 0.0,
+            notes = quotationNotes,
+            updatedBy = quotationUpdatedBy,
+            updatedAt = quotationUpdatedAt,
+        )
+    },
 )

@@ -3,6 +3,7 @@ package com.project.vortex.callsagent.data.repository
 import android.util.Log
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.QuotationValidation
 import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.data.local.db.ClientDao
 import com.project.vortex.callsagent.data.local.db.LocalAgentStatusChangeDao
@@ -12,6 +13,7 @@ import com.project.vortex.callsagent.data.mapper.toEntity
 import com.project.vortex.callsagent.data.error.ErrorMapper
 import com.project.vortex.callsagent.data.remote.api.ClientsApi
 import com.project.vortex.callsagent.data.remote.dto.AgentStatusChangeDto
+import com.project.vortex.callsagent.data.remote.dto.UpsertQuotationDto
 import com.project.vortex.callsagent.domain.error.ClientError
 import com.project.vortex.callsagent.domain.model.AgentStatusChangeLocal
 import com.project.vortex.callsagent.domain.model.Client
@@ -192,6 +194,35 @@ class ClientRepositoryImpl @Inject constructor(
         runCatching {
             api.getStatusHistory(clientId, page = 1, limit = limit)
                 .data.data.mapNotNull { it.toDomain() }
+        }
+    }
+
+    override suspend fun upsertQuotation(
+        clientId: String,
+        validation: QuotationValidation,
+        bank: String,
+        quotedAmount: Double,
+        biweeklyPayment: Double,
+        notes: String?,
+    ): OperationResult<Unit, ClientError> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.upsertQuotation(
+                clientId,
+                UpsertQuotationDto(
+                    validation = validation.name,
+                    bank = bank,
+                    quotedAmount = quotedAmount,
+                    biweeklyPayment = biweeklyPayment,
+                    notes = notes?.takeIf { it.isNotBlank() },
+                ),
+            )
+            // The PUT returns the full client with the quotation embedded —
+            // write it as the source of truth so the detail reflects it.
+            dao.upsert(listOf(response.data.toEntity()))
+            OperationResult.Success(Unit)
+        } catch (err: Throwable) {
+            Log.w(TAG, "upsertQuotation($clientId) failed", err)
+            OperationResult.Failure(errorMapper.toClientError(err))
         }
     }
 

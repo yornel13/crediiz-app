@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.QuotationValidation
 import com.project.vortex.callsagent.common.enums.RemovalReason
 import java.time.Instant
 
@@ -37,6 +38,16 @@ data class ClientEntity(
     val lastNote: String?,
     val queueOrder: Int,
     val extraData: Map<String, Any?>?,
+    // ─── Quotation (latest-only, flattened) ──────────────────────────────
+    // The whole quotation is null when [quotationValidation] is null; the
+    // mapper reconstructs the domain object only in that case.
+    val quotationValidation: QuotationValidation?,
+    val quotationBank: String?,
+    val quotationQuotedAmount: Double?,
+    val quotationBiweeklyPayment: Double?,
+    val quotationNotes: String?,
+    val quotationUpdatedBy: String?,
+    val quotationUpdatedAt: Instant?,
     val uploadBatchId: String?,
     val createdAt: Instant,
     val updatedAt: Instant,

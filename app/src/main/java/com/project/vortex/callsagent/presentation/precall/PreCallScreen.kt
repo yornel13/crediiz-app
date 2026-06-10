@@ -116,6 +116,8 @@ import com.project.vortex.callsagent.presentation.clients.components.DismissClie
 import com.project.vortex.callsagent.presentation.common.WindowSize
 import com.project.vortex.callsagent.presentation.autocall.PendingAutoCall
 import com.project.vortex.callsagent.presentation.precall.components.AgentStatusChangeSheet
+import com.project.vortex.callsagent.presentation.precall.components.QuotationCard
+import com.project.vortex.callsagent.presentation.precall.components.QuotationSheet
 import com.project.vortex.callsagent.presentation.precall.components.ScheduleFollowUpSheet
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.components.CallReadinessBanner
@@ -164,6 +166,7 @@ private sealed interface ActiveSheet {
     data object Dismiss : ActiveSheet
     data object StatusChange : ActiveSheet
     data object Schedule : ActiveSheet
+    data object Quotation : ActiveSheet
 }
 
 // Snackbar text arrives from the ViewModel as a @StringRes at runtime, so it
@@ -350,6 +353,7 @@ fun PreCallScreen(
                 onBack = effectiveOnBack,
                 onRequestStatusChange = { activeSheet = ActiveSheet.StatusChange },
                 onRequestSchedule = { activeSheet = ActiveSheet.Schedule },
+                onRequestQuotation = { activeSheet = ActiveSheet.Quotation },
                 contentPadding = padding,
             )
         }
@@ -396,6 +400,22 @@ fun PreCallScreen(
                             scheduledAt = result.scheduledAt,
                             reason = result.reason,
                             replacePending = result.replacePending,
+                        )
+                        activeSheet = ActiveSheet.None
+                    },
+                )
+            }
+            ActiveSheet.Quotation -> uiState.client?.let { client ->
+                QuotationSheet(
+                    initial = client.quotation,
+                    onDismiss = { activeSheet = ActiveSheet.None },
+                    onConfirm = { validation, bank, amount, biweekly, notes ->
+                        viewModel.saveQuotation(
+                            validation = validation,
+                            bank = bank,
+                            quotedAmount = amount,
+                            biweeklyPayment = biweekly,
+                            notes = notes,
                         )
                         activeSheet = ActiveSheet.None
                     },
@@ -555,6 +575,7 @@ private fun PreCallContent(
     onBack: (() -> Unit)?,
     onRequestStatusChange: () -> Unit,
     onRequestSchedule: () -> Unit,
+    onRequestQuotation: () -> Unit,
     contentPadding: PaddingValues,
 ) {
     // Timeline view-mode is sourced from Settings (not toggled here).
@@ -610,6 +631,14 @@ private fun PreCallContent(
         // no separate collapsible card. The duplication of a "Personal
         // data" expander below the header was confusing and against
         // the reference mockup.
+
+        item("quotation_card") {
+            QuotationCard(
+                quotation = client.quotation,
+                onEdit = onRequestQuotation,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
 
         item("activity_header") {
             Row(

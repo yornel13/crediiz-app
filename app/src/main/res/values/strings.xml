@@ -399,6 +399,23 @@
     <string name="enum_removal_deceased">Deceased</string>
     <string name="enum_removal_not_applicable">Not applicable</string>
     <string name="enum_removal_other">Other</string>
+    <!-- Quotation validation -->
+    <string name="enum_quotation_pending">Pending</string>
+    <string name="enum_quotation_approved">Approved</string>
+    <string name="enum_quotation_rejected">Rejected</string>
+    <!-- Quotation -->
+    <string name="quotation_title">Quotation</string>
+    <string name="quotation_empty">No quotation registered yet.</string>
+    <string name="quotation_action_add">Add quotation</string>
+    <string name="quotation_action_edit">Edit quotation</string>
+    <string name="quotation_sheet_title">Quotation</string>
+    <string name="quotation_field_validation">Validation</string>
+    <string name="quotation_field_bank">Bank</string>
+    <string name="quotation_field_amount">Quoted amount</string>
+    <string name="quotation_field_biweekly">Biweekly payment</string>
+    <string name="quotation_field_notes">Notes</string>
+    <string name="quotation_field_notes_optional">Notes (optional)</string>
+    <string name="precall_snack_quotation_saved">Quotation saved</string>
 
     <!-- ============================== Clients · Recent / detail / views ============================== -->
     <string name="recent_dismissed_badge">DISMISSED</string>

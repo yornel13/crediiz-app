@@ -34,4 +34,6 @@ data class Client(
     val lastNote: String?,
     val queueOrder: Int,
     val extraData: Map<String, Any?>,
+    /** Latest-only quotation; `null` until the agent registers one. */
+    val quotation: Quotation?,
 )

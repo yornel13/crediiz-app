@@ -4,9 +4,11 @@ import com.project.vortex.callsagent.data.remote.dto.AgentStatusChangeDto
 import com.project.vortex.callsagent.data.remote.dto.ApiEnvelope
 import com.project.vortex.callsagent.data.remote.dto.ClientResponse
 import com.project.vortex.callsagent.data.remote.dto.StatusHistoryResponse
+import com.project.vortex.callsagent.data.remote.dto.UpsertQuotationDto
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -50,4 +52,15 @@ interface ClientsApi {
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 50,
     ): ApiEnvelope<StatusHistoryResponse>
+
+    /**
+     * Upsert the client's quotation (idempotent full-object replace).
+     * Returns the full client with the quotation embedded. `AGENT` may only
+     * write clients assigned to them (403 otherwise); 404 unknown; 400 invalid.
+     */
+    @PUT("clients/{id}/quotation")
+    suspend fun upsertQuotation(
+        @Path("id") clientId: String,
+        @Body body: UpsertQuotationDto,
+    ): ApiEnvelope<ClientResponse>
 }

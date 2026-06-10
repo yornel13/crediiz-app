@@ -19,7 +19,7 @@ import com.project.vortex.callsagent.data.local.entity.NoteEntity
         MissedCallEntity::class,
         LocalAgentStatusChangeEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)

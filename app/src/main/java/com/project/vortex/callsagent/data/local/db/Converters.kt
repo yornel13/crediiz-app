@@ -6,6 +6,7 @@ import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.common.enums.FollowUpStatus
 import com.project.vortex.callsagent.common.enums.MissedCallReason
+import com.project.vortex.callsagent.common.enums.QuotationValidation
 import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
@@ -43,6 +44,11 @@ class Converters {
     @TypeConverter fun removalReasonToString(v: RemovalReason?): String? = v?.name
     @TypeConverter fun stringToRemovalReason(v: String?): RemovalReason? =
         v?.let { RemovalReason.valueOf(it) }
+
+    // ─── QuotationValidation ↔ String (nullable — null = no quotation) ────────
+    @TypeConverter fun quotationValidationToString(v: QuotationValidation?): String? = v?.name
+    @TypeConverter fun stringToQuotationValidation(v: String?): QuotationValidation? =
+        v?.let { QuotationValidation.valueOf(it) }
 
     // ─── CallOutcome ↔ String ─────────────────────────────────────────────────
     @TypeConverter fun callOutcomeToString(v: CallOutcome?): String? = v?.name

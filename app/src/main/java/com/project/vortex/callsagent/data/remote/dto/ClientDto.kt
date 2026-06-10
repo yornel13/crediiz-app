@@ -25,6 +25,31 @@ data class AgentStatusChangeDto(
     val reason: String? = null,
 )
 
+/**
+ * Body for `PUT /clients/:id/quotation` — full-object upsert (idempotent,
+ * no field-merge). `updatedBy`/`updatedAt` are set by the backend, never sent.
+ */
+@JsonClass(generateAdapter = true)
+data class UpsertQuotationDto(
+    val validation: String,       // QuotationValidation
+    val bank: String,
+    val quotedAmount: Double,
+    val biweeklyPayment: Double,
+    val notes: String? = null,
+)
+
+/** Quotation embedded in the client payload. `null` when none registered. */
+@JsonClass(generateAdapter = true)
+data class QuotationDto(
+    val validation: String,       // QuotationValidation
+    val bank: String,
+    val quotedAmount: Double,
+    val biweeklyPayment: Double,
+    val notes: String?,
+    val updatedBy: String?,
+    val updatedAt: String?,       // ISO-8601
+)
+
 @JsonClass(generateAdapter = true)
 data class ClientResponse(
     @Json(name = "_id") val id: String,
@@ -50,6 +75,8 @@ data class ClientResponse(
     val lastNote: String?,
     val queueOrder: Int,
     val extraData: Map<String, Any?>?,
+    /** Latest-only quotation; `null` until the agent registers one. */
+    val quotation: QuotationDto?,
     val uploadBatchId: String?,
     val createdAt: String,
     val updatedAt: String,
