@@ -37,34 +37,20 @@ import javax.inject.Singleton
 private const val TAG = "CallController"
 private const val REGISTER_WAIT_MS = 10_000L
 
-// ╔═════════════════════════════════════════════════════════════════════════════╗
-// ║                                                                             ║
-// ║   ████████  ███████  ████████ ████████     ███    ███████  ████████ ███████ ║
-// ║      ██     ██       ██          ██        ████  ████ ██  ██   ██  ██       ║
-// ║      ██     ██████   ████████    ██        ██ ████ ██ ██  ██   ██  █████    ║
-// ║      ██     ██             ██    ██        ██  ██  ██ ██  ██   ██  ██       ║
-// ║      ██     ███████  ████████    ██        ██      ██ ████████  ███████ ██  ║
-// ║                                                                             ║
-// ║   TEMPORARY TEST OVERRIDE — REMOVE BEFORE SHIPPING TO AGENTS                ║
-// ║                                                                             ║
-// ║   Every outbound call placed via [CallController.startCall] is routed       ║
-// ║   to TEST_HARDCODED_TARGET regardless of the Client the agent selected.     ║
-// ║   The agent will see the right Client name on the in-call screen but        ║
-// ║   the actual SIP INVITE is sent to the hardcoded test number.               ║
-// ║                                                                             ║
-// ║   Scope: end-to-end QA of the SIP migration with a known reachable          ║
-// ║   number. The clientId / Client.phone column is intentionally ignored.      ║
-// ║                                                                             ║
-// ║   To remove:                                                                ║
-// ║      1. Delete TEST_HARDCODED_TARGET below.                                 ║
-// ║      2. Restore `coreManager.placeCall(client.phone)` in startCall().       ║
-// ║      3. Search the codebase for "TEST_HARDCODED_TARGET" to ensure no        ║
-// ║         other reference leaked.                                             ║
-// ║                                                                             ║
-// ║   Set on: 2026-05-03 by the SIP migration test plan.                        ║
-// ║                                                                             ║
-// ╚═════════════════════════════════════════════════════════════════════════════╝
-private const val TEST_HARDCODED_TARGET = "+507 6957 4868"
+/**
+ * Dial-mode switch.
+ *
+ * Production (default): leave this `null`. Every outbound call is routed to the
+ * real `Client.phone` of the agent's selected client.
+ *
+ * QA override: set this to a known reachable number (e.g. "+507 6957 4868") to
+ * route EVERY call to that fixed target while still showing the real client on
+ * the in-call screen. Used for end-to-end SIP testing without dialing clients.
+ *
+ * Flipping QA ↔ production is a one-line change here — no other code touched.
+ * MUST be `null` on any build shipped to agents.
+ */
+private val DIAL_OVERRIDE: String? = null
 
 /**
  * Domain-level orchestrator of an active call. Replaces the legacy
@@ -177,14 +163,22 @@ class CallController @Inject constructor(
                 return@launch
             }
 
-            // ⚠ TEMPORARY: see TEST_HARDCODED_TARGET banner at the top of this file.
-            //   Remove this override and restore `client.phone` before production.
-            Log.w(
-                TAG,
-                "TEST OVERRIDE: routing call for client ${client.id} (phone=${client.phone}) " +
-                    "to hardcoded $TEST_HARDCODED_TARGET",
-            )
-            val newSession = coreManager.placeCall(TEST_HARDCODED_TARGET)
+            // Production dials the real client number. DIAL_OVERRIDE is the QA
+            // escape hatch (see its docs); null on shipped builds.
+            val target = DIAL_OVERRIDE ?: client.phone
+            if (target.isBlank()) {
+                Log.e(TAG, "startCall aborted — client ${client.id} has no phone")
+                _callState.value = CallUiState.Disconnected
+                return@launch
+            }
+            if (DIAL_OVERRIDE != null) {
+                Log.w(
+                    TAG,
+                    "DIAL_OVERRIDE active: routing client ${client.id} " +
+                        "(phone=${client.phone}) to $DIAL_OVERRIDE",
+                )
+            }
+            val newSession = coreManager.placeCall(target)
             if (newSession == null) {
                 Log.e(TAG, "placeCall returned null for client ${client.id}")
                 _callState.value = CallUiState.Disconnected
