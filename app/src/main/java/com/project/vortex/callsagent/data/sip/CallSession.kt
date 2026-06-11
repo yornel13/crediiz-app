@@ -8,6 +8,7 @@ import org.linphone.core.AudioDevice
 import org.linphone.core.Call
 import org.linphone.core.CallListenerStub
 import org.linphone.core.Core
+import org.linphone.core.CoreListenerStub
 import org.linphone.core.Reason
 import java.time.Instant
 
@@ -33,6 +34,22 @@ class CallSession internal constructor(
 
     private val _isMuted = MutableStateFlow(false)
     val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
+
+    /**
+     * Live audio-routing snapshot (active route + available routes).
+     * Re-published whenever the device list changes (headset plugged /
+     * unplugged, Bluetooth connected / dropped) so the UI can switch
+     * between a binary toggle and a device picker on the fly.
+     */
+    private val _audioRoute = MutableStateFlow(AudioRouteState.SpeakerOnly)
+    val audioRoute: StateFlow<AudioRouteState> = _audioRoute.asStateFlow()
+
+    /**
+     * The route the agent explicitly picked, or `null` while we follow
+     * the automatic policy. A manual pick is honored as long as its
+     * device stays available; once it disappears we fall back to auto.
+     */
+    private var userPickedRoute: AudioRoute? = null
 
     /**
      * Categorical reason this call ended. `null` while the call is
@@ -62,14 +79,40 @@ class CallSession internal constructor(
             // collector observing _state can already read _ending.value.
             if (mapped is SipCallState.Disconnected && _ending.value == null) {
                 _ending.value = computeEnding()
+                // The Core is a long-lived singleton: detach our listeners
+                // exactly once when the call ends so the dead session does
+                // not keep reacting to device changes (and leaking).
+                runCatching {
+                    core.removeListener(coreAudioListener)
+                    call.removeListener(this)
+                }
             }
             _state.value = mapped
         }
     }
 
+    /**
+     * Reacts to audio-device changes on the singleton Core for the life
+     * of this call. [onAudioDevicesListUpdated] fires when a headset is
+     * plugged/unplugged or Bluetooth connects/drops; we re-apply the
+     * routing policy and re-publish. [onAudioDeviceChanged] fires after a
+     * route actually switches; we just re-publish the active route.
+     */
+    private val coreAudioListener = object : CoreListenerStub() {
+        override fun onAudioDevicesListUpdated(core: Core) {
+            applyPreferredRouteAndPublish()
+        }
+
+        override fun onAudioDeviceChanged(core: Core, audioDevice: AudioDevice) {
+            publishRouteState()
+        }
+    }
+
     init {
         call.addListener(listener)
+        core.addListener(coreAudioListener)
         _state.value = mapState(call.state)
+        applyPreferredRouteAndPublish()
     }
 
     fun setMuted(muted: Boolean) {
@@ -83,30 +126,72 @@ class CallSession internal constructor(
     }
 
     /**
-     * Route the call's output to the device speaker (`true`) or to the
-     * earpiece / closest non-speaker output (`false`).
-     *
-     * Returns `true` if the routing was applied, `false` if the target
-     * device type does not exist on this hardware (typical case: the
-     * Galaxy Tab A9+ has no `Earpiece` device, only `Speaker`). Callers
-     * should keep their UI flag in sync with the returned value so the
-     * agent does not see a "phantom" toggle that produces no audible
-     * change.
+     * Playback routes this call can use right now, derived from
+     * Linphone's live device list, de-duplicated by [AudioRoute] (e.g.
+     * Headset + Headphones collapse to one WiredHeadset entry) and
+     * ordered for stable rendering.
      */
-    fun setSpeakerEnabled(enabled: Boolean): Boolean {
-        val targetType =
-            if (enabled) AudioDevice.Type.Speaker else AudioDevice.Type.Earpiece
+    fun availableRoutes(): List<AudioRoute> =
+        core.audioDevices
+            .filter { it.hasCapability(AudioDevice.Capabilities.CapabilityPlay) }
+            .mapNotNull { it.type.toAudioRouteOrNull() }
+            .distinct()
+            .sortedBy { DISPLAY_ROUTE_ORDER.indexOf(it) }
+
+    /** The route currently carrying call audio, or `null` if unmapped. */
+    fun currentRoute(): AudioRoute? =
+        call.outputAudioDevice?.type?.toAudioRouteOrNull()
+
+    /**
+     * Route the call's output to [route] at the agent's explicit request.
+     * Remembers the choice so the auto-switch policy won't override it
+     * while that device stays available. Returns `true` if a matching
+     * playback device existed and was applied.
+     */
+    fun selectRoute(route: AudioRoute): Boolean {
+        userPickedRoute = route
+        val applied = applyRoute(route)
+        publishRouteState()
+        return applied
+    }
+
+    /**
+     * Apply the auto-routing policy and publish the result. Honors a
+     * still-available manual pick; otherwise the highest-priority
+     * connected device wins (Bluetooth > wired > speaker > earpiece).
+     * Called on every device-list change and once at call start.
+     */
+    private fun applyPreferredRouteAndPublish() {
+        val device = core.audioDevices.preferredPlaybackDevice(
+            preferred = userPickedRoute?.takeIf { it in availableRoutes() },
+        )
+        if (device != null && device.type.toAudioRouteOrNull() != currentRoute()) {
+            call.outputAudioDevice = device
+            Log.d(TAG, "Auto-routed to ${device.deviceName} (${device.type})")
+        }
+        publishRouteState()
+    }
+
+    /** Force the call output onto the first playback device of [route]. */
+    private fun applyRoute(route: AudioRoute): Boolean {
         val device = core.audioDevices.firstOrNull { d ->
-            d.type == targetType &&
-                d.hasCapability(AudioDevice.Capabilities.CapabilityPlay)
+            d.hasCapability(AudioDevice.Capabilities.CapabilityPlay) &&
+                d.type.toAudioRouteOrNull() == route
         }
         if (device == null) {
-            Log.w(TAG, "No audio device of type $targetType available")
+            Log.w(TAG, "No playback device available for route $route")
             return false
         }
         call.outputAudioDevice = device
-        Log.d(TAG, "Output device set to ${device.deviceName} ($targetType)")
+        Log.d(TAG, "Output routed to ${device.deviceName} ($route)")
         return true
+    }
+
+    private fun publishRouteState() {
+        _audioRoute.value = AudioRouteState(
+            current = currentRoute() ?: AudioRoute.Speaker,
+            available = availableRoutes().ifEmpty { listOf(AudioRoute.Speaker) },
+        )
     }
 
     fun disconnect() {

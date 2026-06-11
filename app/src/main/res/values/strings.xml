@@ -214,7 +214,11 @@
     <string name="incall_reject">Reject</string>
     <string name="incall_accept">Accept</string>
     <string name="incall_control_mute">Mute</string>
-    <string name="incall_control_speaker">Speaker</string>
+    <string name="incall_audio_output_title">Audio output</string>
+    <string name="incall_route_speaker">Speaker</string>
+    <string name="incall_route_earpiece">Earpiece</string>
+    <string name="incall_route_wired">Headphones</string>
+    <string name="incall_route_bluetooth">Bluetooth</string>
     <string name="incall_status_idle">Idle</string>
     <string name="incall_status_dialing">Dialing</string>
     <string name="incall_status_ringing">Ringing</string>
@@ -224,6 +228,11 @@
     <!-- ============================== Settings ============================== -->
     <string name="settings_sign_out">Sign out</string>
     <string name="settings_account">Account</string>
+    <string name="settings_permissions">Permissions</string>
+    <string name="settings_permissions_missing">Missing permissions</string>
+    <string name="settings_permissions_missing_desc">Tap to grant the pending permissions.</string>
+    <string name="settings_permissions_granted">Permissions granted</string>
+    <string name="settings_permissions_granted_desc">The app has everything it needs.</string>
     <string name="settings_display">Display</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_theme_system">System</string>
@@ -270,6 +279,9 @@
     <string name="onboarding_step_notifications_description">For follow-up reminders and the in-call notification.</string>
     <string name="onboarding_step_battery_title">Run in the background</string>
     <string name="onboarding_step_battery_description">Prevents the system from killing the call service during long shifts.</string>
+    <string name="onboarding_step_bluetooth_title">Bluetooth headsets</string>
+    <string name="onboarding_step_bluetooth_description">Optional — take calls on a paired Bluetooth headset instead of the speaker.</string>
+    <string name="onboarding_optional_badge">Optional</string>
 
     <!-- ============================== Agenda ============================== -->
     <string name="agenda_section_today">Today</string>

@@ -18,6 +18,7 @@ import com.project.vortex.callsagent.presentation.common.LocalWindowSizeClass
 import com.project.vortex.callsagent.presentation.navigation.AppNavGraph
 import com.project.vortex.callsagent.presentation.onboarding.OnboardingActivity
 import com.project.vortex.callsagent.presentation.onboarding.OnboardingGate
+import com.project.vortex.callsagent.presentation.onboarding.OnboardingSessionState
 import com.project.vortex.callsagent.ui.locale.LocaleAwareActivity
 import com.project.vortex.callsagent.ui.theme.CallsAgendsTheme
 import com.project.vortex.callsagent.ui.theme.ThemeMode
@@ -30,6 +31,7 @@ class MainActivity : LocaleAwareActivity() {
 
     @Inject lateinit var settingsPreferences: SettingsPreferences
     @Inject lateinit var onboardingGate: OnboardingGate
+    @Inject lateinit var onboardingSessionState: OnboardingSessionState
     @Inject lateinit var voipRefreshOrchestrator: VoipRefreshOrchestrator
     @Inject lateinit var authRepository: AuthRepository
 
@@ -80,10 +82,18 @@ class MainActivity : LocaleAwareActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Mandatory gate — if any dialer requirement is missing (permission
-        // revoked, role lost, etc.), bounce to onboarding. The gate covers
-        // cold start, returning from Settings, and post-revocation cases.
-        if (!onboardingGate.allMet()) {
+        // Mandatory gate — bounce to onboarding while anything is missing.
+        //  - A missing REQUIRED permission always bounces (covers cold
+        //    start, returning from Settings, and post-revocation).
+        //  - A missing OPTIONAL permission (e.g. Bluetooth) also bounces,
+        //    but only until the user dismisses onboarding this session —
+        //    the session flag prevents an immediate re-bounce loop after
+        //    "Continue", while a fresh launch re-offers it.
+        val missingRequired = !onboardingGate.allMet()
+        val missingOptional = !onboardingGate.allGranted()
+        if (missingRequired ||
+            (missingOptional && !onboardingSessionState.dismissedThisSession)
+        ) {
             startActivity(Intent(this, OnboardingActivity::class.java))
             finish()
             return

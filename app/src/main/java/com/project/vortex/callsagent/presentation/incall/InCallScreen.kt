@@ -25,20 +25,27 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CallEnd
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.PhoneInTalk
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -58,6 +65,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.CallDirection
+import com.project.vortex.callsagent.data.sip.AudioRoute
+import com.project.vortex.callsagent.data.sip.AudioRouteState
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.call.model.CallUiState
 import com.project.vortex.callsagent.presentation.common.WindowSize
@@ -90,7 +99,7 @@ fun InCallScreen(
     val direction by viewModel.callDirection.collectAsState()
     val incomingPhone by viewModel.incomingPhoneNumber.collectAsState()
     val isMuted by viewModel.isMuted.collectAsState()
-    val isSpeaker by viewModel.isSpeakerOn.collectAsState()
+    val audioRoute by viewModel.audioRoute.collectAsState()
     val liveNote by viewModel.liveNoteContent.collectAsState()
 
     // `CallController` nulls out `currentClient` the moment the SIP
@@ -155,10 +164,10 @@ fun InCallScreen(
                 callState = callState,
                 liveNote = liveNote,
                 isMuted = isMuted,
-                isSpeakerOn = isSpeaker,
+                audioRoute = audioRoute,
                 onNoteChange = viewModel::onNoteChange,
                 onToggleMute = viewModel::toggleMute,
-                onToggleSpeaker = viewModel::toggleSpeaker,
+                onSelectRoute = viewModel::selectRoute,
                 onEndCall = viewModel::endCall,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -171,10 +180,10 @@ fun InCallScreen(
                     callState = callState,
                     liveNote = liveNote,
                     isMuted = isMuted,
-                    isSpeakerOn = isSpeaker,
+                    audioRoute = audioRoute,
                     onNoteChange = viewModel::onNoteChange,
                     onToggleMute = viewModel::toggleMute,
-                    onToggleSpeaker = viewModel::toggleSpeaker,
+                    onSelectRoute = viewModel::selectRoute,
                     onEndCall = viewModel::endCall,
                     modifier = Modifier
                         .weight(0.45f)
@@ -195,10 +204,10 @@ fun InCallScreen(
                 callState = callState,
                 liveNote = liveNote,
                 isMuted = isMuted,
-                isSpeakerOn = isSpeaker,
+                audioRoute = audioRoute,
                 onNoteChange = viewModel::onNoteChange,
                 onToggleMute = viewModel::toggleMute,
-                onToggleSpeaker = viewModel::toggleSpeaker,
+                onSelectRoute = viewModel::selectRoute,
                 onEndCall = viewModel::endCall,
             )
         }
@@ -228,10 +237,10 @@ private fun InCallTabsLayout(
     callState: CallUiState,
     liveNote: String,
     isMuted: Boolean,
-    isSpeakerOn: Boolean,
+    audioRoute: AudioRouteState,
     onNoteChange: (String) -> Unit,
     onToggleMute: () -> Unit,
-    onToggleSpeaker: () -> Unit,
+    onSelectRoute: (AudioRoute) -> Unit,
     onEndCall: () -> Unit,
 ) {
     var selectedTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -257,10 +266,10 @@ private fun InCallTabsLayout(
                 callState = callState,
                 liveNote = liveNote,
                 isMuted = isMuted,
-                isSpeakerOn = isSpeakerOn,
+                audioRoute = audioRoute,
                 onNoteChange = onNoteChange,
                 onToggleMute = onToggleMute,
-                onToggleSpeaker = onToggleSpeaker,
+                onSelectRoute = onSelectRoute,
                 onEndCall = onEndCall,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -308,10 +317,10 @@ private fun CallControlPanel(
     callState: CallUiState,
     liveNote: String,
     isMuted: Boolean,
-    isSpeakerOn: Boolean,
+    audioRoute: AudioRouteState,
     onNoteChange: (String) -> Unit,
     onToggleMute: () -> Unit,
-    onToggleSpeaker: () -> Unit,
+    onSelectRoute: (AudioRoute) -> Unit,
     onEndCall: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -363,15 +372,15 @@ private fun CallControlPanel(
             enabled = callState !is CallUiState.Disconnected,
         )
         Spacer(modifier = Modifier.weight(1f))
-        // Mute / Speaker controls — always visible, pinned right
+        // Mute + audio-output controls — always visible, pinned right
         // above the End CTA. See comment on the body Column for why
         // they're NOT inside it.
-        MuteSpeakerRow(
+        CallControlsRow(
             isMuted = isMuted,
-            isSpeakerOn = isSpeakerOn,
+            audioRoute = audioRoute,
             enabled = callState !is CallUiState.Disconnected,
             onToggleMute = onToggleMute,
-            onToggleSpeaker = onToggleSpeaker,
+            onSelectRoute = onSelectRoute,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
         // Primary CTA at the bottom — symmetric to PostCall's Save
@@ -435,21 +444,16 @@ private fun CallActiveHero(
 }
 
 /**
- * Mute + Speaker toggles, side by side, theme-aware.
- *
- * Replaces the previous round white-on-green buttons from the
- * `ControlsRow` — those only made sense when the whole panel was
- * green. Now they're `FilledTonalButton` circles in the theme's
- * secondary container, with the toggled state lighting up in the
- * primary palette.
+ * Mute + audio-output controls, side by side, theme-aware. The audio
+ * control is adaptive — see [AudioOutputControl].
  */
 @Composable
-private fun MuteSpeakerRow(
+private fun CallControlsRow(
     isMuted: Boolean,
-    isSpeakerOn: Boolean,
+    audioRoute: AudioRouteState,
     enabled: Boolean,
     onToggleMute: () -> Unit,
-    onToggleSpeaker: () -> Unit,
+    onSelectRoute: (AudioRoute) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -468,19 +472,155 @@ private fun MuteSpeakerRow(
             enabled = enabled,
             onClick = onToggleMute,
         )
-        ToggleControl(
-            // Use AutoMirrored VolumeUp regardless of state — the
-            // toggled state shows via the container colour change,
-            // not via different icons. (Icons.Filled.VolumeUp is
-            // deprecated in favour of the AutoMirrored variant for
-            // RTL correctness.)
-            icon = androidx.compose.material.icons.Icons.AutoMirrored.Filled.VolumeUp,
-            label = stringResource(R.string.incall_control_speaker),
-            checked = isSpeakerOn,
+        AudioOutputControl(
+            routeState = audioRoute,
             enabled = enabled,
-            onClick = onToggleSpeaker,
+            onSelectRoute = onSelectRoute,
         )
     }
+}
+
+/**
+ * Adaptive audio-output control. Mirrors how mainstream dialers behave:
+ *
+ *  - **1 output** (e.g. Tab A9+ speaker-only): a static, disabled
+ *    indicator showing the active route — there is nothing to switch to.
+ *  - **2 outputs**: a binary toggle that flips to the other route on tap
+ *    (keeps the familiar one-button speaker behavior).
+ *  - **3+ outputs**: a launcher that opens a bottom-sheet device picker.
+ *
+ * The icon and label always reflect the *currently active* route.
+ */
+@Composable
+private fun AudioOutputControl(
+    routeState: AudioRouteState,
+    enabled: Boolean,
+    onSelectRoute: (AudioRoute) -> Unit,
+) {
+    val current = routeState.current
+    val available = routeState.available
+    var showPicker by remember { mutableStateOf(false) }
+
+    val onClick: () -> Unit = when {
+        available.size <= 1 -> ({})
+        available.size == 2 -> ({ onSelectRoute(available.first { it != current }) })
+        else -> ({ showPicker = true })
+    }
+
+    ToggleControl(
+        icon = current.icon(),
+        label = current.label(),
+        // Lit whenever audio is on an "amplified"/accessory route — i.e.
+        // anything other than the private earpiece. On the Tab A9+ the
+        // speaker control therefore reads as ON by default, preserving
+        // the previous visual.
+        checked = current != AudioRoute.Earpiece,
+        enabled = enabled && available.size >= 2,
+        onClick = onClick,
+    )
+
+    if (showPicker) {
+        AudioRoutePickerSheet(
+            routeState = routeState,
+            onSelect = {
+                onSelectRoute(it)
+                showPicker = false
+            },
+            onDismiss = { showPicker = false },
+        )
+    }
+}
+
+/** Bottom-sheet device picker shown when 3+ audio outputs are available. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AudioRoutePickerSheet(
+    routeState: AudioRouteState,
+    onSelect: (AudioRoute) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(bottom = 12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.incall_audio_output_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+            )
+            routeState.available.forEach { route ->
+                AudioRouteRow(
+                    route = route,
+                    selected = route == routeState.current,
+                    onClick = { onSelect(route) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioRouteRow(
+    route: AudioRoute,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Surface(
+        onClick = onClick,
+        color = Color.Transparent,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = route.icon(),
+                contentDescription = null,
+                tint = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(16.dp))
+            Text(
+                text = route.label(),
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (selected) accent else MaterialTheme.colorScheme.onSurface,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                modifier = Modifier.weight(1f),
+            )
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = accent,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioRoute.label(): String = stringResource(
+    when (this) {
+        AudioRoute.Speaker -> R.string.incall_route_speaker
+        AudioRoute.Earpiece -> R.string.incall_route_earpiece
+        AudioRoute.WiredHeadset -> R.string.incall_route_wired
+        AudioRoute.Bluetooth -> R.string.incall_route_bluetooth
+    },
+)
+
+private fun AudioRoute.icon(): ImageVector = when (this) {
+    AudioRoute.Speaker -> Icons.AutoMirrored.Filled.VolumeUp
+    AudioRoute.Earpiece -> Icons.Filled.PhoneInTalk
+    AudioRoute.WiredHeadset -> Icons.Filled.Headset
+    AudioRoute.Bluetooth -> Icons.Filled.Bluetooth
 }
 
 /**

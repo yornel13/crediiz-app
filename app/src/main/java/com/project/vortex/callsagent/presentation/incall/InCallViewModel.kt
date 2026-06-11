@@ -1,6 +1,7 @@
 package com.project.vortex.callsagent.presentation.incall
 
 import androidx.lifecycle.ViewModel
+import com.project.vortex.callsagent.data.sip.AudioRoute
 import com.project.vortex.callsagent.domain.call.CallController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,7 +24,7 @@ class InCallViewModel @Inject constructor(
     val callDirection = callController.callDirection
     val incomingPhoneNumber = callController.incomingPhoneNumber
     val isMuted = callController.isMuted
-    val isSpeakerOn = callController.isSpeakerOn
+    val audioRoute = callController.audioRoute
 
     val liveNoteContent: MutableStateFlow<String> = callController.liveNoteContent
 
@@ -32,6 +33,6 @@ class InCallViewModel @Inject constructor(
     }
 
     fun toggleMute() = callController.mute(!isMuted.value)
-    fun toggleSpeaker() = callController.setSpeaker(!isSpeakerOn.value)
+    fun selectRoute(route: AudioRoute) = callController.selectRoute(route)
     fun endCall() = callController.disconnect()
 }

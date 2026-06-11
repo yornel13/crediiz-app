@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.linphone.core.Account
-import org.linphone.core.AudioDevice
 import org.linphone.core.Core
 import org.linphone.core.CoreListenerStub
 import org.linphone.core.Factory
@@ -247,7 +246,7 @@ class LinphoneCoreManager(
         }
         return suspendCancellableCoroutine { cont ->
             withCore { core ->
-                routeOutputToSpeaker(core)
+                applyPreferredRingbackRoute(core)
 
                 val toAddress = Factory.instance().createAddress(target)
                 val call = if (toAddress != null) core.inviteAddress(toAddress) else null
@@ -262,24 +261,22 @@ class LinphoneCoreManager(
     }
 
     /**
-     * Force playback through the device speaker. Without this, ringback
-     * tones and call audio go to the earpiece (Voice Communication
-     * Signalling stream), which on the Tab A9+ is inaudible. Tab A9+ is
-     * a hands-free device — speaker is the only sensible default.
+     * Pick the initial playback route for the ringback tone, which plays
+     * on the Core's output device *before* the per-call media (and thus
+     * [CallSession]) exists. Honors a connected Bluetooth / wired headset
+     * first, falling back to the built-in speaker — the Tab A9+ hands-free
+     * default, where ringback on the earpiece stream is inaudible.
      *
-     * Bluetooth / wired-headset routing is added as a follow-up — for
-     * v1 the call is always on the built-in speaker.
+     * Once the call object exists, [CallSession] takes over routing on the
+     * call's own output device and reacts to hot-swaps.
      */
-    private fun routeOutputToSpeaker(core: Core) {
-        val speaker = core.audioDevices.firstOrNull { device ->
-            device.type == AudioDevice.Type.Speaker &&
-                device.hasCapability(AudioDevice.Capabilities.CapabilityPlay)
-        }
-        if (speaker != null) {
-            core.outputAudioDevice = speaker
-            Log.d(TAG, "Output routed to speaker: ${speaker.deviceName}")
+    private fun applyPreferredRingbackRoute(core: Core) {
+        val device = core.audioDevices.preferredPlaybackDevice()
+        if (device != null) {
+            core.outputAudioDevice = device
+            Log.d(TAG, "Ringback routed to ${device.deviceName} (${device.type})")
         } else {
-            Log.w(TAG, "No speaker output device found; using default")
+            Log.w(TAG, "No playback device found for ringback; using default")
         }
     }
 

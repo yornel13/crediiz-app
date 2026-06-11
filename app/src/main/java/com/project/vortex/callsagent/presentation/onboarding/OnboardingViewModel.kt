@@ -14,7 +14,10 @@ data class OnboardingUiState(
      * "Open Settings" instead of the regular request prompt. */
     val hardDenied: Set<OnboardingStep> = emptySet(),
 ) {
-    val allMet: Boolean get() = statuses.values.all { it }
+    /** True when every *required* step is granted. Optional steps (e.g.
+     * Bluetooth) are surfaced but never block completion. */
+    val allRequiredMet: Boolean
+        get() = OnboardingStep.values().filter { it.required }.all { statuses[it] == true }
     fun isMet(step: OnboardingStep): Boolean = statuses[step] == true
 }
 

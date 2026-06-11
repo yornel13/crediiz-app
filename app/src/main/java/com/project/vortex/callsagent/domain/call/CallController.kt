@@ -5,6 +5,8 @@ import com.project.vortex.callsagent.common.enums.CallDirection
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
+import com.project.vortex.callsagent.data.sip.AudioRoute
+import com.project.vortex.callsagent.data.sip.AudioRouteState
 import com.project.vortex.callsagent.data.sip.CallSession
 import com.project.vortex.callsagent.data.sip.LinphoneCoreManager
 import com.project.vortex.callsagent.data.sip.SipCallEnding
@@ -98,9 +100,14 @@ class CallController @Inject constructor(
     private val _isMuted = MutableStateFlow(false)
     val isMuted: StateFlow<Boolean> = _isMuted.asStateFlow()
 
-    /** Tab A9+ is hands-free; the engine forces speaker route. */
-    private val _isSpeakerOn = MutableStateFlow(true)
-    val isSpeakerOn: StateFlow<Boolean> = _isSpeakerOn.asStateFlow()
+    /**
+     * Live audio-routing snapshot mirrored from the active [CallSession].
+     * Defaults to speaker-only between calls; the session republishes the
+     * real device set (and reacts to headset/Bluetooth hot-swaps) once a
+     * call is up. See [selectRoute].
+     */
+    private val _audioRoute = MutableStateFlow(AudioRouteState.SpeakerOnly)
+    val audioRoute: StateFlow<AudioRouteState> = _audioRoute.asStateFlow()
 
     val liveNoteContent = MutableStateFlow("")
 
@@ -148,7 +155,7 @@ class CallController @Inject constructor(
         _callState.value = CallUiState.Dialing
         liveNoteContent.value = ""
         _isMuted.value = false
-        _isSpeakerOn.value = true
+        _audioRoute.value = AudioRouteState.SpeakerOnly
         callStartedAt = Instant.now()
 
         scope.launch {
@@ -194,32 +201,18 @@ class CallController @Inject constructor(
     }
 
     /**
-     * Toggle audio output between speaker (`true`) and earpiece (`false`).
-     * Routes through the active [CallSession]; on devices without an
-     * earpiece — e.g. the Tab A9+, which only exposes a built-in speaker
-     * — the engine reports failure and the visual flag is **kept in
-     * sync with the actual routing**: the icon does not flip, signaling
-     * to the agent that the toggle has no effect on this hardware.
-     *
-     * If there is no active session yet, the flag updates optimistically
-     * so the next call can pick up the preference.
+     * Route the call's audio to [route] at the agent's explicit request.
+     * Delegates to the active [CallSession], which records the manual
+     * pick and re-publishes the [audioRoute] snapshot (mirrored here via
+     * [attachSession]). No-op when there is no active call.
      */
-    fun setSpeaker(enabled: Boolean) {
+    fun selectRoute(route: AudioRoute) {
         val active = session
         if (active == null) {
-            _isSpeakerOn.value = enabled
+            Log.w(TAG, "selectRoute($route) ignored — no active session")
             return
         }
-        val applied = active.setSpeakerEnabled(enabled)
-        if (applied) {
-            _isSpeakerOn.value = enabled
-        } else {
-            Log.w(
-                TAG,
-                "Speaker toggle to enabled=$enabled not applied — " +
-                    "target audio device unavailable on this hardware",
-            )
-        }
+        active.selectRoute(route)
     }
 
     fun disconnect() {
@@ -239,6 +232,7 @@ class CallController @Inject constructor(
         sessionWatcher?.cancel()
         sessionWatcher = scope.launch {
             launch { s.isMuted.collect { _isMuted.value = it } }
+            launch { s.audioRoute.collect { _audioRoute.value = it } }
             s.state.collect { sipState ->
                 _callState.value = sipState.toUi()
                 if (sipState is SipCallState.Disconnected) {

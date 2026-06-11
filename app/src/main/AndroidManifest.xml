@@ -10,6 +10,15 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <!-- Bluetooth headset routing. BLUETOOTH_CONNECT is a runtime permission
+         on API 31+ (needed to enumerate paired devices and start SCO);
+         legacy BLUETOOTH covers the API 30 floor (minSdk). Optional at
+         runtime — calls fall back to speaker / wired headset when absent. -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
     <!-- Battery optimization (Samsung One UI is aggressive about killing services) -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 

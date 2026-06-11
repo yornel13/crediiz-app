@@ -1,5 +1,6 @@
 package com.project.vortex.callsagent.presentation.settings
 
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,11 +14,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -32,15 +38,21 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.data.sync.SyncResult
 import com.project.vortex.callsagent.presentation.common.WindowSize
+import com.project.vortex.callsagent.presentation.onboarding.OnboardingActivity
 import com.project.vortex.callsagent.ui.locale.AppLanguage
+import com.project.vortex.callsagent.ui.theme.Amber600
+import com.project.vortex.callsagent.ui.theme.Emerald600
 import com.project.vortex.callsagent.ui.theme.ThemeMode
 
 @Composable
@@ -49,6 +61,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -56,6 +69,13 @@ fun SettingsScreen(
                 SettingsEvent.LoggedOut -> onLoggedOut()
             }
         }
+    }
+
+    // Re-check permission grants whenever the user lands back on Settings
+    // (returning from system Settings or the onboarding screen), so the
+    // permissions row reflects the current state without a manual refresh.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.refreshPermissions()
     }
 
     // Settings is a form-like screen — content stretched edge-to-edge
@@ -89,6 +109,13 @@ fun SettingsScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
             AccountCard(name = state.agentName, email = state.agentEmail)
+
+            PermissionsCard(
+                allGranted = state.permissionsGranted,
+                onOpenPermissions = {
+                    context.startActivity(Intent(context, OnboardingActivity::class.java))
+                },
+            )
 
             DisplayCard(
                 themeMode = state.themeMode,
@@ -485,6 +512,67 @@ private fun SyncCard(
                         stringResource(R.string.settings_force_sync)
                     }
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Permissions status row. While something is still ungranted it renders
+ * a tappable amber warning that opens onboarding; once everything is
+ * granted it becomes a non-interactive "all good" confirmation (the Card
+ * is disabled, so the tap target — and the chevron — disappear).
+ */
+@Composable
+private fun PermissionsCard(
+    allGranted: Boolean,
+    onOpenPermissions: () -> Unit,
+) {
+    Card(
+        onClick = onOpenPermissions,
+        enabled = !allGranted,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            SectionTitle(stringResource(R.string.settings_permissions))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = if (allGranted) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = if (allGranted) Emerald600 else Amber600,
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(
+                            if (allGranted) R.string.settings_permissions_granted
+                            else R.string.settings_permissions_missing
+                        ),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = stringResource(
+                            if (allGranted) R.string.settings_permissions_granted_desc
+                            else R.string.settings_permissions_missing_desc
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (!allGranted) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

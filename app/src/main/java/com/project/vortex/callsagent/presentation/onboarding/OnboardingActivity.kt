@@ -36,6 +36,7 @@ import javax.inject.Inject
 class OnboardingActivity : LocaleAwareActivity() {
 
     @Inject lateinit var gate: OnboardingGate
+    @Inject lateinit var onboardingSessionState: OnboardingSessionState
     @Inject lateinit var settingsPreferences: SettingsPreferences
 
     private val viewModel: OnboardingViewModel by viewModels()
@@ -87,7 +88,7 @@ class OnboardingActivity : LocaleAwareActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 viewModel.refreshStatuses()
-                if (viewModel.uiState.value.allMet) completeAndLaunchHome()
+                if (gate.allGranted()) completeAndLaunchHome()
             }
         }
     }
@@ -100,7 +101,7 @@ class OnboardingActivity : LocaleAwareActivity() {
         OnboardingStep.values().forEach {
             if (gate.isStepMet(it)) viewModel.clearHardDenied(it)
         }
-        if (viewModel.uiState.value.allMet) completeAndLaunchHome()
+        if (gate.allGranted()) completeAndLaunchHome()
     }
 
     private fun handleStepAction(step: OnboardingStep) {
@@ -115,6 +116,16 @@ class OnboardingActivity : LocaleAwareActivity() {
                 requestPermission(step, Manifest.permission.MODIFY_AUDIO_SETTINGS)
             OnboardingStep.NOTIFICATIONS -> requestNotifications(step)
             OnboardingStep.BATTERY_OPTIMIZATION -> requestBatteryWhitelist()
+            OnboardingStep.BLUETOOTH_CONNECT -> requestBluetoothConnect(step)
+        }
+    }
+
+    private fun requestBluetoothConnect(step: OnboardingStep) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            requestPermission(step, Manifest.permission.BLUETOOTH_CONNECT)
+        } else {
+            // Pre-API 31: legacy BLUETOOTH is install-time — nothing to ask.
+            viewModel.refreshStatuses()
         }
     }
 
@@ -162,6 +173,10 @@ class OnboardingActivity : LocaleAwareActivity() {
                     Manifest.permission.POST_NOTIFICATIONS
                 else return true
             OnboardingStep.BATTERY_OPTIMIZATION -> return true
+            OnboardingStep.BLUETOOTH_CONNECT ->
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                    Manifest.permission.BLUETOOTH_CONNECT
+                else return true
         }
         return ActivityCompat.shouldShowRequestPermissionRationale(this, perm)
     }
@@ -170,6 +185,11 @@ class OnboardingActivity : LocaleAwareActivity() {
     private fun completeAndLaunchHome() {
         if (navigatedHome) return
         navigatedHome = true
+        // Mark onboarding dismissed for this process so MainActivity does
+        // not immediately bounce back here when an OPTIONAL permission is
+        // still missing (the user chose to skip it). A fresh launch resets
+        // this and re-offers the optional permission.
+        onboardingSessionState.dismissedThisSession = true
         startActivity(Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         })

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
@@ -88,7 +90,7 @@ fun OnboardingScreen(
             }
             item("continue") {
                 ContinueButton(
-                    enabled = state.allMet,
+                    enabled = state.allRequiredMet,
                     onClick = onAllMetContinue,
                 )
             }
@@ -168,11 +170,17 @@ private fun StepCard(
             Column(
                 modifier = Modifier.weight(1f).padding(start = 12.dp),
             ) {
-                Text(
-                    text = stringResource(info.titleRes),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stringResource(info.titleRes),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (!step.required) {
+                        Spacer(Modifier.width(8.dp))
+                        OptionalBadge()
+                    }
+                }
                 Text(
                     text = stringResource(info.descriptionRes),
                     style = MaterialTheme.typography.bodySmall,
@@ -242,6 +250,23 @@ private fun ContinueButton(enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** Small pill marking a permission step as non-blocking. */
+@Composable
+private fun OptionalBadge() {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Text(
+            text = stringResource(R.string.onboarding_optional_badge),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
+    }
+}
+
 private data class StepInfo(
     @StringRes val titleRes: Int,
     @StringRes val descriptionRes: Int,
@@ -268,5 +293,10 @@ private fun OnboardingStep.info(): StepInfo = when (this) {
         titleRes = R.string.onboarding_step_battery_title,
         descriptionRes = R.string.onboarding_step_battery_description,
         icon = Icons.Filled.BatteryFull,
+    )
+    OnboardingStep.BLUETOOTH_CONNECT -> StepInfo(
+        titleRes = R.string.onboarding_step_bluetooth_title,
+        descriptionRes = R.string.onboarding_step_bluetooth_description,
+        icon = Icons.Filled.Bluetooth,
     )
 }

@@ -211,7 +211,11 @@
     <string name="incall_reject">Rechazar</string>
     <string name="incall_accept">Aceptar</string>
     <string name="incall_control_mute">Silenciar</string>
-    <string name="incall_control_speaker">Altavoz</string>
+    <string name="incall_audio_output_title">Salida de audio</string>
+    <string name="incall_route_speaker">Altavoz</string>
+    <string name="incall_route_earpiece">Auricular</string>
+    <string name="incall_route_wired">Audífonos</string>
+    <string name="incall_route_bluetooth">Bluetooth</string>
     <string name="incall_status_idle">Inactivo</string>
     <string name="incall_status_dialing">Marcando</string>
     <string name="incall_status_ringing">Sonando</string>
@@ -221,6 +225,11 @@
     <!-- ============================== Settings ============================== -->
     <string name="settings_sign_out">Cerrar sesión</string>
     <string name="settings_account">Cuenta</string>
+    <string name="settings_permissions">Permisos</string>
+    <string name="settings_permissions_missing">Faltan permisos</string>
+    <string name="settings_permissions_missing_desc">Toca para otorgar los permisos pendientes.</string>
+    <string name="settings_permissions_granted">Permisos concedidos</string>
+    <string name="settings_permissions_granted_desc">La app tiene todo lo que necesita.</string>
     <string name="settings_display">Pantalla</string>
     <string name="settings_theme">Tema</string>
     <string name="settings_theme_system">Sistema</string>
@@ -267,6 +276,9 @@
     <string name="onboarding_step_notifications_description">Para recordatorios de seguimiento y la notificación durante la llamada.</string>
     <string name="onboarding_step_battery_title">Ejecutar en segundo plano</string>
     <string name="onboarding_step_battery_description">Evita que el sistema cierre el servicio de llamadas durante turnos largos.</string>
+    <string name="onboarding_step_bluetooth_title">Auriculares Bluetooth</string>
+    <string name="onboarding_step_bluetooth_description">Opcional — atiende llamadas con un auricular Bluetooth en lugar del altavoz.</string>
+    <string name="onboarding_optional_badge">Opcional</string>
 
     <!-- ============================== Agenda ============================== -->
     <string name="agenda_section_today">Hoy</string>

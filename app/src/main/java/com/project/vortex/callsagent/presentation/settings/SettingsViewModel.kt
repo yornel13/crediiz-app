@@ -10,6 +10,7 @@ import com.project.vortex.callsagent.domain.repository.AuthRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
 import com.project.vortex.callsagent.domain.repository.InteractionRepository
 import com.project.vortex.callsagent.domain.repository.NoteRepository
+import com.project.vortex.callsagent.presentation.onboarding.OnboardingGate
 import com.project.vortex.callsagent.ui.locale.AppLanguage
 import com.project.vortex.callsagent.ui.theme.ThemeMode
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -36,6 +37,9 @@ data class SettingsUiState(
     val appLanguage: AppLanguage = AppLanguage.SYSTEM,
     val keepScreenOn: Boolean = false,
     val showFullActivityHistory: Boolean = true,
+    /** False when any onboarding permission (required or optional, e.g.
+     * Bluetooth) is still ungranted — drives the Settings permissions row. */
+    val permissionsGranted: Boolean = true,
 )
 
 sealed interface SettingsEvent {
@@ -51,12 +55,17 @@ class SettingsViewModel @Inject constructor(
     private val interactionRepository: InteractionRepository,
     private val noteRepository: NoteRepository,
     private val followUpRepository: FollowUpRepository,
+    private val onboardingGate: OnboardingGate,
 ) : ViewModel() {
 
     private val _events = Channel<SettingsEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
 
     private val _pendingCount = MutableStateFlow(0)
+
+    /** Re-evaluated on every screen resume via [refreshPermissions] so the
+     * row reflects grants the user made in system Settings or onboarding. */
+    private val _permissionsGranted = MutableStateFlow(onboardingGate.allGranted())
 
     val uiState: StateFlow<SettingsUiState> = combine(
         authRepository.agentNameFlow(),
@@ -70,6 +79,7 @@ class SettingsViewModel @Inject constructor(
         settingsPreferences.keepScreenOnFlow,
         settingsPreferences.showFullActivityHistoryFlow,
         settingsPreferences.appLanguageFlow,
+        _permissionsGranted,
     ) { values ->
         SettingsUiState(
             agentName = (values[0] as String?).orEmpty(),
@@ -83,6 +93,7 @@ class SettingsViewModel @Inject constructor(
             keepScreenOn = values[8] as Boolean,
             showFullActivityHistory = values[9] as Boolean,
             appLanguage = values[10] as AppLanguage,
+            permissionsGranted = values[11] as Boolean,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -137,5 +148,11 @@ class SettingsViewModel @Inject constructor(
                 followUpRepository.countPending()
             _pendingCount.value = total
         }
+    }
+
+    /** Re-check permission grants. Called on every screen resume so the
+     * row updates after the user returns from system Settings / onboarding. */
+    fun refreshPermissions() {
+        _permissionsGranted.value = onboardingGate.allGranted()
     }
 }
