@@ -164,8 +164,13 @@ class SyncManager @Inject constructor(
     private fun extractSyncedAndDuplicateIds(
         result: SyncCategoryResult,
     ): Pair<List<String>, Int> {
+        // "updated" = the backend upserted an existing mobileSyncId with the
+        // new payload (e.g. a re-classified outcome from PostCall). It MUST be
+        // treated as synced, otherwise the corrected row stays PENDING and
+        // re-uploads forever. "duplicate" = backend already had it and made no
+        // change; also terminal for this push.
         val synced = result.results
-            .filter { it.status == "created" || it.status == "duplicate" }
+            .filter { it.status == "created" || it.status == "duplicate" || it.status == "updated" }
             .map { it.mobileSyncId }
         return synced to result.duplicateCount
     }

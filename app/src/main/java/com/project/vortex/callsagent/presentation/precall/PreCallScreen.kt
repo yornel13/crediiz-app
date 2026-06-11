@@ -1570,25 +1570,44 @@ private fun ActivityRowPlain(
                     contentDescription = title,
                 )
                 Spacer(Modifier.width(12.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                if (meta != null) {
+                // Title + meta share a single weighted slot so they YIELD
+                // space to the timestamp on narrow phones. The meta (e.g.
+                // "Admin · Admin") truncates with an ellipsis instead of
+                // pushing the timestamp into a 1-char-per-line wrap. The
+                // timestamp itself has no weight (intrinsic width) and
+                // `softWrap = false`, so it is measured first and always
+                // renders on one line.
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Text(
-                        text = "  ·  $meta",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.Medium,
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
+                    if (meta != null) {
+                        Text(
+                            text = "  ·  $meta",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                    }
                 }
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = timestamp,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    maxLines = 1,
+                    softWrap = false,
                 )
             }
             Spacer(Modifier.height(12.dp))

@@ -281,9 +281,10 @@ class CallController @Inject constructor(
             durationSeconds = durationSeconds,
             // Persist the suggested outcome as the placeholder. The agent
             // confirms or changes it on PostCall; either way the row is
-            // updated before sync. Falling back to NO_ANSWER preserves
-            // legacy behavior when there's no insight (e.g. orphan).
-            outcome = insight?.suggestedOutcome ?: CallOutcome.NO_ANSWER,
+            // updated before sync. Fall back to NO_SELECTED (not NO_ANSWER)
+            // when there's no insight (e.g. orphan): an unknown ending must
+            // not fabricate a "no contestó" the agent never chose.
+            outcome = insight?.suggestedOutcome ?: CallOutcome.NO_SELECTED,
             disconnectCause = ending?.javaClass?.simpleName,
             deviceCreatedAt = Instant.now(),
             syncStatus = SyncStatus.PENDING,

@@ -244,7 +244,16 @@ private fun InCallTabsLayout(
     onEndCall: () -> Unit,
 ) {
     var selectedTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
-    Column(modifier = Modifier.fillMaxSize()) {
+    // The tab row sits at the very top with edge-to-edge enabled, so it must
+    // clear the status bar — otherwise "Llamada/Cliente" draw under the clock
+    // and signal icons. Consuming the inset here also means the CallActiveHero
+    // inside the "Llamada" tab won't double-apply it (its statusBars inset
+    // resolves to 0 once consumed).
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.statusBars),
+    ) {
         PrimaryTabRow(selectedTabIndex = selectedTab) {
             Tab(
                 selected = selectedTab == 0,

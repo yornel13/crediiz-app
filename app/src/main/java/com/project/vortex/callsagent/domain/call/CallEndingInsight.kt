@@ -84,20 +84,25 @@ data class CallEndingInsight(
                 reasonLabel = "Número no válido.",
             )
 
+            // Ambiguous endings (NetworkError / Cancelled / Other) carry NO
+            // objective signal about the result — the SIP layer only knows the
+            // call dropped/was cancelled, not WHY. Defaulting to NO_ANSWER would
+            // fabricate a disposition the agent never chose, so we persist the
+            // NO_SELECTED placeholder and force a real classification in PostCall.
             SipCallEnding.NetworkError -> CallEndingInsight(
-                suggestedOutcome = null,
+                suggestedOutcome = CallOutcome.NO_SELECTED,
                 allowedOutcomes = ALL_OUTCOMES,
                 reasonLabel = "Hubo un problema de red durante la llamada.",
             )
 
             SipCallEnding.Cancelled -> CallEndingInsight(
-                suggestedOutcome = null,
+                suggestedOutcome = CallOutcome.NO_SELECTED,
                 allowedOutcomes = NON_CONVERSATIONAL_OUTCOMES,
                 reasonLabel = "Llamada cancelada antes de conectar.",
             )
 
             is SipCallEnding.Other -> CallEndingInsight(
-                suggestedOutcome = null,
+                suggestedOutcome = CallOutcome.NO_SELECTED,
                 allowedOutcomes = ALL_OUTCOMES,
                 reasonLabel = ending.reason
                     ?.takeIf { it.isNotBlank() && it != "None" }
