@@ -52,6 +52,9 @@ data class AutoCallSessionStats(
         CallOutcome.HAS_LOAN,
         CallOutcome.DECEASED,
         CallOutcome.NOT_APPLICABLE -> copy(removed = removed + 1)
+        // Unreachable in practice: NO_SELECTED is never agent-saved (PostCall
+        // blocks it). Leave stats untouched rather than miscount it.
+        CallOutcome.NO_SELECTED -> this
     }
 
     fun recordSkip(): AutoCallSessionStats = copy(skipped = skipped + 1)

@@ -5,6 +5,7 @@ import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.MonetizationOn
+import androidx.compose.material.icons.filled.Pending
 import androidx.compose.material.icons.filled.PersonOff
 import androidx.compose.material.icons.filled.PhoneDisabled
 import androidx.compose.material.icons.filled.PhoneMissed
@@ -68,6 +69,9 @@ fun CallOutcome.palette(): StatusPalette = when (this) {
     CallOutcome.HAS_LOAN,
     CallOutcome.DECEASED,
     CallOutcome.NOT_APPLICABLE -> errorPalette()
+    // Answered-but-unclassified placeholder — neutral so it reads as
+    // "pending", not as a contact or removal result.
+    CallOutcome.NO_SELECTED -> neutralPalette()
 }
 
 @Composable
@@ -111,6 +115,7 @@ fun CallOutcome.label(): String = when (this) {
     CallOutcome.HAS_LOAN -> stringResource(R.string.enum_outcome_has_loan)
     CallOutcome.DECEASED -> stringResource(R.string.enum_outcome_deceased)
     CallOutcome.NOT_APPLICABLE -> stringResource(R.string.enum_outcome_not_applicable)
+    CallOutcome.NO_SELECTED -> stringResource(R.string.enum_outcome_no_selected)
 }
 
 @Composable
@@ -160,6 +165,7 @@ fun CallOutcome.icon(): ImageVector = when (this) {
     CallOutcome.HAS_LOAN -> Icons.Filled.AccountBalance
     CallOutcome.DECEASED -> Icons.Filled.PersonOff
     CallOutcome.NOT_APPLICABLE -> Icons.Filled.RemoveCircleOutline
+    CallOutcome.NO_SELECTED -> Icons.Filled.Pending
 }
 
 /**
@@ -176,7 +182,10 @@ val CallOutcome.isAnswered: Boolean
         CallOutcome.DO_NOT_CALL,
         CallOutcome.HAS_LOAN,
         CallOutcome.DECEASED,
-        CallOutcome.NOT_APPLICABLE -> true
+        CallOutcome.NOT_APPLICABLE,
+        // Unclassified placeholder still implies the call WAS answered —
+        // group it under "answered" so the activity log reads correctly.
+        CallOutcome.NO_SELECTED -> true
         CallOutcome.NO_ANSWER,
         CallOutcome.BUSY,
         CallOutcome.OUT_OF_SERVICE,

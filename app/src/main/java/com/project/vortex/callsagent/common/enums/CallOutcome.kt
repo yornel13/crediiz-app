@@ -60,4 +60,19 @@ enum class CallOutcome {
 
     /** Does not apply. REMOVED (NOT_APPLICABLE), manual. */
     NOT_APPLICABLE,
+
+    /**
+     * Placeholder for an **answered** call the agent has not classified yet.
+     * This is NOT a real disposition and is NEVER directly selectable in
+     * PostCall — it is only the default value persisted at call-end for an
+     * `Answered` SIP ending, so the call no longer masquerades as `NO_ANSWER`.
+     * The agent overwrites it with a real outcome on PostCall; if they never
+     * do, the call still counts as *contacted* via `disconnectCause=Answered`.
+     *
+     * BACKEND CONTRACT: the server `CallOutcome` enum MUST accept this value,
+     * otherwise `POST /sync/interactions` rejects the whole batch with 400.
+     * The web panel must treat it as "answered, no result" — NOT as no-contact
+     * and NOT as a conversion.
+     */
+    NO_SELECTED,
 }

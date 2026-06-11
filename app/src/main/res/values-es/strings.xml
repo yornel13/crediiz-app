@@ -383,6 +383,7 @@
     <string name="enum_outcome_busy">Ocupado</string>
     <string name="enum_outcome_out_of_service">Fuera de servicio</string>
     <string name="enum_outcome_voicemail">Contestadora</string>
+    <string name="enum_outcome_no_selected">Contestada sin clasificar</string>
     <string name="enum_outcome_interested">Interesado</string>
     <string name="enum_outcome_scheduled">Citó</string>
     <string name="enum_outcome_sold">Firmó</string>

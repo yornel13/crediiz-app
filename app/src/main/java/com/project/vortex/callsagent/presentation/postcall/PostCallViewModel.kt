@@ -75,7 +75,10 @@ data class PostCallUiState(
     val canSave: Boolean
         get() {
             if (isSaving || isLoading) return false
-            if (selectedOutcome == null) return false
+            // NO_SELECTED is the placeholder for an unclassified answered
+            // call — it must never count as a real choice, so saving stays
+            // disabled until the agent picks an actual outcome.
+            if (selectedOutcome == null || selectedOutcome == CallOutcome.NO_SELECTED) return false
             return if (selectedOutcome == CallOutcome.INTERESTED) {
                 followUpDate != null &&
                     followUpTime != null &&
@@ -164,8 +167,11 @@ class PostCallViewModel @Inject constructor(
         load()
     }
 
-    fun selectOutcome(outcome: CallOutcome) =
+    fun selectOutcome(outcome: CallOutcome) {
+        // Guard: NO_SELECTED is a placeholder, not a pickable disposition.
+        if (outcome == CallOutcome.NO_SELECTED) return
         _uiState.update { it.copy(selectedOutcome = outcome) }
+    }
 
     fun onNoteChange(text: String) = _uiState.update { it.copy(noteText = text) }
 
@@ -384,10 +390,13 @@ class PostCallViewModel @Inject constructor(
                     interaction = interaction,
                     // Prefilled outcome wins over the placeholder stored in the
                     // interaction itself, which in turn wins over a recovered
-                    // insight.
-                    selectedOutcome = prefilledOutcome
+                    // insight. NO_SELECTED is stripped so an unclassified
+                    // answered call lands with NO button pre-selected — the
+                    // agent is forced to choose a real outcome.
+                    selectedOutcome = (prefilledOutcome
                         ?: recoveredInsight?.suggestedOutcome
-                        ?: interaction.outcome,
+                        ?: interaction.outcome)
+                        ?.takeIf { it != CallOutcome.NO_SELECTED },
                     isRecovering = isRecovering,
                     allowedOutcomes = it.allowedOutcomes
                         .takeIf { existing -> existing.isNotEmpty() }

@@ -435,7 +435,9 @@ private fun CompactOutcomeSelector(
     onTimeChange: (LocalTime) -> Unit,
 ) {
     val outcomesToShow = state.allowedOutcomes.takeIf { it.isNotEmpty() }
-        ?: CallOutcome.values().toList()
+        // NO_SELECTED is a placeholder, never a pickable button — exclude it
+        // from the catch-all fallback shown when no allow-list was provided.
+        ?: CallOutcome.values().filterNot { it == CallOutcome.NO_SELECTED }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         FlowRow(
@@ -492,7 +494,9 @@ private fun OutcomeSelector(
     onTimeChange: (LocalTime) -> Unit,
 ) {
     val outcomesToShow = state.allowedOutcomes.takeIf { it.isNotEmpty() }
-        ?: CallOutcome.values().toList()
+        // NO_SELECTED is a placeholder, never a pickable button — exclude it
+        // from the catch-all fallback shown when no allow-list was provided.
+        ?: CallOutcome.values().filterNot { it == CallOutcome.NO_SELECTED }
     // Stable order: backend enum declaration order is already the order
     // HOW_IT_WORKS §5 prescribes (answered outcomes first, then the
     // non-answered ones).

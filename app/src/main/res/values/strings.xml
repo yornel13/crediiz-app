@@ -386,6 +386,7 @@
     <string name="enum_outcome_busy">Busy</string>
     <string name="enum_outcome_out_of_service">Out of service</string>
     <string name="enum_outcome_voicemail">Voicemail</string>
+    <string name="enum_outcome_no_selected">Answered, unclassified</string>
     <string name="enum_outcome_interested">Interested</string>
     <string name="enum_outcome_scheduled">Scheduled</string>
     <string name="enum_outcome_sold">Sold</string>

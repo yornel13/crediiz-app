@@ -49,7 +49,13 @@ data class CallEndingInsight(
 
         fun from(ending: SipCallEnding): CallEndingInsight = when (ending) {
             SipCallEnding.Answered -> CallEndingInsight(
-                suggestedOutcome = null,
+                // The call connected but we can't infer the business result.
+                // Persist NO_SELECTED as the placeholder (NOT a real choice)
+                // so an unclassified answered call stops reporting as
+                // NO_ANSWER. PostCall strips it from the pre-selection, so the
+                // agent must still pick a real outcome. NO_SELECTED is never in
+                // `allowedOutcomes` — it is not a selectable button.
+                suggestedOutcome = CallOutcome.NO_SELECTED,
                 allowedOutcomes = ALL_OUTCOMES,
                 reasonLabel = null,
             )
