@@ -1,9 +1,12 @@
 package com.project.vortex.callsagent.data.sip
 
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
+import androidx.annotation.RawRes
+import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.data.sip.auth.SipCredentialsProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +22,10 @@ import org.linphone.core.CoreListenerStub
 import org.linphone.core.Factory
 import org.linphone.core.MediaEncryption
 import org.linphone.core.RegistrationState
+import org.linphone.core.ToneID
 import org.linphone.core.TransportType
+import org.linphone.mediastream.Factory as MsFactory
+import java.io.File
 import kotlin.coroutines.resume
 
 private const val TAG = "LinphoneCoreManager"
@@ -40,6 +46,19 @@ private val PREFERRED_AUDIO_CODECS = listOf("opus", "G722", "PCMA", "PCMU")
 
 /** Cap the Opus bit rate to match Sipnetic's `Limit bit rate` setting. */
 private const val OPUS_MAX_BITRATE_KBPS = 32
+
+/**
+ * Device models whose Qualcomm/Samsung audio HAL has no MMAP mixer path
+ * for the `voip-headphones` usecase. On these, Linphone's default AAudio
+ * (MMAP / low-latency) backend opens the call output stream but the HAL
+ * cannot start the PCM (`mmap-playback voip-headphones` path not found),
+ * so call audio is silent on a WIRED HEADSET once the full-duplex stream
+ * starts — ringback plays, then goes mute on answer. Speaker / earpiece /
+ * Bluetooth are unaffected. Forcing the OpenSLES backend (whose
+ * `low-latency-playback voip-headphones` path the HAL does define) fixes
+ * it. Confirmed via audio_route HAL logs. See linphone-android #1918.
+ */
+private val CRAPPY_AAUDIO_MODELS = setOf("SM-X216B") // Galaxy Tab A9+
 
 /**
  * Owns the singleton Linphone [Core], runs its event loop on a dedicated
@@ -128,13 +147,71 @@ class LinphoneCoreManager(
             // Identify ourselves clearly in SIP signaling.
             setUserAgent(USER_AGENT_NAME, USER_AGENT_VERSION)
 
+            // Replace Linphone's default (loud) call tones with softened
+            // copies. The setters need filesystem paths, so we stage the
+            // bundled res/raw wavs into filesDir first.
+            stageRawWav(R.raw.ringback_soft, "ringback_soft.wav")?.let { ringback = it }
+            stageRawWav(R.raw.call_end_soft, "call_end_soft.wav")?.let {
+                setTone(ToneID.CallEnd, it)
+            }
+
             addListener(coreListener)
             start()
 
             configureCodecPriority(this)
+            applyAAudioWorkaroundIfNeeded(this)
         }
 
         startIterateLoop()
+    }
+
+    /**
+     * Stage a bundled wav (`res/raw`) into the app's files dir and return
+     * its absolute path, or `null` on failure. Linphone's `ringback` and
+     * `setTone` setters need a filesystem path, not a resource id. Copied
+     * on every Core start (cheap, a few KB) so a rebuilt wav always wins
+     * over a previously staged one.
+     */
+    private fun stageRawWav(@RawRes resId: Int, fileName: String): String? {
+        val outFile = File(context.filesDir, fileName)
+        return runCatching {
+            context.resources.openRawResource(resId).use { input ->
+                outFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            outFile.absolutePath
+        }.onFailure { Log.e(TAG, "Failed to stage wav $fileName", it) }.getOrNull()
+    }
+
+    /**
+     * Work around the wired-headset silent-call bug on
+     * [CRAPPY_AAUDIO_MODELS] by tagging the running device with
+     * [MsFactory.DEVICE_HAS_CRAPPY_AAUDIO], which makes mediastreamer fall
+     * back to OpenSLES instead of AAudio. The built-in echo-canceller
+     * flags are re-asserted so AEC keeps working under OpenSLES. No-op on
+     * other models, which keep the lower-latency AAudio path.
+     */
+    private fun applyAAudioWorkaroundIfNeeded(core: Core) {
+        if (Build.MODEL !in CRAPPY_AAUDIO_MODELS) return
+        val msFactory = core.mediastreamerFactory
+        val flags = msFactory.deviceFlags or
+            MsFactory.DEVICE_HAS_BUILTIN_AEC or
+            MsFactory.DEVICE_HAS_BUILTIN_OPENSLES_AEC or
+            MsFactory.DEVICE_HAS_CRAPPY_AAUDIO
+        msFactory.setDeviceInfo(Build.MANUFACTURER, Build.MODEL, "", flags, 0, 0)
+        // Belt-and-suspenders: hard-disable the AAudio sound filters too,
+        // so the OpenSLES fallback is used even if the device-info match
+        // above doesn't take. Both directions are disabled together to keep
+        // capture and playback on the same backend (shared echo canceller).
+        runCatching {
+            msFactory.enableFilterFromName("MSAAudioPlayer", false)
+            msFactory.enableFilterFromName("MSAAudioRecorder", false)
+        }.onFailure { Log.w(TAG, "Could not disable AAudio filters", it) }
+        core.reloadSoundDevices()
+        Log.i(
+            TAG,
+            "AAudio MMAP workaround applied — forcing OpenSLES for " +
+                "${Build.MANUFACTURER}/${Build.MODEL} (flags=$flags)",
+        )
     }
 
     /**

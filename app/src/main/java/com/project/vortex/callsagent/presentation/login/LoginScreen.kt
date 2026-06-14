@@ -49,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -170,6 +171,8 @@ fun LoginScreen(
                     enabled = !state.isBusy,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Email,
+                        capitalization = KeyboardCapitalization.None,
+                        autoCorrectEnabled = false,
                         imeAction = ImeAction.Next,
                     ),
                     modifier = Modifier.fillMaxWidth(),

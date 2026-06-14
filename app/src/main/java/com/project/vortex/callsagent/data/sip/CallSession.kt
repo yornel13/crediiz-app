@@ -73,6 +73,15 @@ class CallSession internal constructor(
             Log.d(TAG, "Call state=$cstate message=$message")
             if (cstate == Call.State.StreamsRunning) {
                 wasConnected = true
+                // Re-assert the output route now that the RTP stream is
+                // live. A wired headset only becomes a fully usable output
+                // device once the call is active (Android enables the
+                // headset audio path then), so the route applied pre-stream
+                // in init() does not stick — without this re-apply, call
+                // audio is silent on wired headsets even though ringback
+                // played fine. BT / speaker / earpiece are unaffected.
+                // See linphone-android issue #1918.
+                applyPreferredRouteAndPublish()
             }
             val mapped = mapState(cstate)
             // Compute ending BEFORE emitting Disconnected so that any
@@ -165,7 +174,13 @@ class CallSession internal constructor(
         val device = core.audioDevices.preferredPlaybackDevice(
             preferred = userPickedRoute?.takeIf { it in availableRoutes() },
         )
-        if (device != null && device.type.toAudioRouteOrNull() != currentRoute()) {
+        if (device != null) {
+            // Always (re-)assign, even when currentRoute() already reports
+            // this route: the getter can report a device the live stream
+            // isn't actually playing through yet (wired headset before the
+            // stream is up), so guarding on equality would skip the very
+            // assignment that fixes the audio. Re-setting the same device
+            // is idempotent in Linphone.
             call.outputAudioDevice = device
             Log.d(TAG, "Auto-routed to ${device.deviceName} (${device.type})")
         }
