@@ -14,8 +14,19 @@ import java.time.Instant
 
 interface ClientRepository {
 
-    /** Fetch assigned clients from the server and replace the local cache. */
-    suspend fun refreshAssigned(status: ClientStatus = ClientStatus.PENDING): Result<Unit>
+    /**
+     * Fetch the agent's WHOLE assigned set from the server (any status,
+     * `GET /clients/assigned` with no status filter) and mirror it into the
+     * local cache: upsert all, drop any local client no longer assigned.
+     *
+     * The local DB therefore holds every assigned client regardless of status —
+     * a client only leaves the device when it is unassigned or hard-deleted in
+     * the core, not when it turns terminal (REMOVED/CONVERTED). The status-
+     * scoped lists ([observeAssigned], the Pendientes sub-feeds) filter by
+     * status locally, so terminal clients never leak into the active queues;
+     * they only surface in "Recientes" within its time window.
+     */
+    suspend fun refreshAssigned(): Result<Unit>
 
     /** Observe assigned clients by status from the local DB. */
     fun observeAssigned(status: ClientStatus): Flow<List<Client>>

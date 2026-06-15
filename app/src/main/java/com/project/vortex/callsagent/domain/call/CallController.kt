@@ -326,10 +326,11 @@ class CallController @Inject constructor(
         // In the 5-state model the app does NOT decide the status here —
         // a placeholder no-contact outcome leaves the client PENDING. The
         // sync push below uploads the interaction first; the pull then
-        // re-fetches `assigned?status=PENDING` and `replaceAllByStatus`
+        // re-fetches the whole assigned set and `replaceAllAssigned`
         // converges the row to the server snapshot, which already
         // reflects that push (incremented attempts, canonical status).
-        // No "vanish" risk: the client comes back in the PENDING snapshot.
+        // No "vanish" risk: the client stays in the assigned mirror even
+        // if it turned terminal (it only leaves on unassign/hard-delete).
         // Only the safe high-water-mark advances (INTERESTED/SCHEDULED/
         // SOLD) move the status locally, and those land in PostCall.
         runCatching {

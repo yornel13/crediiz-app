@@ -3,7 +3,6 @@ package com.project.vortex.callsagent.presentation.login
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.R
-import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.data.device.DeviceInfoProvider
 import com.project.vortex.callsagent.data.sync.LoginHydrationState
 import com.project.vortex.callsagent.data.voip.VoipRefreshOrchestrator
@@ -184,24 +183,16 @@ class LoginViewModel @Inject constructor(
      * lands on Home with data already in Room. Returns true if any of the
      * fetches failed (e.g. offline) — caller surfaces a "stale data" banner.
      *
-     * All pulls run in parallel — KI-02 is closed (the DAO uses
-     * `replaceAllByStatus`, status-scoped, so they don't clobber each
-     * other). The active agenda funnel covers PENDING ("never called"),
-     * INTERESTED and CITED ("scheduled for a follow-up"); these are the
-     * only working states the agent acts on. INTERESTED and CITED are
-     * required for Agenda's INNER JOIN against `clients`.
+     * One pull of the WHOLE assigned set (any status) + the agenda, in
+     * parallel. The full mirror covers every working state the agent acts on
+     * (PENDING / INTERESTED / CITED, required for Agenda's INNER JOIN against
+     * `clients`) plus terminal-but-still-assigned clients; the status-scoped
+     * lists filter locally. See [ClientRepository.refreshAssigned].
      */
     private suspend fun hydrate(): Boolean = coroutineScope {
-        val pending = async { clientRepository.refreshAssigned(ClientStatus.PENDING) }
-        val interested = async { clientRepository.refreshAssigned(ClientStatus.INTERESTED) }
-        val cited = async { clientRepository.refreshAssigned(ClientStatus.CITED) }
+        val clients = async { clientRepository.refreshAssigned() }
         val agenda = async { followUpRepository.refreshAgenda() }
-        val results = listOf(
-            pending.await(),
-            interested.await(),
-            cited.await(),
-            agenda.await(),
-        )
+        val results = listOf(clients.await(), agenda.await())
         results.any { it.isFailure }
     }
 }

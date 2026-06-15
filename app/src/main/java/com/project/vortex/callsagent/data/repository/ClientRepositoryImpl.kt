@@ -61,16 +61,17 @@ class ClientRepositoryImpl @Inject constructor(
     private val errorMapper: ErrorMapper,
 ) : ClientRepository {
 
-    override suspend fun refreshAssigned(status: ClientStatus): Result<Unit> =
+    override suspend fun refreshAssigned(): Result<Unit> =
         withContext(Dispatchers.IO) {
             runCatching {
-                val envelope = api.getAssigned(status.name)
+                // No status filter → the server returns EVERY client assigned to
+                // this agent, in any status. Mirror the full set locally so a
+                // client stays on the device until it is unassigned/hard-deleted,
+                // not when it merely turns terminal (see [ClientDao.replaceAllAssigned]).
+                // One round-trip replaces the old per-status fetches.
+                val envelope = api.getAssigned(null)
                 val entities = envelope.data.map { it.toEntity() }
-                // Status-scoped replace — calling this for PENDING then
-                // INTERESTED used to wipe the PENDING set with `replaceAll`
-                // (KI-02). The scoped variant only touches rows of the
-                // status we just fetched.
-                dao.replaceAllByStatus(status, entities)
+                dao.replaceAllAssigned(entities)
             }
         }
 

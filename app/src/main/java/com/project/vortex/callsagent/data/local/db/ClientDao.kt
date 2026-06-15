@@ -176,27 +176,34 @@ interface ClientDao {
     suspend fun upsert(clients: List<ClientEntity>)
 
     /**
-     * Status-scoped replace. Deletes only the rows currently sitting in
-     * [status] and inserts the new server snapshot. This is the path
-     * Sync uses — calling [replaceAll] consecutively for PENDING and
-     * INTERESTED would clobber the first set on the second call (KI-02).
+     * Full assignment mirror — the path Sync uses. The local table must equal
+     * the agent's currently-assigned clients in ANY status, so [clients] is the
+     * complete set from `GET /clients/assigned` (no status filter). Upserts all
+     * of them and deletes any local row whose id is absent from the set: those
+     * are clients that were **unassigned** or **hard-deleted** in the core.
      *
-     * Note: a client that moved from PENDING → INTERESTED on the server
-     * is correctly removed from the PENDING set on the PENDING refresh,
-     * then re-inserted with status=INTERESTED on the INTERESTED refresh.
+     * A client that merely turned terminal (REMOVED/CONVERTED) is still
+     * assigned, so it stays — that's what keeps a just-removed client visible
+     * in "Recientes" (and openable for a note) until it is truly detached,
+     * instead of vanishing the instant its status flips. An empty [clients]
+     * (no assignments) clears the table.
      */
     @Transaction
-    suspend fun replaceAllByStatus(status: ClientStatus, clients: List<ClientEntity>) {
-        deleteByStatus(status)
+    suspend fun replaceAllAssigned(clients: List<ClientEntity>) {
+        if (clients.isEmpty()) {
+            deleteAll()
+            return
+        }
         upsert(clients)
+        deleteNotIn(clients.map { it.id })
     }
 
-    @Query("DELETE FROM clients WHERE status = :status")
-    suspend fun deleteByStatus(status: ClientStatus)
+    @Query("DELETE FROM clients WHERE id NOT IN (:ids)")
+    suspend fun deleteNotIn(ids: List<String>)
 
     /**
      * Wipe the whole table — used by logout / fresh-install paths only.
-     * Do NOT call from sync; use [replaceAllByStatus] there.
+     * Do NOT call from sync; use [replaceAllAssigned] there.
      */
     @Transaction
     suspend fun replaceAll(clients: List<ClientEntity>) {
@@ -217,7 +224,7 @@ interface ClientDao {
      * Both counters are bumped because the call was placed BY THIS agent:
      * `callAttempts` (team-wide) and `agentCallAttempts` (per-agent). The
      * per-agent bump is the optimistic local move from "Sin llamar" to "Para
-     * reintentar" before the next sync; the next `replaceAllByStatus` overwrites
+     * reintentar" before the next sync; the next `replaceAllAssigned` overwrites
      * both with the server's authoritative values (also `>= 1`), so they stay
      * consistent.
      */

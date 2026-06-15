@@ -333,11 +333,10 @@ class ClientsViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isRefreshing = true, errorMessage = null)
-            // Both Pendientes and Recientes are backed by the local
-            // PENDING set plus rows that left PENDING via post-call
-            // updates (which stay in the local DB). Pulling PENDING
-            // covers both views.
-            clientRepository.refreshAssigned(ClientStatus.PENDING)
+            // One pull mirrors the whole assigned set (any status): covers
+            // Pendientes, Interesados/Agenda and Recientes (which now keeps
+            // terminal-but-assigned clients) in a single round-trip.
+            clientRepository.refreshAssigned()
                 .onFailure { err ->
                     _uiState.value = _uiState.value.copy(
                         errorMessage = err.message ?: "Failed to refresh clients",

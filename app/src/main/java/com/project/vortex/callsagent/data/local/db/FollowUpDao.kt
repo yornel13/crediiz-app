@@ -26,10 +26,12 @@ interface FollowUpDao {
      * local cache — those rows would crash with "Client not found"
      * when the agent taps them.
      *
-     * Follow-up rows can become orphaned when the client leaves the
-     * active set (CONVERTED or REMOVED): the next
-     * `replaceAllByStatus(INTERESTED, ...)` deletes the client locally
-     * but `replaceAgenda` keeps the follow-up.
+     * Follow-up rows can become orphaned when the client is removed from
+     * the local mirror — i.e. unassigned or hard-deleted in the core
+     * (`replaceAllAssigned`'s `deleteNotIn`). A client that merely turned
+     * terminal (CONVERTED/REMOVED) is still assigned, so it stays and its
+     * follow-up is not orphaned. `replaceAgenda` keeps the follow-up either
+     * way, so the JOIN guards the genuine unassigned/hard-deleted case.
      *
      * Tracked as KI-04.b — long-term we want a server-fallback
      * `GET /clients/:id` so orphan follow-ups can still be opened.

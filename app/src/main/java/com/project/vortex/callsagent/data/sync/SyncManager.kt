@@ -1,7 +1,6 @@
 package com.project.vortex.callsagent.data.sync
 
 import android.util.Log
-import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.data.mapper.toCompletedSyncDto
 import com.project.vortex.callsagent.data.mapper.toSyncDto
 import com.project.vortex.callsagent.data.remote.api.SyncApi
@@ -145,18 +144,17 @@ class SyncManager @Inject constructor(
         // status, and sync always pushes before it pulls. So even when a
         // no-contact outcome leaves the row PENDING (callAttempts bumped
         // but status unchanged), the server snapshot pulled here already
-        // reflects that push — `replaceAllByStatus(PENDING, …)` converges
-        // the row to the canonical value. A push that failed just retries
-        // on the next tick (eventual consistency).
+        // reflects that push — `replaceAllAssigned(…)` converges the row to
+        // the canonical value. A push that failed just retries on the next
+        // tick (eventual consistency).
         //
-        // Refresh every active (in-agenda) state: PENDING, INTERESTED, CITED.
+        // One pull of the WHOLE assigned set (any status) mirrors it locally;
+        // status-scoped lists filter client-side. A client only leaves the
+        // device when unassigned/hard-deleted, so a just-removed one stays in
+        // "Recientes" instead of vanishing.
 
-        runCatching { clientRepo.refreshAssigned(ClientStatus.PENDING) }
-            .onFailure { Log.w(TAG, "refreshAssigned PENDING failed", it) }
-        runCatching { clientRepo.refreshAssigned(ClientStatus.INTERESTED) }
-            .onFailure { Log.w(TAG, "refreshAssigned INTERESTED failed", it) }
-        runCatching { clientRepo.refreshAssigned(ClientStatus.CITED) }
-            .onFailure { Log.w(TAG, "refreshAssigned CITED failed", it) }
+        runCatching { clientRepo.refreshAssigned() }
+            .onFailure { Log.w(TAG, "refreshAssigned failed", it) }
         runCatching { followUpRepo.refreshAgenda() }
             .onFailure { Log.w(TAG, "refreshAgenda failed", it) }
     }
