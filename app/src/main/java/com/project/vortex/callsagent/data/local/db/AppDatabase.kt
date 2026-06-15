@@ -19,7 +19,10 @@ import com.project.vortex.callsagent.data.local.entity.NoteEntity
         MissedCallEntity::class,
         LocalAgentStatusChangeEntity::class,
     ],
-    version = 11,
+    // v12: ClientEntity.agentCallAttempts (per-agent attempt count from the
+    // server, drives the "Sin llamar" vs "Para reintentar" split). Destructive
+    // migration is fine — the DB is a disposable cache of server state.
+    version = 12,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)

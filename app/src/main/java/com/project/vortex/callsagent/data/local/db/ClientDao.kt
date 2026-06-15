@@ -19,17 +19,20 @@ interface ClientDao {
     fun observeByStatus(status: ClientStatus): Flow<List<ClientEntity>>
 
     /**
-     * Pendientes feed — clients the agent has **never** called.
+     * Pendientes feed — clients the LOGGED-IN agent has **never** called.
      *
-     * In the 5-state model "new" is derived: `PENDING` with
-     * `callAttempts == 0`. The first no-contact outcome keeps the client
-     * `PENDING` (the backend never promotes to a separate state) but
-     * bumps `callAttempts`, moving it to the [observePendingForRetry] feed.
+     * "New" is derived: `PENDING` with `agentCallAttempts == 0` — i.e. THIS
+     * agent has not dialed it yet. The split uses the per-agent count, NOT the
+     * team-wide `callAttempts`: a client another assigned agent already called
+     * still appears here until this agent personally dials it. The first
+     * no-contact outcome keeps the client `PENDING` (the backend never promotes
+     * to a separate state) but bumps `agentCallAttempts`, moving it to the
+     * [observePendingForRetry] feed. See [ClientEntity.agentCallAttempts].
      */
     @Query(
         """
         SELECT * FROM clients
-        WHERE status = 'PENDING' AND callAttempts = 0
+        WHERE status = 'PENDING' AND agentCallAttempts = 0
         ORDER BY queueOrder ASC
         """,
     )
@@ -38,7 +41,7 @@ interface ClientDao {
     @Query(
         """
         SELECT * FROM clients
-        WHERE status = 'PENDING' AND callAttempts = 0
+        WHERE status = 'PENDING' AND agentCallAttempts = 0
           AND (name LIKE '%' || :query || '%' OR phone LIKE '%' || :query || '%')
         ORDER BY queueOrder ASC
         """,
@@ -46,16 +49,18 @@ interface ClientDao {
     fun searchPendingNeverCalled(query: String): Flow<List<ClientEntity>>
 
     /**
-     * "Para reintentar" feed — `PENDING` clients already called at least
-     * once without a closing outcome (`callAttempts > 0`). Sort by
-     * `lastCalledAt` ascending so the oldest attempt floats to the top:
-     * those are the most ready to dial again. NULL `lastCalledAt` sorts
-     * first thanks to SQLite's NULL ordering.
+     * "Para reintentar" feed — `PENDING` clients the LOGGED-IN agent has
+     * already called at least once without a closing outcome
+     * (`agentCallAttempts > 0`). Per-agent on purpose: another agent's calls do
+     * NOT move a client here for an agent who never dialed it. Sort by
+     * `lastCalledAt` ascending so the oldest attempt floats to the top: those
+     * are the most ready to dial again. NULL `lastCalledAt` sorts first thanks
+     * to SQLite's NULL ordering. See [ClientEntity.agentCallAttempts].
      */
     @Query(
         """
         SELECT * FROM clients
-        WHERE status = 'PENDING' AND callAttempts > 0
+        WHERE status = 'PENDING' AND agentCallAttempts > 0
         ORDER BY lastCalledAt ASC
         """,
     )
@@ -64,7 +69,7 @@ interface ClientDao {
     @Query(
         """
         SELECT * FROM clients
-        WHERE status = 'PENDING' AND callAttempts > 0
+        WHERE status = 'PENDING' AND agentCallAttempts > 0
           AND (name LIKE '%' || :query || '%' OR phone LIKE '%' || :query || '%')
         ORDER BY lastCalledAt ASC
         """,
@@ -203,16 +208,24 @@ interface ClientDao {
     suspend fun deleteAll()
 
     /**
-     * Local bookkeeping after a call. Bumps the attempt counter and
+     * Local bookkeeping after a call. Bumps the attempt counters and
      * records the outcome — but **does NOT decide the status**. In the
      * 5-state model the backend derives the status from history; the app
      * only advances it locally for the safe high-water-mark outcomes
      * (INTERESTED/SCHEDULED/SOLD) via a separate [setStatus] call.
+     *
+     * Both counters are bumped because the call was placed BY THIS agent:
+     * `callAttempts` (team-wide) and `agentCallAttempts` (per-agent). The
+     * per-agent bump is the optimistic local move from "Sin llamar" to "Para
+     * reintentar" before the next sync; the next `replaceAllByStatus` overwrites
+     * both with the server's authoritative values (also `>= 1`), so they stay
+     * consistent.
      */
     @Query(
         """
         UPDATE clients
         SET callAttempts = callAttempts + 1,
+            agentCallAttempts = agentCallAttempts + 1,
             lastCalledAt = :lastCalledAt,
             lastOutcome = :lastOutcome,
             updatedAt = :now

@@ -1,5 +1,6 @@
 package com.project.vortex.callsagent.data.local.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.project.vortex.callsagent.common.enums.CallOutcome
@@ -32,7 +33,25 @@ data class ClientEntity(
     val removalReason: RemovalReason?,
     val assignedTo: String?,
     val assignedAt: Instant?,
+    /**
+     * Team-wide attempt count: dials by ANY agent assigned to this client.
+     * Shown in the "intentos" chip. Do NOT use it to decide the queue split —
+     * use [agentCallAttempts], which is scoped to the logged-in agent.
+     */
     val callAttempts: Int,
+    /**
+     * Per-agent attempt count: dials the LOGGED-IN agent has made to this
+     * client, computed server-side and returned by `GET /clients/assigned`.
+     *
+     * Drives the PENDING queue split: `== 0` → "Sin llamar", `> 0` → "Para
+     * reintentar" (see [ClientDao.observePendingNeverCalled] /
+     * [ClientDao.observePendingForRetry]). Because it comes from the server it
+     * survives logout/reinstall, unlike the local `interactions` table which is
+     * wiped on logout. A client another agent already called therefore stays in
+     * "Sin llamar" for an agent who never personally dialed it.
+     */
+    @ColumnInfo(defaultValue = "0")
+    val agentCallAttempts: Int = 0,
     val lastCalledAt: Instant?,
     val lastOutcome: CallOutcome?,
     val lastNote: String?,

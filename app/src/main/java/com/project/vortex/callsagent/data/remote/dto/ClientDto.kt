@@ -69,7 +69,14 @@ data class ClientResponse(
     val removalReason: String?,
     val assignedTo: String?,
     val assignedAt: String?,
+    /** Team-wide attempt count (any assigned agent). For the "intentos" chip. */
     val callAttempts: Int,
+    /**
+     * Per-agent attempt count for the logged-in agent, computed server-side.
+     * Drives the "Sin llamar" (0) vs "Para reintentar" (>0) split. Defaulted to
+     * 0 so an older backend that doesn't send it degrades gracefully.
+     */
+    val agentCallAttempts: Int = 0,
     val lastCalledAt: String?,
     val lastOutcome: String?,
     val lastNote: String?,

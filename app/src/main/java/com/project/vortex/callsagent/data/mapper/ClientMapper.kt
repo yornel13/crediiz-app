@@ -38,6 +38,10 @@ fun ClientResponse.toEntity(): ClientEntity = ClientEntity(
     assignedTo = assignedTo,
     assignedAt = assignedAt.toInstantOrNull(),
     callAttempts = callAttempts,
+    // Per-agent count from the server; drives the queue split (D2: the UI chip
+    // keeps showing the team-wide `callAttempts`, so this is not mapped to the
+    // domain model — it lives only at the persistence/query layer).
+    agentCallAttempts = agentCallAttempts,
     lastCalledAt = lastCalledAt.toInstantOrNull(),
     lastOutcome = lastOutcome?.let { runCatching { CallOutcome.valueOf(it) }.getOrNull() },
     lastNote = lastNote,

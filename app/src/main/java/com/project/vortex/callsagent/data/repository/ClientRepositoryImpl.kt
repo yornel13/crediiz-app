@@ -149,7 +149,8 @@ class ClientRepositoryImpl @Inject constructor(
         removalReason: RemovalReason?,
         reason: String?,
     ): OperationResult<ClientStatus, ClientError> = withContext(Dispatchers.IO) {
-        val fromStatus = dao.findById(clientId)?.status
+        val existing = dao.findById(clientId)
+        val fromStatus = existing?.status
         try {
             // No optimistic write: the result may be a 200 no-op (blocked
             // transition / quorum). We apply the server-returned client as
@@ -162,7 +163,14 @@ class ClientRepositoryImpl @Inject constructor(
                     reason = reason?.takeIf { it.isNotBlank() },
                 ),
             )
-            val entity = response.data.toEntity()
+            // This endpoint returns the raw Client doc, which has no synthetic
+            // `agentCallAttempts` (only `findAssigned` computes it). Preserve the
+            // locally-known per-agent count so a REPLACE upsert doesn't reset it
+            // to 0 and bounce a still-PENDING client back to "Sin llamar".
+            // Self-heals on the next refreshAssigned, but this avoids the flicker.
+            val entity = response.data.toEntity().copy(
+                agentCallAttempts = existing?.agentCallAttempts ?: 0,
+            )
             dao.upsert(listOf(entity))
 
             // Record the action for the Recientes feed only when it
@@ -218,7 +226,12 @@ class ClientRepositoryImpl @Inject constructor(
             )
             // The PUT returns the full client with the quotation embedded —
             // write it as the source of truth so the detail reflects it.
-            dao.upsert(listOf(response.data.toEntity()))
+            // Preserve the synthetic per-agent `agentCallAttempts` (absent from
+            // this response) so a REPLACE upsert doesn't reset the queue split.
+            val existingAttempts = dao.findById(clientId)?.agentCallAttempts ?: 0
+            dao.upsert(
+                listOf(response.data.toEntity().copy(agentCallAttempts = existingAttempts)),
+            )
             OperationResult.Success(Unit)
         } catch (err: Throwable) {
             Log.w(TAG, "upsertQuotation($clientId) failed", err)
