@@ -20,7 +20,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,11 +40,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.project.vortex.callsagent.R
-import com.project.vortex.callsagent.common.enums.QuotationValidation
 import com.project.vortex.callsagent.domain.model.Quotation
 import com.project.vortex.callsagent.ui.components.FullHeightBottomSheet
-import com.project.vortex.callsagent.ui.theme.label
-import com.project.vortex.callsagent.ui.theme.palette
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -61,8 +57,7 @@ internal fun formatUsd(amount: Double): String =
 
 /**
  * Quotation summary card in the client detail. Shows the registered
- * quotation (bank, amounts, validation badge, notes) or an empty state with
- * a CTA to add one.
+ * quotation (bank, amounts, notes) or an empty state with a CTA to add one.
  */
 @Composable
 fun QuotationCard(
@@ -88,10 +83,6 @@ fun QuotationCard(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
-                if (quotation != null) {
-                    ValidationBadge(quotation.validation)
-                    Spacer(Modifier.width(8.dp))
-                }
                 // Single pencil affordance for both create and edit — replaces
                 // the old full-width buttons that dominated the card.
                 IconButton(onClick = onEdit) {
@@ -146,23 +137,6 @@ private fun QuotationField(labelRes: Int, value: String) {
     }
 }
 
-@Composable
-private fun ValidationBadge(validation: QuotationValidation) {
-    val palette = validation.palette()
-    Surface(
-        shape = RoundedCornerShape(50),
-        color = palette.container,
-    ) {
-        Text(
-            text = validation.label(),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = palette.onContainer,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-        )
-    }
-}
-
 /**
  * Create/edit form for the client's quotation. Full-object upsert — the
  * caller sends the whole object. All fields required except notes.
@@ -173,14 +147,12 @@ fun QuotationSheet(
     initial: Quotation?,
     onDismiss: () -> Unit,
     onConfirm: (
-        validation: QuotationValidation,
         bank: String,
         quotedAmount: Double,
         biweeklyPayment: Double,
         notes: String?,
     ) -> Unit,
 ) {
-    var validation by remember { mutableStateOf(initial?.validation ?: QuotationValidation.PENDING) }
     var bank by remember { mutableStateOf(initial?.bank.orEmpty()) }
     var amount by remember {
         mutableStateOf(initial?.quotedAmount?.let { trimAmount(it) } ?: "")
@@ -211,25 +183,6 @@ fun QuotationSheet(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
-
-                // Validation selector
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = stringResource(R.string.quotation_field_validation),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        QuotationValidation.entries.forEach { v ->
-                            FilterChip(
-                                selected = validation == v,
-                                onClick = { validation = v },
-                                label = { Text(v.label()) },
-                            )
-                        }
-                    }
-                }
 
                 OutlinedTextField(
                     value = bank,
@@ -290,7 +243,7 @@ fun QuotationSheet(
                     onClick = {
                         val a = amount.toDoubleOrNull() ?: return@Button
                         val b = biweekly.toDoubleOrNull() ?: return@Button
-                        onConfirm(validation, bank.trim(), a, b, notes.trim().ifBlank { null })
+                        onConfirm(bank.trim(), a, b, notes.trim().ifBlank { null })
                     },
                     enabled = canSave,
                     modifier = Modifier.weight(1f),

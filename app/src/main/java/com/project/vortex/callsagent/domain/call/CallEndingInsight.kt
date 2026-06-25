@@ -23,29 +23,35 @@ data class CallEndingInsight(
     val reasonLabel: String?,
 ) {
     companion object {
-        /** Outcomes that only make sense after a real conversation. */
-        private val CONVERSATIONAL_OUTCOMES = listOf(
+        /**
+         * Outcomes only offered when the call was ANSWERED — the line was
+         * reached, by a person OR by the voicemail machine. WRONG_NUMBER and
+         * VOICEMAIL live here on purpose: both are only knowable once the call
+         * connects (someone says it's the wrong number; the voicemail greeting
+         * plays). Neither can happen on a call that never connected.
+         */
+        private val ANSWERED_OUTCOMES = listOf(
             CallOutcome.INTERESTED,
             CallOutcome.SCHEDULED,
             CallOutcome.SOLD,
             CallOutcome.NOT_INTERESTED,
             CallOutcome.DO_NOT_CALL,
+            CallOutcome.WRONG_NUMBER,
             CallOutcome.HAS_LOAN,
             CallOutcome.DECEASED,
             CallOutcome.NOT_APPLICABLE,
+            CallOutcome.VOICEMAIL,
         )
 
         /** Outcomes that only make sense when the call never connected. */
-        private val NON_CONVERSATIONAL_OUTCOMES = listOf(
+        private val NO_CONTACT_OUTCOMES = listOf(
             CallOutcome.NO_ANSWER,
             CallOutcome.BUSY,
             CallOutcome.OUT_OF_SERVICE,
-            CallOutcome.VOICEMAIL,
-            CallOutcome.WRONG_NUMBER,
         )
 
-        /** All 13 outcomes the backend accepts (FRONTEND-ESTADOS, CallOutcome). */
-        private val ALL_OUTCOMES = CONVERSATIONAL_OUTCOMES + NON_CONVERSATIONAL_OUTCOMES
+        /** Every agent-selectable outcome — used for ambiguous endings. */
+        private val ALL_OUTCOMES = ANSWERED_OUTCOMES + NO_CONTACT_OUTCOMES
 
         fun from(ending: SipCallEnding): CallEndingInsight = when (ending) {
             SipCallEnding.Answered -> CallEndingInsight(
@@ -55,14 +61,18 @@ data class CallEndingInsight(
                 // NO_ANSWER. PostCall strips it from the pre-selection, so the
                 // agent must still pick a real outcome. NO_SELECTED is never in
                 // `allowedOutcomes` — it is not a selectable button.
+                //
+                // Only "answered" outcomes are offered: the call connected, so
+                // the no-contact results (NO_ANSWER, BUSY, OUT_OF_SERVICE)
+                // physically cannot apply.
                 suggestedOutcome = CallOutcome.NO_SELECTED,
-                allowedOutcomes = ALL_OUTCOMES,
+                allowedOutcomes = ANSWERED_OUTCOMES,
                 reasonLabel = null,
             )
 
             SipCallEnding.NotAnswered -> CallEndingInsight(
                 suggestedOutcome = CallOutcome.NO_ANSWER,
-                allowedOutcomes = NON_CONVERSATIONAL_OUTCOMES,
+                allowedOutcomes = NO_CONTACT_OUTCOMES,
                 reasonLabel = "El cliente no contestó.",
             )
 
@@ -79,8 +89,11 @@ data class CallEndingInsight(
             )
 
             SipCallEnding.InvalidNumber -> CallEndingInsight(
-                suggestedOutcome = CallOutcome.WRONG_NUMBER,
-                allowedOutcomes = listOf(CallOutcome.WRONG_NUMBER),
+                // The carrier flagged the number as invalid — an unreachable
+                // line, NOT a "wrong number" (only an answering person can
+                // confirm that). Record it as no-contact.
+                suggestedOutcome = CallOutcome.OUT_OF_SERVICE,
+                allowedOutcomes = listOf(CallOutcome.OUT_OF_SERVICE),
                 reasonLabel = "Número no válido.",
             )
 
@@ -97,7 +110,7 @@ data class CallEndingInsight(
 
             SipCallEnding.Cancelled -> CallEndingInsight(
                 suggestedOutcome = CallOutcome.NO_SELECTED,
-                allowedOutcomes = NON_CONVERSATIONAL_OUTCOMES,
+                allowedOutcomes = NO_CONTACT_OUTCOMES,
                 reasonLabel = "Llamada cancelada antes de conectar.",
             )
 

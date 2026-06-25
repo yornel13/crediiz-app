@@ -182,8 +182,8 @@
     <string name="clients_bucket_day_before_yesterday">Antier</string>
     <string name="clients_bucket_earlier">Más antiguos</string>
     <plurals name="clients_headline_to_call">
-        <item quantity="one">cliente por llamar</item>
-        <item quantity="other">clientes por llamar</item>
+        <item quantity="one">cliente</item>
+        <item quantity="other">clientes</item>
     </plurals>
     <plurals name="clients_headline_recent_call">
         <item quantity="one">llamada reciente</item>
@@ -423,8 +423,8 @@
     <string name="quotation_field_bank">Banco</string>
     <string name="quotation_field_amount">Monto cotizado</string>
     <string name="quotation_field_biweekly">Letra quincenal</string>
-    <string name="quotation_field_notes">Notas</string>
-    <string name="quotation_field_notes_optional">Notas (opcional)</string>
+    <string name="quotation_field_notes">Motivación</string>
+    <string name="quotation_field_notes_optional">Motivación (opcional)</string>
     <string name="precall_snack_quotation_saved">Cotización guardada</string>
 
     <!-- ============================== Clients · Recent / detail / views ============================== -->

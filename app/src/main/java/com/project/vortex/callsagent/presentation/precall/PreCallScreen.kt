@@ -409,9 +409,8 @@ fun PreCallScreen(
                 QuotationSheet(
                     initial = client.quotation,
                     onDismiss = { activeSheet = ActiveSheet.None },
-                    onConfirm = { validation, bank, amount, biweekly, notes ->
+                    onConfirm = { bank, amount, biweekly, notes ->
                         viewModel.saveQuotation(
-                            validation = validation,
                             bank = bank,
                             quotedAmount = amount,
                             biweeklyPayment = biweekly,

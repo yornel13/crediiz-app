@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.R
 import com.project.vortex.callsagent.common.enums.ClientStatus
-import com.project.vortex.callsagent.common.enums.QuotationValidation
 import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
@@ -240,7 +239,6 @@ class PreCallViewModel @AssistedInject constructor(
      * refreshes on its own (the client is observed).
      */
     fun saveQuotation(
-        validation: QuotationValidation,
         bank: String,
         quotedAmount: Double,
         biweeklyPayment: Double,
@@ -263,7 +261,6 @@ class PreCallViewModel @AssistedInject constructor(
             when (
                 val result = clientRepository.upsertQuotation(
                     clientId = client.id,
-                    validation = validation,
                     bank = bank,
                     quotedAmount = quotedAmount,
                     biweeklyPayment = biweeklyPayment,

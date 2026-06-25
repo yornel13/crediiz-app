@@ -325,10 +325,13 @@ class CallController @Inject constructor(
         //
         // In the 5-state model the app does NOT decide the status here —
         // a placeholder no-contact outcome leaves the client PENDING. The
-        // sync push below uploads the interaction first; the pull then
-        // re-fetches the whole assigned set and `replaceAllAssigned`
-        // converges the row to the server snapshot, which already
-        // reflects that push (incremented attempts, canonical status).
+        // optimistic agentCallAttempts bump moves the client from "Sin
+        // llamar" to "Para reintentar" right away. A pull can race ahead of
+        // the async push (pull-to-refresh, reconnect, the Clients init
+        // refresh), so `replaceAllAssigned` floors the server count with
+        // this local value (max) — that keeps the client out of "Sin llamar"
+        // until the push lands, after which the row converges to the server
+        // snapshot (canonical status/attempts).
         // No "vanish" risk: the client stays in the assigned mirror even
         // if it turned terminal (it only leaves on unassign/hard-delete).
         // Only the safe high-water-mark advances (INTERESTED/SCHEDULED/

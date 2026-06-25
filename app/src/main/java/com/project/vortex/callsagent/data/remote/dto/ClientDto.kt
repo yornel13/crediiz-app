@@ -31,7 +31,6 @@ data class AgentStatusChangeDto(
  */
 @JsonClass(generateAdapter = true)
 data class UpsertQuotationDto(
-    val validation: String,       // QuotationValidation
     val bank: String,
     val quotedAmount: Double,
     val biweeklyPayment: Double,

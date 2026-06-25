@@ -203,8 +203,10 @@ class ClientsViewModel @Inject constructor(
         )
 
     /**
-     * Hero counter — sum of "Sin llamar" + "Para reintentar".
-     * Search-independent so the count stays stable while typing.
+     * Total of the whole visible Pendientes list — "Sin llamar" + "Para
+     * reintentar". Backs the hero headline ("X clientes") and the "X of Y"
+     * search summary, both of which span both sub-lists. Search-independent
+     * so the count stays stable while typing.
      */
     val totalPendingCount: StateFlow<Int> = combine(
         clientRepository.observePendingNeverCalled(),
@@ -215,6 +217,22 @@ class ClientsViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = 0,
         )
+
+    /**
+     * "Pendientes" pill counter — clients THIS agent still has to call:
+     * PENDING with no personal attempt yet ("Sin llamar"). Deliberately
+     * EXCLUDES "Para reintentar" (already contacted at least once), which are
+     * no longer "pending to call". Search-independent so the count stays
+     * stable while typing.
+     */
+    val pendingToCallCount: StateFlow<Int> =
+        clientRepository.observePendingNeverCalled()
+            .map { it.size }
+            .stateIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                initialValue = 0,
+            )
 
     /**
      * Recientes feed — unified list of:

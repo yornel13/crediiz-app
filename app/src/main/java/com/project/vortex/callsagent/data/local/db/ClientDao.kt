@@ -194,9 +194,33 @@ interface ClientDao {
             deleteAll()
             return
         }
-        upsert(clients)
-        deleteNotIn(clients.map { it.id })
+        // Floor each incoming `agentCallAttempts` with the value already on the
+        // device. The server count is synthetic — it only reflects interactions
+        // the backend has ALREADY received, so a just-placed call that is still
+        // syncing comes back as 0 and would bounce the client back to "Sin
+        // llamar". A pull can race ahead of the async push (pull-to-refresh,
+        // reconnect, the Clients screen's init refresh), so we cannot trust the
+        // server value to be monotonic in real time. The per-agent count only
+        // ever GROWS for a given agent, so max(server, local) never yields a
+        // wrong value — it just protects the optimistic bump from
+        // [applyInteractionUpdate] until the push lands.
+        val localAttempts = agentCallAttemptsByIds(clients.map { it.id })
+            .associate { it.id to it.agentCallAttempts }
+        val reconciled = clients.map { c ->
+            val local = localAttempts[c.id] ?: 0
+            if (local > c.agentCallAttempts) c.copy(agentCallAttempts = local) else c
+        }
+        upsert(reconciled)
+        deleteNotIn(reconciled.map { it.id })
     }
+
+    /**
+     * Per-agent attempt counts already on the device, keyed by id — the local
+     * floor applied in [replaceAllAssigned] so a server snapshot that predates
+     * the latest call's sync can't reset the queue split.
+     */
+    @Query("SELECT id, agentCallAttempts FROM clients WHERE id IN (:ids)")
+    suspend fun agentCallAttemptsByIds(ids: List<String>): List<ClientAttemptCount>
 
     @Query("DELETE FROM clients WHERE id NOT IN (:ids)")
     suspend fun deleteNotIn(ids: List<String>)
@@ -283,3 +307,9 @@ interface ClientDao {
         now: Instant,
     )
 }
+
+/** Projection for [ClientDao.agentCallAttemptsByIds] — id + per-agent attempt count. */
+data class ClientAttemptCount(
+    val id: String,
+    val agentCallAttempts: Int,
+)

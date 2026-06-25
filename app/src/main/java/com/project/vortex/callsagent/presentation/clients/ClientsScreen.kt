@@ -133,6 +133,7 @@ internal fun ClientsListPane(
     val pendingForRetry by viewModel.pendingForRetry.collectAsState()
     val recentEntries by viewModel.recentEntries.collectAsState()
     val totalPending by viewModel.totalPendingCount.collectAsState()
+    val pendingToCall by viewModel.pendingToCallCount.collectAsState()
     val totalRecent by viewModel.totalRecentCount.collectAsState()
     val query by viewModel.searchQuery.collectAsState()
     val viewKind by viewModel.viewKind.collectAsState()
@@ -270,7 +271,7 @@ internal fun ClientsListPane(
             item("view_selector") {
                 ClientsViewSelector(
                     selected = viewKind,
-                    pendingCount = totalPending,
+                    pendingCount = pendingToCall,
                     recentCount = totalRecent,
                     onSelected = viewModel::onViewKindChange,
                 )

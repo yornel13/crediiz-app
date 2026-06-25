@@ -2,7 +2,6 @@ package com.project.vortex.callsagent.domain.repository
 
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
-import com.project.vortex.callsagent.common.enums.QuotationValidation
 import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.domain.error.ClientError
 import com.project.vortex.callsagent.domain.model.AgentStatusChangeLocal
@@ -169,7 +168,6 @@ interface ClientRepository {
      */
     suspend fun upsertQuotation(
         clientId: String,
-        validation: QuotationValidation,
         bank: String,
         quotedAmount: Double,
         biweeklyPayment: Double,

@@ -3,7 +3,6 @@ package com.project.vortex.callsagent.data.repository
 import android.util.Log
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
-import com.project.vortex.callsagent.common.enums.QuotationValidation
 import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.data.local.db.ClientDao
 import com.project.vortex.callsagent.data.local.db.LocalAgentStatusChangeDao
@@ -208,7 +207,6 @@ class ClientRepositoryImpl @Inject constructor(
 
     override suspend fun upsertQuotation(
         clientId: String,
-        validation: QuotationValidation,
         bank: String,
         quotedAmount: Double,
         biweeklyPayment: Double,
@@ -218,7 +216,6 @@ class ClientRepositoryImpl @Inject constructor(
             val response = api.upsertQuotation(
                 clientId,
                 UpsertQuotationDto(
-                    validation = validation.name,
                     bank = bank,
                     quotedAmount = quotedAmount,
                     biweeklyPayment = biweeklyPayment,

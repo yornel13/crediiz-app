@@ -185,8 +185,8 @@
     <string name="clients_bucket_day_before_yesterday">2 days ago</string>
     <string name="clients_bucket_earlier">Older</string>
     <plurals name="clients_headline_to_call">
-        <item quantity="one">client to call</item>
-        <item quantity="other">clients to call</item>
+        <item quantity="one">client</item>
+        <item quantity="other">clients</item>
     </plurals>
     <plurals name="clients_headline_recent_call">
         <item quantity="one">recent call</item>
@@ -426,8 +426,8 @@
     <string name="quotation_field_bank">Bank</string>
     <string name="quotation_field_amount">Quoted amount</string>
     <string name="quotation_field_biweekly">Biweekly payment</string>
-    <string name="quotation_field_notes">Notes</string>
-    <string name="quotation_field_notes_optional">Notes (optional)</string>
+    <string name="quotation_field_notes">Motivation</string>
+    <string name="quotation_field_notes_optional">Motivation (optional)</string>
     <string name="precall_snack_quotation_saved">Quotation saved</string>
 
     <!-- ============================== Clients · Recent / detail / views ============================== -->
