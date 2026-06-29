@@ -124,6 +124,39 @@ class FollowUpRepositoryAutoCloseTest {
     }
 
     @Test
+    fun `closes an EXPIRED follow-up too when the agent calls`() = runBlocking {
+        // A vencido must also be cumplido by the call that satisfies it
+        // (doc point 3: completing has no time limit).
+        dao.seed(
+            pending(id = "exp", clientId = "c-1", scheduledAt = past)
+                .copy(status = FollowUpStatus.EXPIRED),
+        )
+
+        val closed = repo.markPendingForClientCompleted("c-1", asOf)
+
+        assertEquals(1, closed)
+        val row = dao.findById("exp")!!
+        assertEquals(FollowUpStatus.COMPLETED, row.status)
+        assertEquals(asOf, row.completedAt)
+        assertEquals(SyncStatus.PENDING, row.completionSyncStatus)
+    }
+
+    @Test
+    fun `closes an EXPIRED follow-up even if its scheduledAt is in the future`() = runBlocking {
+        // A vencido is overdue by definition; a call that completes it must
+        // close it regardless of the stored scheduledAt.
+        dao.seed(
+            pending(id = "exp-future", clientId = "c-1", scheduledAt = future)
+                .copy(status = FollowUpStatus.EXPIRED),
+        )
+
+        val closed = repo.markPendingForClientCompleted("c-1", asOf)
+
+        assertEquals(1, closed)
+        assertEquals(FollowUpStatus.COMPLETED, dao.findById("exp-future")!!.status)
+    }
+
+    @Test
     fun `does not touch already-COMPLETED rows`() = runBlocking {
         val already = pending(id = "done", clientId = "c-1", scheduledAt = past).copy(
             status = FollowUpStatus.COMPLETED,
@@ -178,10 +211,12 @@ private class FakeFollowUpDao : FollowUpDao {
     override suspend fun markPendingCompletedForClient(clientId: String, asOf: Instant): Int {
         var n = 0
         rows.forEach { (id, row) ->
-            if (row.clientId == clientId &&
-                row.status == FollowUpStatus.PENDING &&
-                !row.scheduledAt.isAfter(asOf)
-            ) {
+            val matches = row.clientId == clientId && when (row.status) {
+                FollowUpStatus.EXPIRED -> true // a vencido closes regardless of date
+                FollowUpStatus.PENDING -> !row.scheduledAt.isAfter(asOf)
+                else -> false
+            }
+            if (matches) {
                 rows[id] = row.copy(
                     status = FollowUpStatus.COMPLETED,
                     completedAt = asOf,
@@ -197,8 +232,7 @@ private class FakeFollowUpDao : FollowUpDao {
 
     override suspend fun insert(followUp: FollowUpEntity) = error("not stubbed")
     override suspend fun upsertAll(followUps: List<FollowUpEntity>) = error("not stubbed")
-    override fun observePending(status: FollowUpStatus, from: Instant): Flow<List<FollowUpEntity>> =
-        error("not stubbed")
+    override fun observeActiveAgenda(): Flow<List<FollowUpEntity>> = error("not stubbed")
     override fun observeNextPendingForClient(
         clientId: String,
         now: Instant,

@@ -30,7 +30,23 @@ import kotlin.coroutines.resume
 
 private const val TAG = "LinphoneCoreManager"
 private const val ITERATE_INTERVAL_MS = 20L
-private const val DEFAULT_EXPIRES_SECONDS = 3600
+
+/**
+ * Registration TTL. Kept short (10 min, was 3600) so Linphone re-REGISTERs
+ * every ~5 min (it refreshes at half-life). That bounds how long a stale NAT
+ * binding can linger after a call's RTP activity, and gives the SBC a fresh
+ * binding well before the agent dials again.
+ */
+private const val DEFAULT_EXPIRES_SECONDS = 600
+
+/**
+ * SIP keep-alive period (ms). A short CRLF ping keeps the signaling NAT
+ * binding open between/after calls, so the UDP registration doesn't go silent
+ * and decay. Without it, a call's RTP activity can shift the NAT mapping and
+ * the registration is dead until the next foreground refresh.
+ */
+private const val SIP_KEEPALIVE_PERIOD_MS = 20_000
+
 private const val USER_AGENT_NAME = "calls-agends"
 private const val USER_AGENT_VERSION = "1.0"
 
@@ -97,6 +113,18 @@ class LinphoneCoreManager(
     val registrationState: StateFlow<SipRegistrationState> =
         _registrationState.asStateFlow()
 
+    /**
+     * The account whose registration we currently track. Set when a fresh
+     * account is added in [applyAccountAndRegister]. Used to DROP late events
+     * from a previously-cleared account: `register()` calls `clearAccounts()`,
+     * which fires a `Cleared` event for the OLD account asynchronously — and
+     * that event can land AFTER the NEW account's `Ok`, overwriting it and
+     * pinning the UI on "Connecting" forever. Volatile: written and read on the
+     * iterate thread, but published for safety.
+     */
+    @Volatile
+    private var activeAccount: Account? = null
+
     private val coreListener = object : CoreListenerStub() {
         override fun onAccountRegistrationStateChanged(
             core: Core,
@@ -104,6 +132,13 @@ class LinphoneCoreManager(
             state: RegistrationState?,
             message: String,
         ) {
+            val tracked = activeAccount
+            if (tracked != null && account != tracked) {
+                // Stale event from a prior (cleared) account — never let it
+                // clobber the current account's registration state.
+                Log.d(TAG, "Ignoring stale registration event ($state) from old account")
+                return
+            }
             Log.d(TAG, "Registration state=$state message=$message")
             _registrationState.value = when (state) {
                 RegistrationState.None, null -> SipRegistrationState.Idle
@@ -143,6 +178,18 @@ class LinphoneCoreManager(
 
             // RTP local port range — anti-NAT, matches Sipnetic.
             setAudioPortRange(RTP_PORT_MIN, RTP_PORT_MAX)
+
+            // Keep the SIP signaling NAT binding alive between calls. Over UDP
+            // a silent socket's NAT mapping decays (often within 30-120s),
+            // which silently kills the registration after a call's RTP burst.
+            // A short CRLF keep-alive holds the binding open.
+            isKeepAliveEnabled = true
+            val cfg = config
+            if (cfg != null) {
+                cfg.setInt("sip", "keepalive_period", SIP_KEEPALIVE_PERIOD_MS)
+            } else {
+                Log.w(TAG, "Core.config is null — SIP keepalive_period not set")
+            }
 
             // Identify ourselves clearly in SIP signaling.
             setUserAgent(USER_AGENT_NAME, USER_AGENT_VERSION)
@@ -248,6 +295,7 @@ class LinphoneCoreManager(
         core?.removeListener(coreListener)
         core?.stop()
         core = null
+        activeAccount = null
         _registrationState.value = SipRegistrationState.Idle
     }
 
@@ -266,19 +314,6 @@ class LinphoneCoreManager(
     }
 
     private fun applyAccountAndRegister(core: Core, cfg: SipConfig) {
-        core.clearAccounts()
-        core.clearAllAuthInfo()
-
-        val authInfo = Factory.instance().createAuthInfo(
-            /* username = */ cfg.user,
-            /* userid   = */ null,
-            /* password = */ cfg.password,
-            /* ha1      = */ null,
-            /* realm    = */ null,
-            /* domain   = */ cfg.server,
-        )
-        core.addAuthInfo(authInfo)
-
         val identityAddress = Factory.instance().createAddress(cfg.identity)
         val proxyAddress = Factory.instance().createAddress("sip:${cfg.server}")
             ?.apply { transport = TransportType.Udp }
@@ -290,6 +325,15 @@ class LinphoneCoreManager(
             return
         }
 
+        val authInfo = Factory.instance().createAuthInfo(
+            /* username = */ cfg.user,
+            /* userid   = */ null,
+            /* password = */ cfg.password,
+            /* ha1      = */ null,
+            /* realm    = */ null,
+            /* domain   = */ cfg.server,
+        )
+
         val accountParams = core.createAccountParams().apply {
             setIdentityAddress(identityAddress)
             serverAddress = proxyAddress
@@ -297,10 +341,52 @@ class LinphoneCoreManager(
             expires = DEFAULT_EXPIRES_SECONDS
         }
         val account = core.createAccount(accountParams)
+
+        // CRITICAL ordering: point activeAccount at the NEW account BEFORE
+        // clearing the old one. clearAccounts() fires a `Cleared` event for the
+        // previous account — possibly synchronously — and with activeAccount
+        // already updated, the listener reliably drops it as stale instead of
+        // letting it race the new account's `Ok` and pin the UI on "Connecting".
+        // The new account is not added yet, so clearAccounts() won't touch it.
+        activeAccount = account
+
+        core.clearAccounts()
+        core.clearAllAuthInfo()
+        core.addAuthInfo(authInfo)
         core.addAccount(account)
         core.defaultAccount = account
         _registrationState.value = SipRegistrationState.InProgress
         Log.d(TAG, "REGISTER kicked off for ${cfg.identity}")
+    }
+
+    /**
+     * Bring the registration back to healthy WITHOUT tearing the account down.
+     * If an account is already configured we just re-send REGISTER
+     * ([Core.refreshRegisters]) — cheap, reuses the same binding, and avoids
+     * the clear/re-add race. Only when there is no account do we fall back to a
+     * full [register]. This is the recovery entry point used by the
+     * [com.project.vortex.callsagent.domain.call.RegistrationWatchdog].
+     */
+    fun ensureRegistered() {
+        start()
+        scope.launch {
+            val cfg = runCatching { credentialsProvider.current() }.getOrNull()
+            if (cfg == null) {
+                Log.w(TAG, "ensureRegistered skipped — no credentials cached")
+                return@launch
+            }
+            withCore { core ->
+                if (core.defaultAccount != null) {
+                    if (_registrationState.value !is SipRegistrationState.Registered) {
+                        _registrationState.value = SipRegistrationState.InProgress
+                    }
+                    core.refreshRegisters()
+                    Log.d(TAG, "refreshRegisters() — recovering registration")
+                } else {
+                    applyAccountAndRegister(core, cfg)
+                }
+            }
+        }
     }
 
     /**

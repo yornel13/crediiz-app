@@ -1,6 +1,5 @@
 package com.project.vortex.callsagent.data.repository
 
-import com.project.vortex.callsagent.common.enums.FollowUpStatus
 import com.project.vortex.callsagent.common.enums.SyncStatus
 import com.project.vortex.callsagent.data.local.db.FollowUpDao
 import com.project.vortex.callsagent.data.local.entity.FollowUpEntity
@@ -44,8 +43,8 @@ class FollowUpRepositoryImpl @Inject constructor(
         )
     }
 
-    override fun observeAgenda(from: Instant): Flow<List<FollowUp>> =
-        dao.observePending(FollowUpStatus.PENDING, from)
+    override fun observeAgenda(): Flow<List<FollowUp>> =
+        dao.observeActiveAgenda()
             .map { list -> list.map { it.toDomain() } }
 
     override fun observeNextPendingForClient(clientId: String, now: Instant): Flow<FollowUp?> =

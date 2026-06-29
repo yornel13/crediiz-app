@@ -284,14 +284,15 @@
     <string name="onboarding_optional_badge">Optional</string>
 
     <!-- ============================== Agenda ============================== -->
-    <string name="agenda_section_today">Today</string>
-    <string name="agenda_section_tomorrow">Tomorrow</string>
-    <string name="agenda_section_this_week">This week</string>
-    <string name="agenda_section_later">Later</string>
+    <string name="agenda_section_overdue">Overdue</string>
+    <string name="agenda_section_today">Scheduled</string>
+    <string name="agenda_section_today_subtitle">For today</string>
+    <string name="agenda_section_upcoming">Upcoming</string>
+    <string name="agenda_section_upcoming_subtitle">Coming days</string>
     <string name="agenda_section_unscheduled">Unscheduled</string>
     <string name="agenda_unscheduled_subtitle">Interested leads without a scheduled re-call.</string>
     <string name="agenda_client_fallback">Client</string>
-    <string name="agenda_overdue">OVERDUE</string>
+    <string name="agenda_overdue">Overdue</string>
     <string name="agenda_never_called">Never called</string>
     <string name="agenda_more_actions">More actions</string>
     <string name="agenda_dismiss_client">Dismiss client</string>
@@ -391,7 +392,7 @@
     <string name="enum_outcome_scheduled">Scheduled</string>
     <string name="enum_outcome_sold">Sold</string>
     <string name="enum_outcome_not_interested">Not interested</string>
-    <string name="enum_outcome_do_not_call">Do not call</string>
+    <string name="enum_outcome_do_not_call">Do Not Disturb</string>
     <string name="enum_outcome_wrong_number">Wrong number</string>
     <string name="enum_outcome_has_loan">Has loan</string>
     <string name="enum_outcome_deceased">Deceased</string>
@@ -406,7 +407,7 @@
     <!-- Removal reasons -->
     <string name="enum_removal_not_interested">Not interested</string>
     <string name="enum_removal_unreachable">Unreachable</string>
-    <string name="enum_removal_do_not_call">Do not call</string>
+    <string name="enum_removal_do_not_call">Do Not Disturb</string>
     <string name="enum_removal_wrong_number">Wrong number</string>
     <string name="enum_removal_has_loan">Has loan</string>
     <string name="enum_removal_deceased">Deceased</string>

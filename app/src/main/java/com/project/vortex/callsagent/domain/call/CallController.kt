@@ -159,13 +159,17 @@ class CallController @Inject constructor(
         callStartedAt = Instant.now()
 
         scope.launch {
-            val registered = withTimeoutOrNull(REGISTER_WAIT_MS) {
+            // Wait for a TERMINAL registration outcome — Registered (go) or
+            // Failed (stop now instead of burning the full timeout). The
+            // watchdog is independently re-registering in the background, so a
+            // transient drop usually resolves before the agent re-dials.
+            val outcome = withTimeoutOrNull(REGISTER_WAIT_MS) {
                 coreManager.registrationState.first {
-                    it is SipRegistrationState.Registered
+                    it is SipRegistrationState.Registered || it is SipRegistrationState.Failed
                 }
             }
-            if (registered == null) {
-                Log.e(TAG, "REGISTER did not complete within ${REGISTER_WAIT_MS}ms")
+            if (outcome !is SipRegistrationState.Registered) {
+                Log.e(TAG, "REGISTER not ready before dialing: $outcome")
                 _callState.value = CallUiState.Disconnected
                 return@launch
             }

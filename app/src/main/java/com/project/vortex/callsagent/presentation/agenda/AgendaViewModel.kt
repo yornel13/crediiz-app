@@ -3,6 +3,7 @@ package com.project.vortex.callsagent.presentation.agenda
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.common.enums.ClientStatus
+import com.project.vortex.callsagent.common.enums.FollowUpStatus
 import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.data.sync.ConnectivityObserver
 import com.project.vortex.callsagent.domain.model.Client
@@ -30,10 +31,14 @@ import javax.inject.Inject
 
 /**
  * Logical buckets for the agenda UI. Order matters — they render in
- * declaration order, with `UNSCHEDULED` last as the safety-net
- * surface for orphan INTERESTED leads.
+ * declaration order:
+ *  - [OVERDUE]     "Vencidos": should have been called (EXPIRED, or re-evaluated
+ *                  locally as past-due). Shown first.
+ *  - [TODAY]       "Programados": due today (Panama day), not yet overdue.
+ *  - [UPCOMING]    "Pendientes": tomorrow onward.
+ *  - [UNSCHEDULED] "Sin agendar": orphan INTERESTED leads, last (safety net).
  */
-enum class AgendaSection { TODAY, TOMORROW, THIS_WEEK, LATER, UNSCHEDULED }
+enum class AgendaSection { OVERDUE, TODAY, UPCOMING, UNSCHEDULED }
 
 /**
  * Agenda items can be either a scheduled follow-up or an orphan
@@ -69,10 +74,10 @@ class AgendaViewModel @Inject constructor(
      *  - the "Sin agendar" orphan-INTERESTED set (oldest first).
      */
     val agenda: StateFlow<Map<AgendaSection, List<AgendaItem>>> = combine(
-        followUpRepository.observeAgenda(startOfToday()),
+        followUpRepository.observeAgenda(),
         clientRepository.observeUnscheduledInterested(Instant.now()),
     ) { followUps, orphans ->
-        buildSections(followUps, orphans)
+        buildAgendaSections(followUps, orphans, Instant.now(), BusinessConfig.BUSINESS_TIMEZONE)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -153,55 +158,62 @@ class AgendaViewModel @Inject constructor(
         }
     }
 
-    private fun startOfToday(): Instant =
-        // "Today" = business calendar day, not the agent's calendar.
-        // An agent in Caracas at 23:30 is already on "tomorrow"
-        // locally, but the agenda's Today bucket must still mean the
-        // Panama business day. See BusinessConfig.
-        LocalDate.now(BusinessConfig.BUSINESS_TIMEZONE)
-            .atStartOfDay(BusinessConfig.BUSINESS_TIMEZONE)
-            .toInstant()
+}
 
-    private fun buildSections(
-        followUps: List<FollowUp>,
-        orphans: List<Client>,
-    ): Map<AgendaSection, List<AgendaItem>> {
-        val result = linkedMapOf<AgendaSection, List<AgendaItem>>()
-        groupFollowUpsByDate(followUps).forEach { (section, items) ->
-            result[section] = items.map { fu ->
-                AgendaItem.Scheduled(followUp = fu)
-            }
+/**
+ * Compose the ordered agenda map from active follow-ups + orphan leads.
+ * Sections render in declaration order; empty ones are omitted. Pure top-level
+ * fn so it can be unit tested without the ViewModel.
+ */
+fun buildAgendaSections(
+    followUps: List<FollowUp>,
+    orphans: List<Client>,
+    now: Instant,
+    zone: ZoneId,
+): Map<AgendaSection, List<AgendaItem>> {
+    val result = linkedMapOf<AgendaSection, List<AgendaItem>>()
+    val bySection = followUps.groupBy { followUpAgendaSection(it, now, zone) }
+    // Declaration order: Vencidos → Programados → Pendientes.
+    listOf(AgendaSection.OVERDUE, AgendaSection.TODAY, AgendaSection.UPCOMING).forEach { section ->
+        bySection[section]
+            ?.sortedBy { it.scheduledAt }
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { items -> result[section] = items.map { AgendaItem.Scheduled(it) } }
+    }
+    if (orphans.isNotEmpty()) {
+        result[AgendaSection.UNSCHEDULED] = orphans.map { AgendaItem.Unscheduled(it) }
+    }
+    return result
+}
+
+/** Grace window after the scheduled time before a PENDING is treated as overdue. */
+private val FOLLOW_UP_EXPIRY_GRACE: java.time.Duration = java.time.Duration.ofHours(1)
+
+/**
+ * Re-evaluate a follow-up's overdue state LOCALLY, in Panama time, so a
+ * freshly-expired follow-up surfaces without waiting for the next backend sync.
+ * Mirrors the backend rule: overdue when >1h past the scheduled time OR the
+ * Panama calendar day has rolled over. A backend [FollowUpStatus.EXPIRED] is
+ * trusted as-is; terminal states are never overdue.
+ */
+fun isFollowUpOverdue(followUp: FollowUp, now: Instant, zone: ZoneId): Boolean =
+    when (followUp.status) {
+        FollowUpStatus.COMPLETED, FollowUpStatus.CANCELLED -> false
+        FollowUpStatus.EXPIRED -> true
+        FollowUpStatus.PENDING -> {
+            val pastGrace = now.isAfter(followUp.scheduledAt.plus(FOLLOW_UP_EXPIRY_GRACE))
+            val today = now.atZone(zone).toLocalDate()
+            val scheduledDay = followUp.scheduledAt.atZone(zone).toLocalDate()
+            pastGrace || scheduledDay.isBefore(today)
         }
-        if (orphans.isNotEmpty()) {
-            result[AgendaSection.UNSCHEDULED] = orphans.map { AgendaItem.Unscheduled(it) }
-        }
-        return result
     }
 
-    private fun groupFollowUpsByDate(items: List<FollowUp>): Map<AgendaSection, List<FollowUp>> {
-        // Bucket by the BUSINESS calendar day, not the agent's device
-        // day. A follow-up scheduled for "23 May 23:00 Panama" must
-        // appear in the Today bucket for both Panama and Venezuelan
-        // agents — under device TZ the Caracas agent would see it as
-        // "Tomorrow" (Caracas 00:00 next day). See BusinessConfig.
-        val zone = BusinessConfig.BUSINESS_TIMEZONE
-        val today = LocalDate.now(zone)
-        val tomorrow = today.plusDays(1)
-        val endOfWeek = today.plusDays(6) // today + 6 more days = "this week"
-
-        return items
-            .groupBy { followUp ->
-                val date = followUp.scheduledAt.atZone(zone).toLocalDate()
-                when {
-                    date == today -> AgendaSection.TODAY
-                    date == tomorrow -> AgendaSection.TOMORROW
-                    date <= endOfWeek -> AgendaSection.THIS_WEEK
-                    else -> AgendaSection.LATER
-                }
-            }
-            .mapValues { (_, list) -> list.sortedBy { it.scheduledAt } }
-            .toSortedMap(compareBy { it.ordinal })
-    }
+/** Which agenda bucket a follow-up belongs to right now (Panama time). */
+fun followUpAgendaSection(followUp: FollowUp, now: Instant, zone: ZoneId): AgendaSection {
+    if (isFollowUpOverdue(followUp, now, zone)) return AgendaSection.OVERDUE
+    val today = now.atZone(zone).toLocalDate()
+    val scheduledDay = followUp.scheduledAt.atZone(zone).toLocalDate()
+    return if (scheduledDay == today) AgendaSection.TODAY else AgendaSection.UPCOMING
 }
 
 /** Count of today's follow-ups for badge display. */

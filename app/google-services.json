@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "171706186456",
+    "project_id": "crediiz",
+    "storage_bucket": "crediiz.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:171706186456:android:02953e530d8877f98735ad",
+        "android_client_info": {
+          "package_name": "com.project.vortex.callsagent"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA92F_OtNt6ziXv-u4WDC6iLzevc-DjnAM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

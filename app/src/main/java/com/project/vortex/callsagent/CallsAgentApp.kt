@@ -4,9 +4,11 @@ import android.app.Application
 import android.content.Intent
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.project.vortex.callsagent.data.crash.CrashContextReporter
 import com.project.vortex.callsagent.data.sync.ConnectivityObserver
 import com.project.vortex.callsagent.data.sync.SyncScheduler
 import com.project.vortex.callsagent.domain.call.CallController
+import com.project.vortex.callsagent.domain.call.RegistrationWatchdog
 import com.project.vortex.callsagent.domain.call.model.CallUiState
 import com.project.vortex.callsagent.presentation.incall.InCallActivity
 import com.project.vortex.callsagent.service.SipCallForegroundService
@@ -36,6 +38,8 @@ class CallsAgentApp : Application(), Configuration.Provider {
     @Inject lateinit var syncScheduler: SyncScheduler
     @Inject lateinit var connectivityObserver: ConnectivityObserver
     @Inject lateinit var callController: CallController
+    @Inject lateinit var registrationWatchdog: RegistrationWatchdog
+    @Inject lateinit var crashContextReporter: CrashContextReporter
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -49,6 +53,11 @@ class CallsAgentApp : Application(), Configuration.Provider {
         syncScheduler.schedulePeriodicSync()
         connectivityObserver.start()
         observeCallStateForUi()
+        // Self-heal the SIP registration whenever it drops while the agent is
+        // idle and has a VoIP line — no app restart needed. See [RegistrationWatchdog].
+        registrationWatchdog.start(appScope)
+        // Attach agent id + SIP state to crash reports for remote diagnosis.
+        crashContextReporter.start(appScope)
     }
 
     /**

@@ -281,14 +281,15 @@
     <string name="onboarding_optional_badge">Opcional</string>
 
     <!-- ============================== Agenda ============================== -->
-    <string name="agenda_section_today">Hoy</string>
-    <string name="agenda_section_tomorrow">Mañana</string>
-    <string name="agenda_section_this_week">Esta semana</string>
-    <string name="agenda_section_later">Más adelante</string>
+    <string name="agenda_section_overdue">Vencidos</string>
+    <string name="agenda_section_today">Programados</string>
+    <string name="agenda_section_today_subtitle">Para hoy</string>
+    <string name="agenda_section_upcoming">Pendientes</string>
+    <string name="agenda_section_upcoming_subtitle">Próximos días</string>
     <string name="agenda_section_unscheduled">Sin agendar</string>
     <string name="agenda_unscheduled_subtitle">Prospectos interesados sin una rellamada agendada.</string>
     <string name="agenda_client_fallback">Cliente</string>
-    <string name="agenda_overdue">VENCIDA</string>
+    <string name="agenda_overdue">Vencido</string>
     <string name="agenda_never_called">Nunca llamado</string>
     <string name="agenda_more_actions">Más acciones</string>
     <string name="agenda_dismiss_client">Descartar cliente</string>
@@ -388,7 +389,7 @@
     <string name="enum_outcome_scheduled">Citó</string>
     <string name="enum_outcome_sold">Firmó</string>
     <string name="enum_outcome_not_interested">No le interesa</string>
-    <string name="enum_outcome_do_not_call">No llamar</string>
+    <string name="enum_outcome_do_not_call">No Molestar</string>
     <string name="enum_outcome_wrong_number">Número equivocado</string>
     <string name="enum_outcome_has_loan">Ya tiene préstamo</string>
     <string name="enum_outcome_deceased">Fallecido</string>
@@ -403,7 +404,7 @@
     <!-- Motivos de baja -->
     <string name="enum_removal_not_interested">No le interesa</string>
     <string name="enum_removal_unreachable">No localizable</string>
-    <string name="enum_removal_do_not_call">No llamar</string>
+    <string name="enum_removal_do_not_call">No Molestar</string>
     <string name="enum_removal_wrong_number">Número equivocado</string>
     <string name="enum_removal_has_loan">Ya tiene préstamo</string>
     <string name="enum_removal_deceased">Fallecido</string>

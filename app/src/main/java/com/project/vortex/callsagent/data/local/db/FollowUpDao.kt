@@ -37,15 +37,23 @@ interface FollowUpDao {
      * `GET /clients/:id` so orphan follow-ups can still be opened.
      * For now the JOIN is the cleanest way to avoid the visible bug.
      */
+    /**
+     * Active agenda feed: every still-actionable follow-up — PENDING and
+     * EXPIRED — regardless of date. We do NOT filter by date here: an EXPIRED
+     * follow-up can be days old and must still surface ("se debía llamar"), and
+     * the agenda bucketing (Vencidos / Programados / Pendientes) is decided in
+     * the ViewModel by re-evaluating against Panama time. COMPLETED/CANCELLED
+     * are excluded — they're done.
+     */
     @Query(
         """
         SELECT f.* FROM follow_ups f
         INNER JOIN clients c ON c.id = f.clientId
-        WHERE f.status = :status AND f.scheduledAt >= :from
+        WHERE f.status IN ('PENDING', 'EXPIRED')
         ORDER BY f.scheduledAt ASC
         """,
     )
-    fun observePending(status: FollowUpStatus, from: Instant): Flow<List<FollowUpEntity>>
+    fun observeActiveAgenda(): Flow<List<FollowUpEntity>>
 
     @Query("SELECT * FROM follow_ups WHERE mobileSyncId = :id")
     suspend fun findById(id: String): FollowUpEntity?
@@ -99,15 +107,14 @@ interface FollowUpDao {
     suspend fun markCompletedLocally(id: String, completedAt: Instant)
 
     /**
-     * Auto-close every PENDING follow-up for [clientId] whose
-     * `scheduledAt` is at or before [asOf]. Called from PostCall.save()
-     * — the call we just persisted satisfies the "llamar a este
-     * cliente" obligation of any past-due follow-up.
+     * Auto-close the follow-ups of [clientId] that the just-placed call
+     * satisfies: every EXPIRED one (a vencido is always cumplido by the call,
+     * regardless of its date) PLUS any PENDING whose `scheduledAt <= asOf`
+     * (past-due / due now). Called from PostCall.save().
      *
-     * Future-dated follow-ups (`scheduledAt > asOf`) are deliberately
-     * left untouched: if the agent had agendado "llamar mañana" and
-     * llamó hoy por otro motivo, the future appointment is still
-     * meaningful.
+     * Future-dated PENDING follow-ups (`scheduledAt > asOf`) are deliberately
+     * left untouched: "llamar mañana" is still meaningful if the agent called
+     * today for another reason.
      *
      * Returns the row count for telemetry / logging.
      */
@@ -118,8 +125,10 @@ interface FollowUpDao {
             completedAt = :asOf,
             completionSyncStatus = 'PENDING'
         WHERE clientId = :clientId
-          AND status = 'PENDING'
-          AND scheduledAt <= :asOf
+          AND (
+            (status = 'PENDING' AND scheduledAt <= :asOf)
+            OR status = 'EXPIRED'
+          )
         """,
     )
     suspend fun markPendingCompletedForClient(clientId: String, asOf: Instant): Int
@@ -130,7 +139,14 @@ interface FollowUpDao {
         upsertAll(followUps)
     }
 
-    /** Delete only server-sourced pending follow-ups; keep locally-created PENDING sync records. */
-    @Query("DELETE FROM follow_ups WHERE status = 'PENDING' AND syncStatus = 'SYNCED'")
+    /**
+     * Delete server-sourced ACTIVE follow-ups (PENDING + EXPIRED) so
+     * [replaceAgenda] can re-insert the fresh backend snapshot. Keeps
+     * locally-created records (syncStatus != SYNCED) and terminal
+     * COMPLETED/CANCELLED rows. This is also what makes a reschedule
+     * reconcile: the old follow-up the backend cancelled is no longer in the
+     * /agenda snapshot, so deleting + re-inserting drops it from the agenda.
+     */
+    @Query("DELETE FROM follow_ups WHERE status IN ('PENDING', 'EXPIRED') AND syncStatus = 'SYNCED'")
     suspend fun deletePending()
 }

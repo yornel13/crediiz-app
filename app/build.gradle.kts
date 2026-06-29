@@ -6,6 +6,11 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.android)
+    // Firebase: google-services reads app/google-services.json (required to
+    // build once these are applied); crashlytics enables crash reporting +
+    // mapping/symbol upload.
+    alias(libs.plugins.google.services)
+    alias(libs.plugins.firebase.crashlytics)
 }
 
 // Load release-signing material from local.properties (gitignored).
@@ -32,8 +37,8 @@ android {
         applicationId = "com.project.vortex.callsagent"
         minSdk = 30
         targetSdk = 37
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 5
+        versionName = "1.0.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -170,8 +175,18 @@ dependencies {
     // Linphone SDK (SIP/VoIP outbound calling against Voselia)
     implementation(libs.linphone.sdk.android)
 
+    // Firebase Crashlytics — remote crash reporting for the off-Play-Store
+    // fleet. The NDK module captures native crashes (e.g. inside the Linphone
+    // .so), which the JVM-only Crashlytics would miss. Analytics is Crashlytics'
+    // transport dependency. Versions are pinned by the BoM.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.crashlytics)
+    implementation(libs.firebase.crashlytics.ndk)
+    implementation(libs.firebase.analytics)
+
     // Testing
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

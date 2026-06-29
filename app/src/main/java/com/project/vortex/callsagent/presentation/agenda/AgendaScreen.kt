@@ -22,7 +22,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -129,7 +135,7 @@ internal fun AgendaListPane(
                             when (entry) {
                                 is AgendaItem.Scheduled -> ScheduledRow(
                                     followUp = entry.followUp,
-                                    isToday = section == AgendaSection.TODAY,
+                                    section = section,
                                     onClick = { onFollowUpSelected(entry.followUp.clientId) },
                                 )
                                 is AgendaItem.Unscheduled -> UnscheduledRow(
@@ -170,60 +176,95 @@ private fun AgendaItem.stableKey(): String = when (this) {
 // Headers
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Per-section visual identity: accent color, header tint, icon, copy. */
+private data class AgendaSectionStyle(
+    val accent: Color,
+    val tint: Color,
+    val title: String,
+    val subtitle: String?,
+    val icon: ImageVector,
+)
+
+@Composable
+private fun agendaSectionStyle(section: AgendaSection): AgendaSectionStyle {
+    val cs = MaterialTheme.colorScheme
+    return when (section) {
+        AgendaSection.OVERDUE -> AgendaSectionStyle(
+            accent = cs.error,
+            tint = cs.errorContainer.copy(alpha = 0.30f),
+            title = stringResource(R.string.agenda_section_overdue),
+            subtitle = null,
+            icon = Icons.Filled.Warning,
+        )
+        AgendaSection.TODAY -> AgendaSectionStyle(
+            accent = cs.primary,
+            tint = cs.primaryContainer.copy(alpha = 0.30f),
+            title = stringResource(R.string.agenda_section_today),
+            subtitle = stringResource(R.string.agenda_section_today_subtitle),
+            icon = Icons.Filled.Today,
+        )
+        AgendaSection.UPCOMING -> AgendaSectionStyle(
+            accent = cs.tertiary,
+            tint = cs.tertiaryContainer.copy(alpha = 0.30f),
+            title = stringResource(R.string.agenda_section_upcoming),
+            subtitle = stringResource(R.string.agenda_section_upcoming_subtitle),
+            icon = Icons.Filled.Schedule,
+        )
+        AgendaSection.UNSCHEDULED -> AgendaSectionStyle(
+            accent = cs.outline,
+            tint = cs.surfaceVariant.copy(alpha = 0.5f),
+            title = stringResource(R.string.agenda_section_unscheduled),
+            subtitle = stringResource(R.string.agenda_unscheduled_subtitle),
+            icon = Icons.Filled.PersonAdd,
+        )
+    }
+}
+
 @Composable
 private fun SectionHeader(section: AgendaSection, count: Int) {
-    val isToday = section == AgendaSection.TODAY
-    val label = when (section) {
-        AgendaSection.TODAY -> stringResource(R.string.agenda_section_today)
-        AgendaSection.TOMORROW -> stringResource(R.string.agenda_section_tomorrow)
-        AgendaSection.THIS_WEEK -> stringResource(R.string.agenda_section_this_week)
-        AgendaSection.LATER -> stringResource(R.string.agenda_section_later)
-        AgendaSection.UNSCHEDULED -> stringResource(R.string.agenda_section_unscheduled)
-    }
-    val isUnscheduled = section == AgendaSection.UNSCHEDULED
-
+    val s = agendaSectionStyle(section)
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                else MaterialTheme.colorScheme.surface,
-            )
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            // Opaque base first so the sticky header doesn't bleed the list
+            // behind it, then the section tint on top.
+            .background(MaterialTheme.colorScheme.surface)
+            .background(s.tint)
+            .drawBehind { drawRect(color = s.accent, size = Size(4.dp.toPx(), size.height)) }
+            .padding(start = 18.dp, end = 16.dp, top = 9.dp, bottom = 9.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = label,
-                style = if (isToday) MaterialTheme.typography.titleMedium
-                else MaterialTheme.typography.labelLarge,
-                fontWeight = if (isToday) FontWeight.Bold else FontWeight.SemiBold,
-                color = when {
-                    isUnscheduled -> MaterialTheme.colorScheme.onSurfaceVariant
-                    isToday -> MaterialTheme.colorScheme.primary
-                    else -> MaterialTheme.colorScheme.onSurface
-                },
-                modifier = Modifier.weight(1f),
+            Icon(
+                imageVector = s.icon,
+                contentDescription = null,
+                tint = s.accent,
+                modifier = Modifier.size(18.dp),
             )
-            Surface(
-                shape = PillShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ) {
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = s.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = s.accent,
+                )
+                s.subtitle?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Surface(shape = PillShape, color = s.accent.copy(alpha = 0.18f)) {
                 Text(
                     text = count.toString(),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = s.accent,
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
                 )
             }
-        }
-        if (isUnscheduled) {
-            Spacer(Modifier.height(2.dp))
-            Text(
-                text = stringResource(R.string.agenda_unscheduled_subtitle),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
@@ -235,27 +276,34 @@ private fun SectionHeader(section: AgendaSection, count: Int) {
 @Composable
 private fun ScheduledRow(
     followUp: FollowUp,
-    isToday: Boolean,
+    section: AgendaSection,
     onClick: () -> Unit,
 ) {
-    // Business clock — see BusinessConfig. Without this, agents in
-    // Caracas would see follow-ups in their local wall-clock, off by
-    // one hour from the admin/client view.
+    // Business clock — see BusinessConfig. The OVERDUE/TODAY/UPCOMING bucket is
+    // decided by the ViewModel's Panama-time re-evaluation; the row only styles.
     val zone = BusinessConfig.BUSINESS_TIMEZONE
-    val now = Instant.now()
-    val isOverdue = followUp.scheduledAt.isBefore(now)
+    val isToday = section == AgendaSection.TODAY
+    val isOverdue = section == AgendaSection.OVERDUE
+    val accent = agendaSectionStyle(section).accent
+    // Pin `now` to the row's data so unrelated recompositions don't jitter the
+    // relative-time text.
+    val now = remember(followUp.scheduledAt) { Instant.now() }
 
     val absoluteTime = remember(followUp.scheduledAt, isToday) {
         val pattern = if (isToday) "h:mm a" else "EEE · h:mm a"
         DateTimeFormatter.ofPattern(pattern).format(followUp.scheduledAt.atZone(zone))
     }
-    val relativeTime = relativeFuture(followUp.scheduledAt, now)
+    val relativeTime = if (isOverdue) relativePast(followUp.scheduledAt)
+    else relativeFuture(followUp.scheduledAt, now)
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .drawBehind {
+                drawRect(color = accent.copy(alpha = 0.55f), size = Size(3.dp.toPx(), size.height))
+            }
+            .padding(start = 18.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val clientFallback = stringResource(R.string.agenda_client_fallback)
@@ -303,45 +351,13 @@ private fun ScheduledRow(
                 text = absoluteTime,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = if (isOverdue) MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.primary,
+                color = accent,
             )
             Spacer(Modifier.height(2.dp))
-            if (isOverdue) {
-                OverdueBadge()
-            } else {
-                Text(
-                    text = relativeTime,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun OverdueBadge() {
-    Surface(
-        shape = PillShape,
-        color = MaterialTheme.colorScheme.errorContainer,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Filled.Warning,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.size(11.dp),
-            )
-            Spacer(Modifier.width(3.dp))
             Text(
-                text = stringResource(R.string.agenda_overdue),
+                text = relativeTime,
                 style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onErrorContainer,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -358,12 +374,16 @@ private fun UnscheduledRow(
     onDismiss: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val accent = MaterialTheme.colorScheme.outline
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .drawBehind {
+                drawRect(color = accent.copy(alpha = 0.5f), size = Size(3.dp.toPx(), size.height))
+            }
+            .padding(start = 18.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(

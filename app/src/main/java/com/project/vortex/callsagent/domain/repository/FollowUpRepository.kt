@@ -9,8 +9,12 @@ interface FollowUpRepository {
     /** Save a new follow-up locally (syncStatus = PENDING). */
     suspend fun save(followUp: FollowUp)
 
-    /** Observe pending follow-ups from a given instant forward (the agent's agenda). */
-    fun observeAgenda(from: Instant): Flow<List<FollowUp>>
+    /**
+     * Observe the active agenda: all PENDING + EXPIRED follow-ups (any date).
+     * Bucketing into Vencidos / Programados / Pendientes is the ViewModel's
+     * job, re-evaluating expiry against Panama time.
+     */
+    fun observeAgenda(): Flow<List<FollowUp>>
 
     /**
      * Observe the next pending follow-up for a client (soonest

@@ -56,7 +56,11 @@ class Converters {
 
     // ─── FollowUpStatus ↔ String ──────────────────────────────────────────────
     @TypeConverter fun followUpStatusToString(v: FollowUpStatus): String = v.name
-    @TypeConverter fun stringToFollowUpStatus(v: String): FollowUpStatus = FollowUpStatus.valueOf(v)
+    // Fall back to PENDING on any unknown value so a future backend status (or
+    // a value written by a newer build) can't crash the read. Mirrors the
+    // defensive parse in FollowUpMapper.
+    @TypeConverter fun stringToFollowUpStatus(v: String): FollowUpStatus =
+        runCatching { FollowUpStatus.valueOf(v) }.getOrDefault(FollowUpStatus.PENDING)
 
     // ─── NoteType ↔ String ────────────────────────────────────────────────────
     @TypeConverter fun noteTypeToString(v: NoteType): String = v.name
