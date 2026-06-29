@@ -286,11 +286,11 @@
     <!-- ============================== Agenda ============================== -->
     <string name="agenda_section_overdue">Overdue</string>
     <string name="agenda_section_today">Scheduled</string>
-    <string name="agenda_section_today_subtitle">For today</string>
+    <string name="agenda_section_today_subtitle">today</string>
     <string name="agenda_section_upcoming">Upcoming</string>
-    <string name="agenda_section_upcoming_subtitle">Coming days</string>
+    <string name="agenda_section_upcoming_subtitle">coming days</string>
     <string name="agenda_section_unscheduled">Unscheduled</string>
-    <string name="agenda_unscheduled_subtitle">Interested leads without a scheduled re-call.</string>
+    <string name="agenda_unscheduled_subtitle">Interested and cited clients without a scheduled re-call.</string>
     <string name="agenda_client_fallback">Client</string>
     <string name="agenda_overdue">Overdue</string>
     <string name="agenda_never_called">Never called</string>

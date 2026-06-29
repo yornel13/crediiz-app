@@ -196,7 +196,7 @@ fun NoteType.label(): String = when (this) {
 
 @Composable
 @ReadOnlyComposable
-private fun successPalette(): StatusPalette =
+internal fun successPalette(): StatusPalette =
     if (isDark()) StatusPalette(Emerald600.copy(alpha = 0.25f), Emerald100)
     else StatusPalette(Emerald100, Emerald600)
 
@@ -208,19 +208,19 @@ private fun warningPalette(): StatusPalette =
 
 @Composable
 @ReadOnlyComposable
-private fun errorPalette(): StatusPalette =
+internal fun errorPalette(): StatusPalette =
     if (isDark()) StatusPalette(Rose600.copy(alpha = 0.25f), Rose100)
     else StatusPalette(Rose100, Rose600)
 
 @Composable
 @ReadOnlyComposable
-private fun infoPalette(): StatusPalette =
+internal fun infoPalette(): StatusPalette =
     if (isDark()) StatusPalette(Sky600.copy(alpha = 0.25f), Sky100)
     else StatusPalette(Sky100, Sky600)
 
 @Composable
 @ReadOnlyComposable
-private fun neutralPalette(): StatusPalette =
+internal fun neutralPalette(): StatusPalette =
     if (isDark()) StatusPalette(Slate600.copy(alpha = 0.30f), Slate200)
     else StatusPalette(Slate200, Slate700)
 

@@ -144,33 +144,29 @@ interface ClientDao {
     fun searchRecent(since: Instant, query: String): Flow<List<ClientEntity>>
 
     /**
-     * "Sin agendar" feed for the Agenda tab — INTERESTED leads that
-     * have NO pending follow-up scheduled in the future. Three real
-     * paths land a client here:
+     * "Sin agendar" feed for the Agenda tab — active clients (INTERESTED or
+     * CITED) with NO active follow-up at all (PENDING or EXPIRED). A client
+     * that HAS a follow-up already shows under Vencidos/Programados/Pendientes,
+     * so excluding them here keeps the same client from appearing twice.
      *
-     *  1. Admin reassigned an INTERESTED client from another agent
-     *     (the previous agent's follow-ups got cancelled server-side).
-     *  2. The agent completed a follow-up but didn't schedule the next.
-     *  3. A follow-up's `scheduledAt` passed without being marked
-     *     completed.
-     *
-     * Sort: oldest `assignedAt` first — the older the orphan, the
-     * more urgent (most likely to go cold).
+     * A client lands here when: admin reassigned them (prior follow-ups
+     * cancelled), the agent completed a follow-up without scheduling the next,
+     * etc. Sort: oldest `assignedAt` first — the older the orphan, the more
+     * urgent (most likely to go cold).
      */
     @Query(
         """
         SELECT c.* FROM clients c
-        WHERE c.status = 'INTERESTED'
+        WHERE c.status IN ('INTERESTED', 'CITED')
           AND NOT EXISTS (
             SELECT 1 FROM follow_ups f
             WHERE f.clientId = c.id
-              AND f.status = 'PENDING'
-              AND f.scheduledAt > :now
+              AND f.status IN ('PENDING', 'EXPIRED')
           )
         ORDER BY c.assignedAt ASC
         """,
     )
-    fun observeUnscheduledInterested(now: Instant): Flow<List<ClientEntity>>
+    fun observeUnscheduledActive(): Flow<List<ClientEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(clients: List<ClientEntity>)

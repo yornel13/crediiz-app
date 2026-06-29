@@ -317,7 +317,7 @@ class ClientRepositoryAgentStatusChangeTest {
         override fun searchByStatus(status: ClientStatus, query: String): Flow<List<ClientEntity>> = flowOf(emptyList())
         override fun observeRecent(since: Instant): Flow<List<ClientEntity>> = flowOf(emptyList())
         override fun searchRecent(since: Instant, query: String): Flow<List<ClientEntity>> = flowOf(emptyList())
-        override fun observeUnscheduledInterested(now: Instant): Flow<List<ClientEntity>> = flowOf(emptyList())
+        override fun observeUnscheduledActive(): Flow<List<ClientEntity>> = flowOf(emptyList())
     }
 
     private class FakeLocalAgentStatusChangeDao : LocalAgentStatusChangeDao {

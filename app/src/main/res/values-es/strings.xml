@@ -283,11 +283,11 @@
     <!-- ============================== Agenda ============================== -->
     <string name="agenda_section_overdue">Vencidos</string>
     <string name="agenda_section_today">Programados</string>
-    <string name="agenda_section_today_subtitle">Para hoy</string>
+    <string name="agenda_section_today_subtitle">hoy</string>
     <string name="agenda_section_upcoming">Pendientes</string>
-    <string name="agenda_section_upcoming_subtitle">Próximos días</string>
+    <string name="agenda_section_upcoming_subtitle">próximos días</string>
     <string name="agenda_section_unscheduled">Sin agendar</string>
-    <string name="agenda_unscheduled_subtitle">Prospectos interesados sin una rellamada agendada.</string>
+    <string name="agenda_unscheduled_subtitle">Interesados y citados sin una rellamada agendada.</string>
     <string name="agenda_client_fallback">Cliente</string>
     <string name="agenda_overdue">Vencido</string>
     <string name="agenda_never_called">Nunca llamado</string>

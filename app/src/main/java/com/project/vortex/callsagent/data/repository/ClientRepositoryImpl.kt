@@ -98,8 +98,8 @@ class ClientRepositoryImpl @Inject constructor(
     override fun searchRecent(since: Instant, query: String): Flow<List<Client>> =
         dao.searchRecent(since, query).map { list -> list.map { it.toDomain() } }
 
-    override fun observeUnscheduledInterested(now: Instant): Flow<List<Client>> =
-        dao.observeUnscheduledInterested(now).map { list -> list.map { it.toDomain() } }
+    override fun observeUnscheduledActive(): Flow<List<Client>> =
+        dao.observeUnscheduledActive().map { list -> list.map { it.toDomain() } }
 
     override suspend fun findById(id: String): Client? = withContext(Dispatchers.IO) {
         dao.findById(id)?.toDomain()

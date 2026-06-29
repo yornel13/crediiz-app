@@ -21,10 +21,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
@@ -65,6 +65,10 @@ import com.project.vortex.callsagent.presentation.common.relativeFuture
 import com.project.vortex.callsagent.presentation.common.relativePast
 import com.project.vortex.callsagent.ui.components.Avatar
 import com.project.vortex.callsagent.ui.theme.PillShape
+import com.project.vortex.callsagent.ui.theme.errorPalette
+import com.project.vortex.callsagent.ui.theme.infoPalette
+import com.project.vortex.callsagent.ui.theme.neutralPalette
+import com.project.vortex.callsagent.ui.theme.successPalette
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -187,37 +191,43 @@ private data class AgendaSectionStyle(
 
 @Composable
 private fun agendaSectionStyle(section: AgendaSection): AgendaSectionStyle {
-    val cs = MaterialTheme.colorScheme
-    return when (section) {
-        AgendaSection.OVERDUE -> AgendaSectionStyle(
-            accent = cs.error,
-            tint = cs.errorContainer.copy(alpha = 0.30f),
-            title = stringResource(R.string.agenda_section_overdue),
-            subtitle = null,
-            icon = Icons.Filled.Warning,
+    // Semantic palettes (red / green / blue / gray) that already handle
+    // light & dark, matching the proposed design.
+    val palette = when (section) {
+        AgendaSection.OVERDUE -> errorPalette()
+        AgendaSection.TODAY -> successPalette()
+        AgendaSection.UPCOMING -> infoPalette()
+        AgendaSection.UNSCHEDULED -> neutralPalette()
+    }
+    val (title, subtitle, icon) = when (section) {
+        AgendaSection.OVERDUE -> Triple(
+            stringResource(R.string.agenda_section_overdue),
+            null,
+            Icons.Filled.Warning,
         )
-        AgendaSection.TODAY -> AgendaSectionStyle(
-            accent = cs.primary,
-            tint = cs.primaryContainer.copy(alpha = 0.30f),
-            title = stringResource(R.string.agenda_section_today),
-            subtitle = stringResource(R.string.agenda_section_today_subtitle),
-            icon = Icons.Filled.Today,
+        AgendaSection.TODAY -> Triple(
+            stringResource(R.string.agenda_section_today),
+            stringResource(R.string.agenda_section_today_subtitle),
+            Icons.Filled.EventAvailable,
         )
-        AgendaSection.UPCOMING -> AgendaSectionStyle(
-            accent = cs.tertiary,
-            tint = cs.tertiaryContainer.copy(alpha = 0.30f),
-            title = stringResource(R.string.agenda_section_upcoming),
-            subtitle = stringResource(R.string.agenda_section_upcoming_subtitle),
-            icon = Icons.Filled.Schedule,
+        AgendaSection.UPCOMING -> Triple(
+            stringResource(R.string.agenda_section_upcoming),
+            stringResource(R.string.agenda_section_upcoming_subtitle),
+            Icons.Filled.Schedule,
         )
-        AgendaSection.UNSCHEDULED -> AgendaSectionStyle(
-            accent = cs.outline,
-            tint = cs.surfaceVariant.copy(alpha = 0.5f),
-            title = stringResource(R.string.agenda_section_unscheduled),
-            subtitle = stringResource(R.string.agenda_unscheduled_subtitle),
-            icon = Icons.Filled.PersonAdd,
+        AgendaSection.UNSCHEDULED -> Triple(
+            stringResource(R.string.agenda_section_unscheduled),
+            null,
+            Icons.Filled.PersonAdd,
         )
     }
+    return AgendaSectionStyle(
+        accent = palette.onContainer,
+        tint = palette.container,
+        title = title,
+        subtitle = subtitle,
+        icon = icon,
+    )
 }
 
 @Composable
@@ -241,21 +251,13 @@ private fun SectionHeader(section: AgendaSection, count: Int) {
                 modifier = Modifier.size(18.dp),
             )
             Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = s.title,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = s.accent,
-                )
-                s.subtitle?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            Text(
+                text = s.subtitle?.let { "${s.title} · $it" } ?: s.title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = s.accent,
+                modifier = Modifier.weight(1f),
+            )
             Surface(shape = PillShape, color = s.accent.copy(alpha = 0.18f)) {
                 Text(
                     text = count.toString(),

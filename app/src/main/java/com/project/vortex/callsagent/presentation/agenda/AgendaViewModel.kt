@@ -71,11 +71,12 @@ class AgendaViewModel @Inject constructor(
     /**
      * Map of section → agenda items. Combines:
      *  - scheduled follow-ups grouped by date,
-     *  - the "Sin agendar" orphan-INTERESTED set (oldest first).
+     *  - the "Sin agendar" set: active clients (INTERESTED/CITED) with no
+     *    active follow-up (oldest first).
      */
     val agenda: StateFlow<Map<AgendaSection, List<AgendaItem>>> = combine(
         followUpRepository.observeAgenda(),
-        clientRepository.observeUnscheduledInterested(Instant.now()),
+        clientRepository.observeUnscheduledActive(),
     ) { followUps, orphans ->
         buildAgendaSections(followUps, orphans, Instant.now(), BusinessConfig.BUSINESS_TIMEZONE)
     }.stateIn(
