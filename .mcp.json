@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "firebase": {
+      "command": "/Users/yornel/.nvm/versions/node/v24.5.0/bin/firebase",
+      "args": [
+        "experimental:mcp",
+        "--dir",
+        "/Users/yornel/projects/vortex/calls-agends",
+        "--only",
+        "crashlytics"
+      ]
+    }
+  }
+}
