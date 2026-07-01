@@ -26,10 +26,18 @@ import org.linphone.core.ToneID
 import org.linphone.core.TransportType
 import org.linphone.mediastream.Factory as MsFactory
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 
 private const val TAG = "LinphoneCoreManager"
 private const val ITERATE_INTERVAL_MS = 20L
+
+// Teardown budgets. `stop()` runs on logout (off the main thread) but is
+// still bounded so a wedged native call can never hang shutdown. Worst
+// case is CORE_TEARDOWN + THREAD_JOIN before we abandon the thread.
+private const val CORE_TEARDOWN_TIMEOUT_MS = 2_000L
+private const val THREAD_JOIN_TIMEOUT_MS = 1_000L
 
 /**
  * Registration TTL. Kept short (10 min, was 3600) so Linphone re-REGISTERs
@@ -291,9 +299,44 @@ class LinphoneCoreManager(
     @Synchronized
     fun stop() {
         Log.d(TAG, "Stopping Linphone Core")
-        stopIterateLoop()
-        core?.removeListener(coreListener)
-        core?.stop()
+        val handler = iterateHandler
+        val thread = iterateThread
+        val liveCore = core
+
+        if (handler != null && thread != null && liveCore != null) {
+            // The native Core is NOT thread-safe. Running iterate() on the
+            // iterate thread while removeListener()/stop() run on the caller
+            // thread races inside liblinphone and trips ART's JNI abort ->
+            // SIGABRT. Halt the ticks, then tear the Core down ON the same
+            // thread that runs iterate() so the two never overlap.
+            handler.removeCallbacksAndMessages(null)
+            val torndown = CountDownLatch(1)
+            handler.post {
+                try {
+                    liveCore.removeListener(coreListener)
+                    liveCore.stop()
+                } catch (t: Throwable) {
+                    Log.e(TAG, "Core teardown threw", t)
+                } finally {
+                    torndown.countDown()
+                }
+            }
+            if (!torndown.await(CORE_TEARDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+                Log.w(TAG, "Core teardown timed out; quitting iterate thread anyway")
+            }
+            // Wait for the thread to actually die before dropping the Core
+            // reference — quitSafely() alone is async and would leave an
+            // in-flight tick touching a Core we're about to null out.
+            thread.quitSafely()
+            try {
+                thread.join(THREAD_JOIN_TIMEOUT_MS)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }
+
+        iterateHandler = null
+        iterateThread = null
         core = null
         activeAccount = null
         _registrationState.value = SipRegistrationState.Idle
@@ -476,12 +519,5 @@ class LinphoneCoreManager(
             }
         }
         handler.post(tick)
-    }
-
-    private fun stopIterateLoop() {
-        iterateHandler?.removeCallbacksAndMessages(null)
-        iterateThread?.quitSafely()
-        iterateHandler = null
-        iterateThread = null
     }
 }

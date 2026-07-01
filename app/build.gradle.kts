@@ -1,3 +1,4 @@
+import com.google.firebase.crashlytics.buildtools.gradle.CrashlyticsExtension
 import java.util.Properties
 
 plugins {
@@ -95,6 +96,14 @@ android {
             // can still build (the APK will be unsigned).
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
+            }
+            // Upload native (.so) symbols so Crashlytics de-obfuscates
+            // Linphone/mediastreamer frames. Without this, native SIGABRT
+            // tombstones arrive as raw `liblinphone.so 0x…` offsets, which
+            // are unreadable. This only affects build-time symbol upload —
+            // it adds nothing to the runtime and changes no app behavior.
+            configure<CrashlyticsExtension> {
+                nativeSymbolUploadEnabled = true
             }
         }
     }
