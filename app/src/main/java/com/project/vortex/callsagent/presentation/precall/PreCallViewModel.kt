@@ -592,8 +592,31 @@ class PreCallViewModel @AssistedInject constructor(
         }
     }
 
-    fun saveManualNote(content: String) {
-        val trimmed = content.trim()
+    /**
+     * Draft of the quick-note composer, owned here (not in the composable)
+     * so it is the single source of truth: it survives the LazyColumn
+     * recycling the composer item, and clearing it on a successful save is
+     * the one signal the UI needs to empty the field. Deliberately NOT
+     * derived from the isSubmittingNote true→false edge — that pulse is
+     * lost to StateFlow conflation whenever the local Room save completes
+     * within a single frame, which is what left stale text in the field.
+     *
+     * Kept out of [PreCallUiState] so per-keystroke updates don't
+     * invalidate every reader of the main uiState (same pattern as
+     * ClientsViewModel._searchQuery).
+     */
+    private val _noteDraft = MutableStateFlow("")
+    val noteDraft: StateFlow<String> = _noteDraft.asStateFlow()
+
+    fun onNoteDraftChange(value: String) {
+        // The field is disabled while submitting; this guard just closes
+        // the race where a keystroke lands between tap-save and disable.
+        if (_uiState.value.isSubmittingNote) return
+        _noteDraft.value = value
+    }
+
+    fun saveManualNote() {
+        val trimmed = _noteDraft.value.trim()
         if (trimmed.isEmpty() || _uiState.value.isSubmittingNote) return
 
         viewModelScope.launch {
@@ -618,6 +641,9 @@ class PreCallViewModel @AssistedInject constructor(
             }
                 .onSuccess {
                     syncScheduler.triggerImmediateSync()
+                    // Clearing the draft IS the "saved" signal the composer
+                    // reacts to — no submit-edge detection in the UI.
+                    _noteDraft.value = ""
                     _uiState.update {
                         it.copy(
                             isSubmittingNote = false,
@@ -626,6 +652,7 @@ class PreCallViewModel @AssistedInject constructor(
                     }
                 }
                 .onFailure { err ->
+                    // Draft intentionally preserved so the agent can retry.
                     _uiState.update {
                         it.copy(
                             isSubmittingNote = false,

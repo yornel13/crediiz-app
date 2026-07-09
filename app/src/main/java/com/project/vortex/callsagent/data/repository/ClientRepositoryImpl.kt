@@ -13,6 +13,7 @@ import com.project.vortex.callsagent.data.error.ErrorMapper
 import com.project.vortex.callsagent.data.remote.api.ClientsApi
 import com.project.vortex.callsagent.data.remote.dto.AgentStatusChangeDto
 import com.project.vortex.callsagent.data.remote.dto.UpsertQuotationDto
+import com.project.vortex.callsagent.domain.call.advanceTargetStatus
 import com.project.vortex.callsagent.domain.error.ClientError
 import com.project.vortex.callsagent.domain.model.AgentStatusChangeLocal
 import com.project.vortex.callsagent.domain.model.Client
@@ -29,26 +30,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * The only outcomes the app may advance a client to **locally**. They are
- * all monotonic high-water-mark advances (the agent can only move up), so
- * applying them optimistically can never contradict the backend's
- * precedence rules. Every other outcome (no-contact, not-interested, hard
- * reasons) is left to the backend: thresholds and quorum mean a single
- * mobile guess would be wrong, so we wait for the post-sync refresh.
- */
-private val SAFE_ADVANCE_OUTCOME_TO_STATUS: Map<CallOutcome, ClientStatus> = mapOf(
-    CallOutcome.INTERESTED to ClientStatus.INTERESTED,
-    CallOutcome.SCHEDULED to ClientStatus.CITED,
-    CallOutcome.SOLD to ClientStatus.CONVERTED,
-)
-
-/**
  * Default [ClientRepository] backed by Room + Retrofit.
  *
  * **Project invariant — read before adding new methods:**
  * In the 5-state model the backend is the source of truth for status.
  * The app never decides a status from an outcome except for the safe
- * high-water-mark advances in [SAFE_ADVANCE_OUTCOME_TO_STATUS]. Writes
+ * high-water-mark advances in [advanceTargetStatus]. Writes
  * that depend on a server decision (see [agentStatusChange]) reconcile
  * against the returned client instead of guessing.
  */
@@ -124,7 +111,7 @@ class ClientRepositoryImpl @Inject constructor(
             lastOutcome = outcome,
             now = now,
         )
-        val advance = SAFE_ADVANCE_OUTCOME_TO_STATUS[outcome]
+        val advance = outcome.advanceTargetStatus
         if (advance != null) dao.setStatus(clientId, advance, now)
     }
 
@@ -134,7 +121,7 @@ class ClientRepositoryImpl @Inject constructor(
     ) = withContext(Dispatchers.IO) {
         val now = Instant.now()
         dao.refineOutcome(clientId = clientId, outcome = outcome, now = now)
-        val advance = SAFE_ADVANCE_OUTCOME_TO_STATUS[outcome]
+        val advance = outcome.advanceTargetStatus
         if (advance != null) dao.setStatus(clientId, advance, now)
     }
 

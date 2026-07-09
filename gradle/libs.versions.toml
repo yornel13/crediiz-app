@@ -23,7 +23,7 @@ dataStore = "1.1.1"
 coroutines = "1.8.1"
 lifecycleViewmodelCompose = "2.8.7"
 coreKtxVersion = "1.18.0"
-linphoneSdk = "5.4.85"
+linphoneSdk = "5.4.124"
 material3Adaptive = "1.2.0"
 
 # Firebase (Crashlytics crash reporting + Analytics)

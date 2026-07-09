@@ -34,3 +34,21 @@ enum class ClientStatus {
      */
     REMOVED,
 }
+
+/**
+ * Position in the ascending funnel, or `null` for the lateral [ClientStatus.REMOVED]
+ * state. PENDING(0) < INTERESTED(1) < CITED(2) < CONVERTED(3).
+ *
+ * Deliberately NOT the enum `ordinal`: ordinal is fragile if a state is ever
+ * inserted, and REMOVED's ordinal (4) would wrongly rank it above CONVERTED.
+ * Callers that need a numeric floor for REMOVED (e.g. "a removed client is
+ * revivable from the bottom of the funnel") should map `null` to 0.
+ */
+val ClientStatus.funnelLevel: Int?
+    get() = when (this) {
+        ClientStatus.PENDING -> 0
+        ClientStatus.INTERESTED -> 1
+        ClientStatus.CITED -> 2
+        ClientStatus.CONVERTED -> 3
+        ClientStatus.REMOVED -> null
+    }

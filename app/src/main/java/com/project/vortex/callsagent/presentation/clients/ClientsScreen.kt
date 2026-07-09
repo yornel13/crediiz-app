@@ -325,7 +325,7 @@ internal fun ClientsListPane(
                                 )
                             }
                         } else {
-                            // Group by assignedAt date, oldest first.
+                            // Group by assignedAt date, newest first.
                             // LinkedHashMap iteration order = sort order
                             // (see groupPendingNeverCalledByAssignedDate).
                             pendingNeverCalledByDate.forEach { (bucket, clients) ->

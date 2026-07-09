@@ -164,7 +164,7 @@ class ClientsViewModel @Inject constructor(
 
     /**
      * Same data as [pendingNeverCalled] but grouped by `assignedAt`
-     * date into [PendingDateBucket]s ordered oldest-first. Drives the
+     * date into [PendingDateBucket]s ordered newest-first. Drives the
      * date headers in the Pendientes → "Sin llamar" view.
      *
      * Only populated when the search query is **blank** — searching
@@ -393,11 +393,11 @@ class ClientsViewModel @Inject constructor(
      * to PreCall, or null if the queue is empty.
      *
      * **Order contract — must match the UI exactly:**
-     *  1. "Sin llamar" rendered as date-grouped sections (oldest
-     *     bucket first, newest last). When the agent isn't searching,
+     *  1. "Sin llamar" rendered as date-grouped sections (newest
+     *     bucket first, oldest last). When the agent isn't searching,
      *     [pendingNeverCalledByDate] is the source of truth: its
      *     LinkedHashMap preserves bucket order, and clients inside
-     *     each bucket keep DAO `queueOrder ASC`.
+     *     each bucket are sorted by `assignedAt` DESC.
      *  2. "Para reintentar" follows, ordered by `lastCalledAt ASC`
      *     (same flat list the UI uses).
      *

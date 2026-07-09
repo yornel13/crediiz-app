@@ -68,6 +68,17 @@ class CallSession internal constructor(
      * and audio streams negotiated). Drives the `Answered` ending. */
     private var wasConnected: Boolean = false
 
+    /**
+     * Latched once the call reaches a terminal state. EVERY access to the
+     * native [call]/[core] wrappers is gated on this: Linphone frees the
+     * native call after Released, so a late audio-device callback or UI
+     * action on this dead session would dereference freed native memory —
+     * observed in the field as SIGSEGV inside CoreAccessor::getCore()
+     * (Crashlytics issue b1a157af, v1.0.5/1.0.6).
+     */
+    @Volatile
+    private var isDead = false
+
     private val listener = object : CallListenerStub() {
         override fun onStateChanged(call: Call, cstate: Call.State?, message: String) {
             Log.d(TAG, "Call state=$cstate message=$message")
@@ -87,7 +98,11 @@ class CallSession internal constructor(
             // Compute ending BEFORE emitting Disconnected so that any
             // collector observing _state can already read _ending.value.
             if (mapped is SipCallState.Disconnected && _ending.value == null) {
+                // computeEnding() reads the call — do it BEFORE latching
+                // isDead (the call object is still valid inside its own
+                // state callback).
                 _ending.value = computeEnding()
+                isDead = true
                 // The Core is a long-lived singleton: detach our listeners
                 // exactly once when the call ends so the dead session does
                 // not keep reacting to device changes (and leaking).
@@ -109,10 +124,12 @@ class CallSession internal constructor(
      */
     private val coreAudioListener = object : CoreListenerStub() {
         override fun onAudioDevicesListUpdated(core: Core) {
+            if (isDead) return
             applyPreferredRouteAndPublish()
         }
 
         override fun onAudioDeviceChanged(core: Core, audioDevice: AudioDevice) {
+            if (isDead) return
             publishRouteState()
         }
     }
@@ -125,12 +142,14 @@ class CallSession internal constructor(
     }
 
     fun setMuted(muted: Boolean) {
+        if (isDead) return
         call.microphoneMuted = muted
         _isMuted.value = muted
     }
 
     /** Send a DTMF tone (RFC 2833 default in Linphone). */
     fun dtmf(digit: Char) {
+        if (isDead) return
         call.sendDtmf(digit)
     }
 
@@ -140,16 +159,20 @@ class CallSession internal constructor(
      * Headset + Headphones collapse to one WiredHeadset entry) and
      * ordered for stable rendering.
      */
-    fun availableRoutes(): List<AudioRoute> =
-        core.audioDevices
+    fun availableRoutes(): List<AudioRoute> {
+        if (isDead) return emptyList()
+        return core.audioDevices
             .filter { it.hasCapability(AudioDevice.Capabilities.CapabilityPlay) }
             .mapNotNull { it.type.toAudioRouteOrNull() }
             .distinct()
             .sortedBy { DISPLAY_ROUTE_ORDER.indexOf(it) }
+    }
 
     /** The route currently carrying call audio, or `null` if unmapped. */
-    fun currentRoute(): AudioRoute? =
-        call.outputAudioDevice?.type?.toAudioRouteOrNull()
+    fun currentRoute(): AudioRoute? {
+        if (isDead) return null
+        return call.outputAudioDevice?.type?.toAudioRouteOrNull()
+    }
 
     /**
      * Route the call's output to [route] at the agent's explicit request.
@@ -158,6 +181,7 @@ class CallSession internal constructor(
      * playback device existed and was applied.
      */
     fun selectRoute(route: AudioRoute): Boolean {
+        if (isDead) return false
         userPickedRoute = route
         val applied = applyRoute(route)
         publishRouteState()
@@ -171,6 +195,7 @@ class CallSession internal constructor(
      * Called on every device-list change and once at call start.
      */
     private fun applyPreferredRouteAndPublish() {
+        if (isDead) return
         val device = core.audioDevices.preferredPlaybackDevice(
             preferred = userPickedRoute?.takeIf { it in availableRoutes() },
         )
@@ -210,6 +235,7 @@ class CallSession internal constructor(
     }
 
     fun disconnect() {
+        if (isDead) return
         when (call.state) {
             Call.State.End, Call.State.Released, Call.State.Error -> Unit
             else -> {

@@ -77,7 +77,7 @@
     <string name="precall_action_call">LLAMAR</string>
     <string name="precall_action_pause">Pausar</string>
     <string name="precall_action_dismiss">Descartar</string>
-    <string name="precall_call_countdown">%1$s · %2$ds</string>
+    <string name="precall_countdown_dialing">Marcando en %1$d s…</string>
     <string name="precall_note_placeholder">Escribir nueva nota de seguimiento…</string>
     <string name="precall_note_saving">GUARDANDO…</string>
     <string name="precall_note_save">GUARDAR NOTA</string>
@@ -177,10 +177,11 @@
     <string name="clients_missed_reason_missed">Perdida</string>
     <string name="clients_missed_reason_busy">Ocupado</string>
     <string name="clients_missed_call_back">Devolver llamada</string>
-    <string name="clients_bucket_today">Hoy</string>
-    <string name="clients_bucket_yesterday">Ayer</string>
-    <string name="clients_bucket_day_before_yesterday">Antier</string>
-    <string name="clients_bucket_earlier">Más antiguos</string>
+    <string name="clients_bucket_today">Asignados hoy</string>
+    <string name="clients_bucket_yesterday">Asignados ayer</string>
+    <string name="clients_bucket_day_before_yesterday">Asignados antier</string>
+    <string name="clients_bucket_earlier">Asignados hace más tiempo</string>
+    <string name="clients_bucket_assigned_on">Asignados el %1$s</string>
     <plurals name="clients_headline_to_call">
         <item quantity="one">cliente</item>
         <item quantity="other">clientes</item>

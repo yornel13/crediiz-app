@@ -9,6 +9,7 @@ import com.project.vortex.callsagent.common.enums.FollowUpStatus
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
 import com.project.vortex.callsagent.domain.call.CallEndingInsight
+import com.project.vortex.callsagent.domain.call.OutcomeVisibilityPolicy
 import com.project.vortex.callsagent.data.sync.SyncScheduler
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
@@ -71,6 +72,20 @@ data class PostCallUiState(
 ) {
     val showFollowUpForm: Boolean
         get() = selectedOutcome == CallOutcome.INTERESTED
+
+    /**
+     * Outcomes actually rendered as chips: the SIP-derived [allowedOutcomes]
+     * (or the full set as a fallback), further narrowed by the client's
+     * current funnel position via [OutcomeVisibilityPolicy]. Both outcome
+     * selectors read THIS — never [allowedOutcomes] directly — so the
+     * contextual filter can't drift between them.
+     */
+    val visibleOutcomes: List<CallOutcome>
+        get() = OutcomeVisibilityPolicy.contextualAllowedOutcomes(
+            allowed = allowedOutcomes.takeIf { it.isNotEmpty() }
+                ?: CallOutcome.values().filterNot { it == CallOutcome.NO_SELECTED },
+            status = client?.status,
+        )
 
     val canSave: Boolean
         get() {
@@ -403,6 +418,13 @@ class PostCallViewModel @Inject constructor(
                         ?: recoveredInsight?.allowedOutcomes.orEmpty(),
                     reasonLabel = it.reasonLabel ?: recoveredInsight?.reasonLabel,
                 )
+            }
+
+            // Drop a pre-selected outcome the contextual filter now hides
+            // (e.g. recovery suggested INTERESTED but the client already
+            // advanced to CITED). Avoids a phantom selection with no chip.
+            _uiState.update { s ->
+                s.copy(selectedOutcome = s.selectedOutcome?.takeIf { it in s.visibleOutcomes })
             }
         }
     }

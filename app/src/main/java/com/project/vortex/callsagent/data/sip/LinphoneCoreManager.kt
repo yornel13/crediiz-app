@@ -122,6 +122,14 @@ class LinphoneCoreManager(
         _registrationState.asStateFlow()
 
     /**
+     * Cumulative calls placed since process start. Crash-report context:
+     * lets Crashlytics correlate native SIP crashes with call churn
+     * (does the crash happen after N accumulated calls?).
+     */
+    private val _callsPlaced = MutableStateFlow(0)
+    val callsPlaced: StateFlow<Int> = _callsPlaced.asStateFlow()
+
+    /**
      * The account whose registration we currently track. Set when a fresh
      * account is added in [applyAccountAndRegister]. Used to DROP late events
      * from a previously-cleared account: `register()` calls `clearAccounts()`,
@@ -458,6 +466,8 @@ class LinphoneCoreManager(
                 val call = if (toAddress != null) core.inviteAddress(toAddress) else null
                 if (call == null) {
                     Log.e(TAG, "Failed to invite $target")
+                } else {
+                    _callsPlaced.value += 1
                 }
                 if (cont.isActive) {
                     cont.resume(call?.let { CallSession(it, core) })

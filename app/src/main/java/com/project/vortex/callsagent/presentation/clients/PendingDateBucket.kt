@@ -17,14 +17,15 @@ import java.util.Locale
 /**
  * One slice of the "Untouched" feed, grouped by [Client.assignedAt].
  *
- * Buckets are ordered by [sortKey] ascending so the **oldest clients
- * surface at the top** of the list and the freshest assignments sink
- * to the bottom (agent should attend the aging tail first).
+ * Buckets are ordered by [sortKey] descending so the **freshest
+ * assignments surface at the top** of the list and the oldest sink
+ * to the bottom.
  *
  * Buckets (high-level):
  *  - **Older** — `assignedAt` ≥ 8 days ago or `null`.
  *  - **Specific weekday** — between 3 and 7 days ago, labeled like
- *    "Fri 8 May" (rendered in the current locale). Empty days are skipped.
+ *    "Assigned Fri 8 May" (rendered in the current locale). Empty days
+ *    are skipped.
  *  - **2 days ago / Yesterday / Today**.
  *
  * The label is locale-resolved at render time via [resolveLabel] — the
@@ -72,7 +73,7 @@ data class PendingDateBucket(
             }
         }
 
-        /** Eldest possible bucket — always sorts first. */
+        /** Eldest possible bucket — always sorts last. */
         val earlier: PendingDateBucket = PendingDateBucket(
             key = "EARLIER",
             labelRes = R.string.clients_bucket_earlier,
@@ -116,7 +117,9 @@ data class PendingDateBucket(
 
 /**
  * Locale-resolved section label. For the dynamic weekday bucket it formats
- * "Fri 8 May" in the current locale; for fixed buckets it resolves [labelRes].
+ * "Assigned Fri 8 May" / "Asignados el vie 8 may" in the current locale;
+ * for fixed buckets it resolves [labelRes]. The weekday keeps the locale's
+ * natural casing — it sits mid-sentence after the "Assigned" prefix.
  */
 @Composable
 fun PendingDateBucket.resolveLabel(): String {
@@ -125,21 +128,21 @@ fun PendingDateBucket.resolveLabel(): String {
         val locale = Locale.getDefault()
         val weekday = date.dayOfWeek
             .getDisplayName(TextStyle.SHORT, locale)
-            .replaceFirstChar { it.uppercase(locale) }
             .trimEnd('.')
         val rest = date.format(DateTimeFormatter.ofPattern("d MMM", locale))
-        return "$weekday $rest"
+        return stringResource(R.string.clients_bucket_assigned_on, "$weekday $rest")
     }
     return labelRes?.let { stringResource(it) }.orEmpty()
 }
 
 /**
  * Splits a flat list of PENDING-never-called clients into date
- * buckets ordered oldest-first. Within each bucket, clients keep
- * their incoming order (driven by the DAO's `ORDER BY queueOrder ASC`).
+ * buckets ordered newest-first. Within each bucket, clients are
+ * sorted by [Client.assignedAt] descending (most recent on top);
+ * a `null` assignedAt sinks to the end of its bucket.
  *
  * Returns a `LinkedHashMap` so iteration order matches insertion
- * order (oldest to newest), giving the UI a stable render contract.
+ * order (newest to oldest), giving the UI a stable render contract.
  */
 fun groupPendingNeverCalledByAssignedDate(
     clients: List<Client>,
@@ -154,11 +157,13 @@ fun groupPendingNeverCalledByAssignedDate(
     val raw = clients.groupBy { client ->
         PendingDateBucket.forAssignedAt(client.assignedAt, today, zone)
     }
-    // Sort by sortKey ascending (oldest first), preserve insertion
-    // order inside each bucket via LinkedHashMap.
+    // Sort buckets by sortKey descending (newest first). Inside each
+    // bucket, most recent assignment on top; compareByDescending
+    // treats null as smallest, so legacy null rows sink to the end.
+    val newestFirst = compareByDescending<Client> { it.assignedAt }
     val sorted = LinkedHashMap<PendingDateBucket, List<Client>>(raw.size)
     raw.entries
-        .sortedBy { it.key.sortKey }
-        .forEach { (bucket, list) -> sorted[bucket] = list }
+        .sortedByDescending { it.key.sortKey }
+        .forEach { (bucket, list) -> sorted[bucket] = list.sortedWith(newestFirst) }
     return sorted
 }

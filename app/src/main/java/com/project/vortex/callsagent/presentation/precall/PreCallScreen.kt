@@ -96,6 +96,7 @@ fun PreCallScreen(
     // background instead of churning CPU/battery on flows the user
     // can't see. Material for an app that stays open 8h/day.
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val noteDraft by viewModel.noteDraft.collectAsStateWithLifecycle()
     val notes by viewModel.notes.collectAsStateWithLifecycle()
     val nextFollowUp by viewModel.nextFollowUp.collectAsStateWithLifecycle()
     val activity by viewModel.activity.collectAsStateWithLifecycle()
@@ -224,6 +225,7 @@ fun PreCallScreen(
                 client = uiState.client,
                 inAutoCall = autoCallSession != null,
                 countdownSecondsLeft = if (countdownActive) countdownRemaining else null,
+                countdownTotalSeconds = autoCallDelaySeconds,
                 onCall = viewModel::startCall,
                 onSkip = viewModel::skipCurrent,
                 onPauseAutoCall = viewModel::cancelAutoCall,
@@ -253,9 +255,11 @@ fun PreCallScreen(
                 activity = activity,
                 nextFollowUp = nextFollowUp,
                 callReadiness = callReadiness,
+                noteDraft = noteDraft,
                 isSubmittingNote = uiState.isSubmittingNote,
                 showFullActivityHistory = showFullActivityHistory,
                 onRetrySip = viewModel::retrySipRegistration,
+                onNoteDraftChange = viewModel::onNoteDraftChange,
                 onSaveNote = viewModel::saveManualNote,
                 onBack = effectiveOnBack,
                 onRequestStatusChange = { activeSheet = ActiveSheet.StatusChange },
@@ -477,7 +481,13 @@ private fun PreCallContent(
     // scheduling action. See the read-only call site for the wiring.
     callReadiness: CallReadiness? = null,
     onRetrySip: (() -> Unit)? = null,
-    onSaveNote: ((String) -> Unit)? = null,
+    // Note composer state is hoisted to the ViewModel (single source of
+    // truth for the draft — survives item recycling; clearing it after a
+    // successful save is what empties the field). Both callbacks must be
+    // wired for the composer to render.
+    noteDraft: String = "",
+    onNoteDraftChange: ((String) -> Unit)? = null,
+    onSaveNote: (() -> Unit)? = null,
     onBack: (() -> Unit)? = null,
     onRequestSchedule: (() -> Unit)? = null,
 ) {
@@ -583,9 +593,11 @@ private fun PreCallContent(
         // chronologically newest. Hidden in the read-only embed
         // (onSaveNote == null): the note is captured in the left panel
         // there (live note in InCall, post-call note in PostCall).
-        if (onSaveNote != null) {
+        if (onSaveNote != null && onNoteDraftChange != null) {
             item("quick_note") {
                 QuickNoteInline(
+                    text = noteDraft,
+                    onTextChange = onNoteDraftChange,
                     isSubmitting = isSubmittingNote,
                     onSave = onSaveNote,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),

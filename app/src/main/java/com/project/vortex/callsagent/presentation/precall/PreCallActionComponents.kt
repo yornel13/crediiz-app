@@ -1,5 +1,8 @@
 package com.project.vortex.callsagent.presentation.precall
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,6 +33,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -78,8 +82,11 @@ private val NoteInputDashedColor = Color(0xFF34D399)
  * secondary button.
  *
  * Layout precedence (only one secondary slot is visible at a time):
- *  1. **Countdown active** → "Pausar" replaces everything else. Stopping
- *     the auto-dial is the only sensible action while a countdown ticks.
+ *  1. **Countdown active** → "Pausar" replaces everything else, and a
+ *     full-width [AutoCallCountdownStrip] mounts above the button row.
+ *     The strip — not the CTA — owns the countdown display: on compact
+ *     widths the CTA's metadata slot ellipsizes first, which used to
+ *     swallow the ticking seconds entirely.
  *  2. **Auto-call session, no countdown** → Skip on the left, Call in
  *     the middle, Descartar on the right.
  *  3. **Normal (no auto-call)** → Call on the left taking most width,
@@ -95,6 +102,7 @@ internal fun CallActionBar(
     client: Client?,
     inAutoCall: Boolean,
     countdownSecondsLeft: Int?,
+    countdownTotalSeconds: Int,
     onCall: () -> Unit,
     onSkip: () -> Unit,
     onPauseAutoCall: () -> Unit,
@@ -113,7 +121,7 @@ internal fun CallActionBar(
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 16.dp,
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 // Union with WindowInsets.ime so the bottom bar lifts above
@@ -124,11 +132,21 @@ internal fun CallActionBar(
                 // even with the IME open. Without the union, the bar would
                 // remain pinned to the nav-bar inset and the IME would cover
                 // both the bar AND the bottom of the scrollable content.
-                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime)),
         ) {
+            if (countdownSecondsLeft != null) {
+                AutoCallCountdownStrip(
+                    secondsLeft = countdownSecondsLeft,
+                    totalSeconds = countdownTotalSeconds,
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
             // Left slot: Skip is visible during the WHOLE auto-call
             // session — including while the countdown is running.
             // The three actions are non-overlapping:
@@ -145,37 +163,26 @@ internal fun CallActionBar(
                 )
             }
 
-            // Center: primary Call CTA. Single-line horizontal layout
-            // matching the reference mockup exactly:
+            // Center: primary Call CTA. The countdown never renders
+            // here — it owns the strip above the row (see KDoc).
+            //
+            // Expanded/medium (tablet, the shipped form factor):
+            // single-line horizontal layout matching the reference
+            // mockup exactly:
             //   [icon]  LLAMAR  6268-2021
             // — phone icon (dark, 18dp), bold "LLAMAR" verb, then the
             // phone number in a slightly muted weight to push it to
             // a secondary visual register. Dark text on PhoneGreen
             // (not white) — the reference shows the higher-contrast
             // dark-on-saturated-green palette.
-            // Compact-width adaptation: phones have ~360-400dp total;
-            // with Descartar reserving 96dp + paddings, the LLAMAR
-            // button has ~200dp of usable content width. The mockup
-            // sizes (titleMedium icon + label + monospace phone) were
-            // overflowing the phone digit, clipping the last char. On
-            // compact we shrink the icon, drop the label one notch,
-            // and constrain the phone text to a single line with
-            // ellipsis so the layout never breaks. On tablets we
-            // keep the larger mockup sizing.
+            //
+            // Compact (phones ~360-412dp): Saltar + Pausar/Descartar
+            // reserve ~200dp of the row, leaving the CTA too little
+            // width for a single line — the number was ellipsizing
+            // ("61…"). Stack two lines instead: verb row on top, full
+            // phone number underneath. The 60dp button height fits
+            // both comfortably.
             val isCompactBar = WindowSize.isCompactWidth
-            val callIconSize = if (isCompactBar) 16.dp else 18.dp
-            val callLabelStyle = if (isCompactBar) {
-                MaterialTheme.typography.titleSmall
-            } else {
-                MaterialTheme.typography.titleMedium
-            }
-            val callMetaStyle = if (isCompactBar) {
-                MaterialTheme.typography.bodyMedium
-            } else {
-                MaterialTheme.typography.titleMedium
-            }
-            val callSpacerLeft = if (isCompactBar) 8.dp else 10.dp
-            val callSpacerMid = if (isCompactBar) 6.dp else 8.dp
 
             Button(
                 onClick = onCall,
@@ -193,46 +200,63 @@ internal fun CallActionBar(
                     contentColor = Color.Black,
                 ),
             ) {
-                Icon(
-                    // Outlined variant matches the reference mockup —
-                    // the filled phone glyph was reading too heavy
-                    // against the saturated green container.
-                    imageVector = Icons.Outlined.Phone,
-                    contentDescription = null,
-                    modifier = Modifier.size(callIconSize),
-                )
-                Spacer(Modifier.width(callSpacerLeft))
-                Text(
-                    text = stringResource(R.string.precall_action_call),
-                    style = callLabelStyle,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                )
-                Spacer(Modifier.width(callSpacerMid))
-                // Phone number (or countdown when auto-call is running)
-                // in lower-emphasis weight + alpha so the verb leads
-                // the eye and the number reads as metadata. `weight(1f)`
-                // so it gets whatever horizontal space remains;
-                // single-line + ellipsis prevents wrap/clipping if the
-                // number is longer than the slot.
-                val secondary = if (countdownSecondsLeft != null) {
-                    stringResource(
-                        R.string.precall_call_countdown,
-                        client?.phone.orEmpty(),
-                        countdownSecondsLeft,
-                    )
+                if (isCompactBar) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Outlined.Phone,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = stringResource(R.string.precall_action_call),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                            )
+                        }
+                        Text(
+                            text = client?.phone.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Normal,
+                            color = Color.Black.copy(alpha = 0.65f),
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    }
                 } else {
-                    client?.phone.orEmpty()
+                    Icon(
+                        // Outlined variant matches the reference mockup —
+                        // the filled phone glyph was reading too heavy
+                        // against the saturated green container.
+                        imageVector = Icons.Outlined.Phone,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = stringResource(R.string.precall_action_call),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    // Phone number in lower-emphasis weight + alpha so
+                    // the verb leads the eye and the number reads as
+                    // metadata. Single-line + ellipsis prevents
+                    // wrap/clipping if the number is longer than the
+                    // slot.
+                    Text(
+                        text = client?.phone.orEmpty(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Normal,
+                        color = Color.Black.copy(alpha = 0.65f),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
                 }
-                Text(
-                    text = secondary,
-                    style = callMetaStyle,
-                    fontWeight = FontWeight.Normal,
-                    color = Color.Black.copy(alpha = 0.65f),
-                    maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
             }
 
             // Right slot: Pausar wins during countdown; otherwise
@@ -258,7 +282,55 @@ internal fun CallActionBar(
                     enabled = client != null,
                 )
             }
+            }
         }
+    }
+}
+
+/**
+ * Full-width auto-dial countdown mounted above the action-bar row while
+ * the auto-call timer ticks. Owns the countdown display for EVERY form
+ * factor — inside the CTA the seconds were the first thing ellipsis
+ * swallowed on compact widths.
+ *
+ * A draining linear progress bar backs the text: motion communicates
+ * "about to fire" faster than a number swap, and the bar reaches zero
+ * exactly when the call fires (hence `secondsLeft - 1` — the last
+ * animated second lands at 0 as the dial triggers).
+ */
+@Composable
+private fun AutoCallCountdownStrip(
+    secondsLeft: Int,
+    totalSeconds: Int,
+) {
+    // Guard against a 0/negative total (instant-call path never mounts
+    // the strip, but a bad config value must not divide by zero).
+    val safeTotal = totalSeconds.coerceAtLeast(1)
+    val progress by animateFloatAsState(
+        targetValue = (secondsLeft - 1).coerceAtLeast(0) / safeTotal.toFloat(),
+        animationSpec = tween(durationMillis = 1_000, easing = LinearEasing),
+        label = "autoCallCountdown",
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 10.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.precall_countdown_dialing, secondsLeft),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(6.dp))
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxWidth(),
+            // PhoneGreen ties the drain visually to the Call CTA that
+            // is about to fire.
+            color = PhoneGreen,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
+        )
     }
 }
 
@@ -394,40 +466,35 @@ private fun SquareIconActionButton(
  *
  * **Two-state pattern** (mirrors the list-screen SearchField):
  *  - **Idle** — no `BasicTextField` is mounted at all. The box is a
- *    clickable Surface showing the placeholder. Because there's
- *    nothing focusable inside, the IME cannot pop on initial mount
- *    of the PreCall screen (which previously stole focus and lifted
- *    the keyboard the moment the screen appeared).
+ *    clickable Surface showing the current draft (or the placeholder
+ *    when empty). Because there's nothing focusable inside, the IME
+ *    cannot pop on initial mount of the PreCall screen (which
+ *    previously stole focus and lifted the keyboard the moment the
+ *    screen appeared).
  *  - **Active** — full `BasicTextField` with auto-focus + `IME show`
  *    once layout has settled. Collapses back to idle when the agent
  *    blurs the field while it's empty.
  *
- * `text` is local state; on a successful save (`isSubmitting` flips
- * true→false while text was non-empty) the field auto-clears AND
- * collapses back to Idle, releasing the keyboard.
+ * The draft is HOISTED to the ViewModel ([text] + [onTextChange]); this
+ * composable only owns the Idle/Active presentation toggle. Tapping
+ * save collapses to Idle optimistically and drops the IME; the field
+ * then empties when the ViewModel clears the draft on success, or keeps
+ * showing the text (for retry) when the save fails. There is no
+ * submit-edge detection here on purpose: inferring success from an
+ * `isSubmitting` true→false pulse loses the pulse to StateFlow
+ * conflation whenever the local save completes within one frame, which
+ * intermittently left already-saved text sitting in the field.
  */
 @Composable
 internal fun QuickNoteInline(
+    text: String,
+    onTextChange: (String) -> Unit,
     isSubmitting: Boolean,
-    onSave: (String) -> Unit,
+    onSave: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Shared state — outlives both branches so post-save cleanup can
-    // toggle Active→Idle without losing the text/wasSubmitting state.
-    var text by remember { mutableStateOf("") }
     var isActive by remember { mutableStateOf(false) }
-    var wasSubmitting by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
-
-    LaunchedEffect(isSubmitting) {
-        if (wasSubmitting && !isSubmitting && text.isNotEmpty()) {
-            // Save succeeded: clear text, drop IME, return to Idle.
-            text = ""
-            keyboardController?.hide()
-            isActive = false
-        }
-        wasSubmitting = isSubmitting
-    }
 
     // Subtle lime-green dashed border — signals "this is an active
     // input zone for new content" while staying quiet enough not to
@@ -439,30 +506,41 @@ internal fun QuickNoteInline(
 
     if (!isActive) {
         // ── IDLE ──
-        // Visually identical to Active (same dashed box, same
-        // placeholder, same character counter "0 CARACTERES", same
-        // disabled "+ GUARDAR NOTA" pill) — but with NO TextField
-        // and NO focus targets, so the screen mount cannot steal
-        // focus and pop the keyboard. A tap anywhere on the box
-        // flips us to Active.
+        // Visually identical to Active (same dashed box, same character
+        // counter, same disabled "+ GUARDAR NOTA" pill) — but with NO
+        // TextField and NO focus targets, so the screen mount cannot
+        // steal focus and pop the keyboard. A tap anywhere on the box
+        // flips us to Active. Renders the hoisted draft when non-empty:
+        // a draft kept after a failed save (or restored after the
+        // LazyColumn recycled this item) stays visible instead of
+        // silently vanishing behind the placeholder.
         Box(
             modifier = modifier
                 .fillMaxWidth()
                 .drawDashedBorder(color = borderColor)
-                .clickable { isActive = true }
+                .clickable(enabled = !isSubmitting) { isActive = true }
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             Column {
                 Text(
-                    text = stringResource(R.string.precall_note_placeholder),
+                    text = text.ifEmpty {
+                        stringResource(R.string.precall_note_placeholder)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (text.isEmpty()) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 72.dp),
                 )
                 Spacer(Modifier.height(8.dp))
-                IdleNoteBottomStrip()
+                IdleNoteBottomStrip(
+                    charCount = text.length,
+                    isSubmitting = isSubmitting,
+                )
             }
         }
         return
@@ -481,7 +559,7 @@ internal fun QuickNoteInline(
         Column {
             BasicTextField(
                 value = text,
-                onValueChange = { text = it },
+                onValueChange = onTextChange,
                 enabled = !isSubmitting,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                     color = MaterialTheme.colorScheme.onSurface,
@@ -538,7 +616,16 @@ internal fun QuickNoteInline(
                     modifier = Modifier.weight(1f),
                 )
                 TextButton(
-                    onClick = { onSave(text) },
+                    onClick = {
+                        // Optimistic collapse: drop the IME and return to
+                        // Idle right away. Idle renders the draft, which
+                        // the ViewModel clears on success (placeholder
+                        // returns) or preserves on failure (text stays
+                        // visible for retry, next to the error snackbar).
+                        keyboardController?.hide()
+                        isActive = false
+                        onSave()
+                    },
                     enabled = !isSubmitting && text.isNotBlank(),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                     shape = PillShape,
@@ -579,17 +666,25 @@ internal fun QuickNoteInline(
 /**
  * Static visual sibling of the Active mode's bottom strip — used in
  * Idle so the box has the same height/density in both states (avoids
- * a layout shift when toggling). The save button is force-disabled
- * because there's no text to save in Idle.
+ * a layout shift when toggling). The save button is force-disabled:
+ * saving happens from Active; Idle only mirrors the draft length and
+ * the in-flight "Guardando…" label after the optimistic collapse.
  */
 @Composable
-private fun IdleNoteBottomStrip() {
+private fun IdleNoteBottomStrip(
+    charCount: Int,
+    isSubmitting: Boolean,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = pluralStringResource(R.plurals.precall_note_char_count, 0, 0),
+            text = pluralStringResource(
+                R.plurals.precall_note_char_count,
+                charCount,
+                charCount,
+            ),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = FontWeight.Medium,
@@ -611,7 +706,11 @@ private fun IdleNoteBottomStrip() {
             )
             Spacer(Modifier.width(4.dp))
             Text(
-                text = stringResource(R.string.precall_note_save),
+                text = if (isSubmitting) {
+                    stringResource(R.string.precall_note_saving)
+                } else {
+                    stringResource(R.string.precall_note_save)
+                },
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
             )

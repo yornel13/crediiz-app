@@ -434,10 +434,10 @@ private fun CompactOutcomeSelector(
     onDateChange: (LocalDate) -> Unit,
     onTimeChange: (LocalTime) -> Unit,
 ) {
-    val outcomesToShow = state.allowedOutcomes.takeIf { it.isNotEmpty() }
-        // NO_SELECTED is a placeholder, never a pickable button — exclude it
-        // from the catch-all fallback shown when no allow-list was provided.
-        ?: CallOutcome.values().filterNot { it == CallOutcome.NO_SELECTED }
+    // Single source of truth: the ViewModel already narrows the SIP-allowed
+    // set by the client's funnel position (OutcomeVisibilityPolicy) and
+    // applies the all-but-NO_SELECTED fallback. Selectors stay dumb.
+    val outcomesToShow = state.visibleOutcomes
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         FlowRow(
@@ -493,10 +493,10 @@ private fun OutcomeSelector(
     onDateChange: (LocalDate) -> Unit,
     onTimeChange: (LocalTime) -> Unit,
 ) {
-    val outcomesToShow = state.allowedOutcomes.takeIf { it.isNotEmpty() }
-        // NO_SELECTED is a placeholder, never a pickable button — exclude it
-        // from the catch-all fallback shown when no allow-list was provided.
-        ?: CallOutcome.values().filterNot { it == CallOutcome.NO_SELECTED }
+    // Single source of truth: the ViewModel already narrows the SIP-allowed
+    // set by the client's funnel position (OutcomeVisibilityPolicy) and
+    // applies the all-but-NO_SELECTED fallback. Selectors stay dumb.
+    val outcomesToShow = state.visibleOutcomes
     // Stable order: backend enum declaration order is already the order
     // HOW_IT_WORKS §5 prescribes (answered outcomes first, then the
     // non-answered ones).
