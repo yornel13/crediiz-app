@@ -2,6 +2,7 @@ package com.project.vortex.callsagent.data.remote.api
 
 import com.project.vortex.callsagent.data.remote.dto.AgentStatusChangeDto
 import com.project.vortex.callsagent.data.remote.dto.ApiEnvelope
+import com.project.vortex.callsagent.data.remote.dto.ClientActivityResponse
 import com.project.vortex.callsagent.data.remote.dto.ClientResponse
 import com.project.vortex.callsagent.data.remote.dto.StatusHistoryResponse
 import com.project.vortex.callsagent.data.remote.dto.UpsertQuotationDto
@@ -52,6 +53,20 @@ interface ClientsApi {
         @Query("page") page: Int = 1,
         @Query("limit") limit: Int = 50,
     ): ApiEnvelope<StatusHistoryResponse>
+
+    /**
+     * Server-side activity history for one client: notes + call
+     * interactions from ANY actor (N:M assignment — other agents' events
+     * included). Used to re-hydrate the local cache on client-detail open.
+     * STATUS_CHANGE notes are excluded server-side (they come from
+     * [getStatusHistory]). `AGENT` may only read clients assigned to them
+     * (403 otherwise); newest-first, [limit] applied per category.
+     */
+    @GET("clients/{id}/activity")
+    suspend fun getActivity(
+        @Path("id") clientId: String,
+        @Query("limit") limit: Int = 500,
+    ): ApiEnvelope<ClientActivityResponse>
 
     /**
      * Upsert the client's quotation (idempotent full-object replace).

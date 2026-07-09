@@ -58,6 +58,14 @@ sealed interface ActivityEvent {
         override val agentId: String?,
         val content: String,
         val type: NoteType,
+        /**
+         * Display name of whoever wrote the note (author snapshot). With
+         * N:M assignment the timeline shows other agents' notes — the
+         * agent needs to see WHO left each one. Null on pre-v13 rows.
+         */
+        val authorName: String? = null,
+        /** Raw author role ("AGENT"/"ADMIN") — drives the Admin suffix. */
+        val authorRole: String? = null,
     ) : ActivityEvent {
         override val stableKey: String
             get() = "note:${occurredAt.toEpochMilli()}:${content.hashCode()}"

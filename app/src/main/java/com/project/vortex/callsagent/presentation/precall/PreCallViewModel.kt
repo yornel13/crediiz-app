@@ -1,5 +1,6 @@
 package com.project.vortex.callsagent.presentation.precall
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.project.vortex.callsagent.R
@@ -17,6 +18,7 @@ import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
 import com.project.vortex.callsagent.domain.model.Note
 import com.project.vortex.callsagent.domain.model.ActivityEvent
+import com.project.vortex.callsagent.domain.repository.ClientActivityRepository
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
 import com.project.vortex.callsagent.domain.repository.InteractionRepository
@@ -40,6 +42,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.UUID
+
+private const val TAG = "PreCallViewModel"
 
 data class PreCallUiState(
     val isLoading: Boolean = true,
@@ -78,6 +82,7 @@ sealed interface PreCallEvent {
 class PreCallViewModel @AssistedInject constructor(
     @Assisted private val clientIdArg: String,
     private val clientRepository: ClientRepository,
+    private val clientActivityRepository: ClientActivityRepository,
     private val noteRepository: NoteRepository,
     private val followUpRepository: FollowUpRepository,
     private val interactionRepository: InteractionRepository,
@@ -527,9 +532,11 @@ class PreCallViewModel @AssistedInject constructor(
             val noteEvents = notes.map { note ->
                 ActivityEvent.NoteEntry(
                     occurredAt = note.deviceCreatedAt,
-                    agentId = null,
+                    agentId = note.authorId,
                     content = note.content,
                     type = note.type,
+                    authorName = note.authorName,
+                    authorRole = note.authorRole,
                 )
             }
             val callEvents = calls.map { call ->
@@ -564,6 +571,22 @@ class PreCallViewModel @AssistedInject constructor(
     init {
         observeClient()
         loadStatusHistory()
+        hydrateActivity()
+    }
+
+    /**
+     * Pull the server-side notes + interactions into Room so the timeline
+     * survives local-cache loss (agent-change wipe, fresh install) and
+     * shows other agents' activity on shared clients (N:M assignment).
+     * Runs on every detail open — the insert-if-absent merge makes it
+     * idempotent and cheap. Best-effort like [loadStatusHistory]: on
+     * failure the timeline just shows whatever Room already has.
+     */
+    private fun hydrateActivity() {
+        viewModelScope.launch {
+            clientActivityRepository.hydrate(clientId)
+                .onFailure { Log.w(TAG, "Activity hydration failed for $clientId", it) }
+        }
     }
 
     /**

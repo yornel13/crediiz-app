@@ -20,10 +20,16 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
+
+/** Upper bound for the pre-logout PENDING drain (see [SettingsViewModel.logout]). */
+private const val LOGOUT_DRAIN_TIMEOUT_MS = 10_000L
 
 data class SettingsUiState(
     val agentName: String = "",
@@ -40,6 +46,10 @@ data class SettingsUiState(
     /** False when any onboarding permission (required or optional, e.g.
      * Bluetooth) is still ungranted — drives the Settings permissions row. */
     val permissionsGranted: Boolean = true,
+    /** True from the sign-out tap until the session teardown finishes —
+     * disables the button (no concurrent logouts) and shows progress
+     * during the pre-logout PENDING drain (up to 10 s on bad network). */
+    val isLoggingOut: Boolean = false,
 )
 
 sealed interface SettingsEvent {
@@ -51,7 +61,7 @@ class SettingsViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val settingsPreferences: SettingsPreferences,
     private val syncScheduler: SyncScheduler,
-    syncManager: SyncManager,
+    private val syncManager: SyncManager,
     private val interactionRepository: InteractionRepository,
     private val noteRepository: NoteRepository,
     private val followUpRepository: FollowUpRepository,
@@ -67,6 +77,9 @@ class SettingsViewModel @Inject constructor(
      * row reflects grants the user made in system Settings or onboarding. */
     private val _permissionsGranted = MutableStateFlow(onboardingGate.allGranted())
 
+    /** Latch for [logout] — set once, never reset (the session ends). */
+    private val _isLoggingOut = MutableStateFlow(false)
+
     val uiState: StateFlow<SettingsUiState> = combine(
         authRepository.agentNameFlow(),
         authRepository.agentEmailFlow(),
@@ -80,6 +93,7 @@ class SettingsViewModel @Inject constructor(
         settingsPreferences.showFullActivityHistoryFlow,
         settingsPreferences.appLanguageFlow,
         _permissionsGranted,
+        _isLoggingOut,
     ) { values ->
         SettingsUiState(
             agentName = (values[0] as String?).orEmpty(),
@@ -94,6 +108,7 @@ class SettingsViewModel @Inject constructor(
             showFullActivityHistory = values[9] as Boolean,
             appLanguage = values[10] as AppLanguage,
             permissionsGranted = values[11] as Boolean,
+            isLoggingOut = values[12] as Boolean,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -134,10 +149,31 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun logout() {
+        // Latch: a second tap (or re-entry) during the drain must not
+        // stack concurrent logout sequences.
+        if (!_isLoggingOut.compareAndSet(expect = false, update = true)) return
+
         viewModelScope.launch {
-            authRepository.logout()
-            syncScheduler.cancelAll()
-            _events.send(SettingsEvent.LoggedOut)
+            try {
+                // Best-effort drain: push PENDING rows while the JWT is
+                // still valid. Bounded so a dead network can't hold the
+                // logout hostage; on timeout/failure nothing is lost —
+                // Room survives logout and the rows sync on this agent's
+                // next login.
+                withTimeoutOrNull(LOGOUT_DRAIN_TIMEOUT_MS) { syncManager.syncAll() }
+            } finally {
+                // The teardown must survive this ViewModel being cleared
+                // (back press mid-drain cancels viewModelScope): without
+                // NonCancellable the JWT, SIP registration and sync
+                // workers would all outlive the "sign out" tap.
+                withContext(NonCancellable) {
+                    authRepository.logout()
+                }
+                // trySend: safe inside a cancelled coroutine (not suspend).
+                // If the screen is gone nobody collects it — the dead
+                // session then routes to login via the auth gate.
+                _events.trySend(SettingsEvent.LoggedOut)
+            }
         }
     }
 

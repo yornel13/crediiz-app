@@ -14,6 +14,15 @@ interface InteractionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(interaction: InteractionEntity)
 
+    /**
+     * Server-hydration insert. IGNORE (not REPLACE) on purpose: an existing
+     * row may be a PENDING re-classification from Post-Call the server
+     * hasn't seen, or carries local-only state the server can't provide
+     * (`confirmedByAgent`). Hydration must never clobber local rows.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(interactions: List<InteractionEntity>)
+
     @Query("SELECT * FROM interactions WHERE syncStatus = :status ORDER BY deviceCreatedAt ASC")
     suspend fun findBySyncStatus(status: SyncStatus): List<InteractionEntity>
 

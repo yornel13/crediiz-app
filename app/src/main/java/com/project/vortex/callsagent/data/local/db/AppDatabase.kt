@@ -20,9 +20,13 @@ import com.project.vortex.callsagent.data.local.entity.NoteEntity
         LocalAgentStatusChangeEntity::class,
     ],
     // v12: ClientEntity.agentCallAttempts (per-agent attempt count from the
-    // server, drives the "Sin llamar" vs "Para reintentar" split). Destructive
-    // migration is fine — the DB is a disposable cache of server state.
-    version = 12,
+    // server, drives the "Sin llamar" vs "Para reintentar" split).
+    // v13: NoteEntity author snapshot (authorId/Name/Role) — first MANUAL
+    // migration (Migrations.kt). Since the identity-keyed-wipe model, Room
+    // is NOT a disposable cache anymore: it holds un-synced PENDING rows
+    // that survive logout, so destructive migration would destroy field
+    // data. Every schema change from here on needs a hand-written step.
+    version = 13,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)

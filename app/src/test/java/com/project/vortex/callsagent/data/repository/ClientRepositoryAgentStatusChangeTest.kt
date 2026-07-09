@@ -13,6 +13,7 @@ import com.project.vortex.callsagent.data.local.entity.LocalAgentStatusChangeEnt
 import com.project.vortex.callsagent.data.remote.api.ClientsApi
 import com.project.vortex.callsagent.data.remote.dto.AgentStatusChangeDto
 import com.project.vortex.callsagent.data.remote.dto.ApiEnvelope
+import com.project.vortex.callsagent.data.remote.dto.ClientActivityResponse
 import com.project.vortex.callsagent.data.remote.dto.ClientResponse
 import com.project.vortex.callsagent.data.remote.dto.StatusHistoryResponse
 import com.project.vortex.callsagent.data.remote.dto.UpsertQuotationDto
@@ -260,6 +261,11 @@ class ClientRepositoryAgentStatusChangeTest {
             page: Int,
             limit: Int,
         ): ApiEnvelope<StatusHistoryResponse> = error("not used")
+
+        override suspend fun getActivity(
+            clientId: String,
+            limit: Int,
+        ): ApiEnvelope<ClientActivityResponse> = error("not used")
 
         override suspend fun upsertQuotation(
             clientId: String,

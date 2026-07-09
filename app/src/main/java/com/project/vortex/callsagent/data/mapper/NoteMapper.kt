@@ -22,6 +22,9 @@ fun NoteEntity.toDomain(): Note = Note(
     type = type,
     deviceCreatedAt = deviceCreatedAt,
     syncStatus = syncStatus,
+    authorId = authorId,
+    authorName = authorName,
+    authorRole = authorRole,
 )
 
 fun NoteEntity.toSyncDto(): SyncNoteDto = SyncNoteDto(

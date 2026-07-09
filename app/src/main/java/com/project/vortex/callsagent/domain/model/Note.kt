@@ -12,4 +12,13 @@ data class Note(
     val type: NoteType,
     val deviceCreatedAt: Instant,
     val syncStatus: SyncStatus,
+    /**
+     * Author snapshot — session agent for locally-created notes (stamped by
+     * the repository at save time), server snapshot for hydrated ones.
+     * Null on pre-v13 rows. Display-only: the sync push never sends it
+     * (the server derives authorship from the JWT).
+     */
+    val authorId: String? = null,
+    val authorName: String? = null,
+    val authorRole: String? = null,
 )

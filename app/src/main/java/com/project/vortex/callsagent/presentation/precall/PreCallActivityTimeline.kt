@@ -315,9 +315,20 @@ private fun CallActivityRow(event: ActivityEvent.Call, modifier: Modifier) {
  */
 @Composable
 private fun NoteActivityRow(event: ActivityEvent.NoteEntry, modifier: Modifier) {
+    // Author attribution in the meta slot ("Nota · Ana"). With N:M
+    // assignment the timeline carries other agents' (and admins') notes,
+    // so the reader must see who wrote each one. Pre-v13 rows have no
+    // author snapshot → no meta, same rendering as before.
+    val author = event.authorName?.let { name ->
+        if (event.authorRole == "ADMIN") {
+            stringResource(R.string.precall_activity_note_author_admin, name)
+        } else {
+            name
+        }
+    }
     ActivityRowPlain(
         title = stringResource(R.string.precall_activity_note),
-        meta = null,
+        meta = author,
         timestamp = formatActivityTimestamp(event.occurredAt),
         body = event.content,
         icon = Icons.AutoMirrored.Filled.Notes,

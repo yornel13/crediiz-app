@@ -55,6 +55,7 @@
     <string name="precall_relative_tomorrow">mañana</string>
     <string name="precall_activity_call">Llamada</string>
     <string name="precall_activity_note">Nota</string>
+    <string name="precall_activity_note_author_admin">%1$s (Admin)</string>
     <string name="precall_activity_status_change">Cambio de estado</string>
     <string name="precall_role_admin">Admin</string>
     <string name="precall_role_agent">Agente</string>
@@ -225,6 +226,7 @@
 
     <!-- ============================== Settings ============================== -->
     <string name="settings_sign_out">Cerrar sesión</string>
+    <string name="settings_signing_out">Cerrando sesión…</string>
     <string name="settings_account">Cuenta</string>
     <string name="settings_permissions">Permisos</string>
     <string name="settings_permissions_missing">Faltan permisos</string>

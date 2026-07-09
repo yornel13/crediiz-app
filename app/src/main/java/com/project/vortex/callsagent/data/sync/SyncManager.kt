@@ -1,6 +1,8 @@
 package com.project.vortex.callsagent.data.sync
 
 import android.util.Log
+import com.project.vortex.callsagent.data.local.preferences.AuthPreferences
+import com.project.vortex.callsagent.data.local.preferences.DeviceOwnerPreferences
 import com.project.vortex.callsagent.data.mapper.toCompletedSyncDto
 import com.project.vortex.callsagent.data.mapper.toSyncDto
 import com.project.vortex.callsagent.data.remote.api.SyncApi
@@ -15,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -43,6 +46,8 @@ class SyncManager @Inject constructor(
     private val followUpRepo: FollowUpRepository,
     private val clientRepo: ClientRepository,
     private val inCallGate: InCallGate,
+    private val authPreferences: AuthPreferences,
+    private val deviceOwnerPreferences: DeviceOwnerPreferences,
 ) {
     private val mutex = Mutex()
 
@@ -72,7 +77,42 @@ class SyncManager @Inject constructor(
         }
     }
 
+    /**
+     * Identity gate (see [SyncIdentityPolicy]). Evaluated at the start of a
+     * sync AND re-checked right before the network push: sync runs on
+     * WorkManager, whose in-flight workers survive cancelAll() and whose
+     * retries back off for minutes, so a worker can straddle a
+     * logout→login boundary. The server attributes pushed rows to the JWT
+     * agent, so pushing another owner's rows would corrupt authorship.
+     *
+     * Returns the agent id the push is authorized for, or null when the
+     * push must not happen. Returning the ID (not a boolean) lets the
+     * caller pin the authorized identity and later verify it is UNCHANGED
+     * — a boolean re-check would pass after a completed A→B login because
+     * both session and owner move together (current-vs-current compares
+     * B to B while the collected rows still belong to A).
+     */
+    private suspend fun identityAllowsPush(): String? {
+        val session = authPreferences.agentIdFlow.first()
+        return when (SyncIdentityPolicy.evaluate(session, deviceOwnerPreferences.currentOwner())) {
+            IdentityCheck.CONSISTENT -> session
+            IdentityCheck.ADOPT_SESSION -> {
+                // One-time migration for devices that predate ownership
+                // tracking: the rows were produced by this session's agent.
+                deviceOwnerPreferences.setOwner(requireNotNull(session))
+                Log.i(TAG, "Data ownership adopted by active session")
+                session
+            }
+            IdentityCheck.BLOCKED -> {
+                Log.w(TAG, "Sync skipped — session/data-owner identity mismatch or no session")
+                null
+            }
+        }
+    }
+
     private suspend fun performSync(): SyncResult {
+        val authorizedAgent = identityAllowsPush() ?: return SyncResult.Idle
+
         val interactions = interactionRepo.pendingSync()
         val notes = noteRepo.pendingSync()
         val newFollowUps = followUpRepo.pendingCreationSync()
@@ -97,6 +137,17 @@ class SyncManager @Inject constructor(
                 .mapNotNull { it.toCompletedSyncDto() }
                 .takeIf { it.isNotEmpty() },
         )
+
+        // Re-check at the last responsible moment: a login could have landed
+        // between collecting the PENDING rows above (they are in-memory
+        // copies — the identity-keyed wipe cannot recall them) and this
+        // push. The identity must be EXACTLY the one the rows were
+        // collected under: a completed A→B login yields a consistent B/B
+        // pair, so only the pinned comparison catches it. Aborting leaves
+        // every row PENDING — safe for a same-agent retry. Residual window
+        // (login completing between this line and the interceptor reading
+        // the token) is micro-seconds; accepted and documented.
+        if (identityAllowsPush() != authorizedAgent) return SyncResult.Idle
 
         val envelope = syncApi.sync(request)
         val response = envelope.data

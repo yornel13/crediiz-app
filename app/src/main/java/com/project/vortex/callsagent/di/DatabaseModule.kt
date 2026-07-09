@@ -2,6 +2,7 @@ package com.project.vortex.callsagent.di
 
 import android.content.Context
 import androidx.room.Room
+import com.project.vortex.callsagent.data.local.db.ALL_MIGRATIONS
 import com.project.vortex.callsagent.data.local.db.AppDatabase
 import com.project.vortex.callsagent.data.local.db.ClientDao
 import com.project.vortex.callsagent.data.local.db.FollowUpDao
@@ -28,11 +29,13 @@ object DatabaseModule {
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME,
         )
-            // DEV policy during the 5-state model migration: the local DB
-            // is a disposable cache of server state, so we wipe and rebuild
-            // it on any schema change instead of writing data migrations.
-            // Re-evaluate before the production cutover — a release build
-            // must NOT destroy unsynced queue rows in the field.
+            // Forward schema changes ship hand-written migrations (see
+            // Migrations.kt): since the identity-keyed-wipe model, Room
+            // holds un-synced PENDING rows across logouts, so destroying
+            // it on a version bump would lose field data. The destructive
+            // fallback remains ONLY as a last resort for downgrades or a
+            // missing-migration bug — never as the upgrade strategy.
+            .addMigrations(*ALL_MIGRATIONS)
             .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
 

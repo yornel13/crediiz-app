@@ -14,6 +14,16 @@ interface NoteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(note: NoteEntity)
 
+    /**
+     * Server-hydration insert. IGNORE (not REPLACE) on purpose: an existing
+     * row is either a PENDING local write the server hasn't seen (replacing
+     * it with the stale server copy would silently destroy it and it would
+     * never push) or an already-hydrated/SYNCED row that can't differ —
+     * notes are append-only in this domain. Never clobber local state.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(notes: List<NoteEntity>)
+
     @Query("SELECT * FROM notes WHERE clientId = :clientId ORDER BY deviceCreatedAt DESC")
     fun observeByClient(clientId: String): Flow<List<NoteEntity>>
 
