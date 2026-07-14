@@ -9,7 +9,9 @@ import com.project.vortex.callsagent.common.enums.FollowUpStatus
 import com.project.vortex.callsagent.common.enums.NoteType
 import com.project.vortex.callsagent.common.enums.SyncStatus
 import com.project.vortex.callsagent.domain.call.CallEndingInsight
+import com.project.vortex.callsagent.domain.call.FollowUpCadencePolicy
 import com.project.vortex.callsagent.domain.call.OutcomeVisibilityPolicy
+import com.project.vortex.callsagent.domain.call.schedulesFollowUp
 import com.project.vortex.callsagent.data.sync.SyncScheduler
 import com.project.vortex.callsagent.domain.model.Client
 import com.project.vortex.callsagent.domain.model.FollowUp
@@ -26,6 +28,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -69,9 +72,19 @@ data class PostCallUiState(
      * Null on the orphan path or when the call answered.
      */
     val reasonLabel: String? = null,
+
+    /**
+     * The client's next FUTURE pending follow-up at screen-open time, when
+     * one exists. Pre-fills the follow-up form so a re-confirmation
+     * ("Continúa interesado" / "Continúa citado") defaults to keeping the
+     * schedule that is already in place — the agent only touches the picker
+     * to reschedule. Also feeds [FollowUpCadencePolicy] at save time to
+     * decide keep-vs-supersede.
+     */
+    val existingFollowUp: FollowUp? = null,
 ) {
     val showFollowUpForm: Boolean
-        get() = selectedOutcome == CallOutcome.INTERESTED
+        get() = selectedOutcome?.schedulesFollowUp == true
 
     /**
      * Outcomes actually rendered as chips: the SIP-derived [allowedOutcomes]
@@ -94,7 +107,7 @@ data class PostCallUiState(
             // call — it must never count as a real choice, so saving stays
             // disabled until the agent picks an actual outcome.
             if (selectedOutcome == null || selectedOutcome == CallOutcome.NO_SELECTED) return false
-            return if (selectedOutcome == CallOutcome.INTERESTED) {
+            return if (selectedOutcome.schedulesFollowUp) {
                 followUpDate != null &&
                     followUpTime != null &&
                     isFollowUpInFuture()
@@ -102,7 +115,7 @@ data class PostCallUiState(
         }
 
     val followUpDateTimeError: String?
-        get() = if (selectedOutcome == CallOutcome.INTERESTED &&
+        get() = if (selectedOutcome?.schedulesFollowUp == true &&
             followUpDate != null &&
             followUpTime != null &&
             !isFollowUpInFuture()
@@ -248,34 +261,7 @@ class PostCallViewModel @Inject constructor(
                     clientRepository.updateLastNoteLocally(clientId, state.noteText.trim())
                 }
 
-                // 4. Schedule a follow-up if Interested.
-                if (outcome == CallOutcome.INTERESTED) {
-                    val date = state.followUpDate ?: error("date required")
-                    val time = state.followUpTime ?: error("time required")
-                    val scheduledAt = date.atTime(time).atZone(zone).toInstant()
-                    // The optional Note above already covers the "agent
-                    // wants to write context" case — follow-up reason was
-                    // redundant. We send an empty string so the existing
-                    // backend contract (reason: string, non-optional)
-                    // keeps working without a deploy.
-                    val followUp = FollowUp(
-                        mobileSyncId = UUID.randomUUID().toString(),
-                        clientId = clientId,
-                        clientName = state.client?.name,
-                        clientPhone = state.client?.phone,
-                        interactionMobileSyncId = interaction.mobileSyncId,
-                        scheduledAt = scheduledAt,
-                        reason = "",
-                        status = FollowUpStatus.PENDING,
-                        completedAt = null,
-                        deviceCreatedAt = Instant.now(),
-                        syncStatus = SyncStatus.PENDING,
-                        completionSyncStatus = SyncStatus.SYNCED,
-                    )
-                    followUpRepository.save(followUp)
-                }
-
-                // 5. Auto-close any past-due follow-ups for this client.
+                // 4. Auto-close any past-due follow-ups for this client.
                 //    Policy (see FollowUpRepository.markPendingForClientCompleted):
                 //    a call that just happened satisfies the "llamar a este
                 //    cliente" obligation of every PENDING follow-up whose
@@ -291,10 +277,59 @@ class PostCallViewModel @Inject constructor(
                 //    The closed rows get completionSyncStatus = PENDING via
                 //    the DAO update, so the next sync push propagates the
                 //    closure to the backend automatically.
+                //
+                //    MUST run BEFORE step 5: past-due rows have to earn their
+                //    COMPLETED (+ completion push) before the reschedule sweep
+                //    below cancels whatever is still active.
                 followUpRepository.markPendingForClientCompleted(
                     clientId = clientId,
                     asOf = Instant.now(),
                 )
+
+                // 5. Follow-up cadence for INTERESTED / SCHEDULED — first
+                //    time AND re-confirmations ("Continúa interesado" /
+                //    "Continúa citado"). FollowUpCadencePolicy decides:
+                //    - KEEP: pure re-confirmation with the pre-filled
+                //      schedule untouched → the existing PENDING row already
+                //      IS the next contact; nothing to write or push.
+                //    - SUPERSEDE: everything else → cancel the surviving
+                //      future row locally (mirror of the backend's "latest
+                //      schedule wins" in FollowUpsService.create — no cancel
+                //      push exists) and insert the fresh follow-up.
+                if (outcome.schedulesFollowUp) {
+                    val date = state.followUpDate ?: error("date required")
+                    val time = state.followUpTime ?: error("time required")
+                    val scheduledAt = date.atTime(time).atZone(zone).toInstant()
+                    val keepExisting = FollowUpCadencePolicy.shouldKeepExistingFollowUp(
+                        outcome = outcome,
+                        clientStatus = state.client?.status,
+                        existingScheduledAt = state.existingFollowUp?.scheduledAt,
+                        newScheduledAt = scheduledAt,
+                    )
+                    if (!keepExisting) {
+                        followUpRepository.cancelActiveForClientLocally(clientId)
+                        // The optional Note above already covers the "agent
+                        // wants to write context" case — follow-up reason was
+                        // redundant. We send an empty string so the existing
+                        // backend contract (reason: string, non-optional)
+                        // keeps working without a deploy.
+                        val followUp = FollowUp(
+                            mobileSyncId = UUID.randomUUID().toString(),
+                            clientId = clientId,
+                            clientName = state.client?.name,
+                            clientPhone = state.client?.phone,
+                            interactionMobileSyncId = interaction.mobileSyncId,
+                            scheduledAt = scheduledAt,
+                            reason = "",
+                            status = FollowUpStatus.PENDING,
+                            completedAt = null,
+                            deviceCreatedAt = Instant.now(),
+                            syncStatus = SyncStatus.PENDING,
+                            completionSyncStatus = SyncStatus.SYNCED,
+                        )
+                        followUpRepository.save(followUp)
+                    }
+                }
             }
                 .onSuccess {
                     syncScheduler.triggerImmediateSync()
@@ -398,11 +433,29 @@ class PostCallViewModel @Inject constructor(
                 CallEndingInsight.fromPersistedCause(interaction.disconnectCause)
             } else null
 
+            // Client's next FUTURE pending follow-up (the one the auto-close
+            // in save() deliberately preserves). Pre-fills the follow-up form
+            // so a re-confirmation defaults to keeping the schedule already
+            // in place; FollowUpCadencePolicy compares against it at save
+            // time. Past-due rows never pre-fill — they are satisfied by
+            // this very call and auto-closed on save.
+            val existingFollowUp = runCatching {
+                followUpRepository
+                    .observeNextPendingForClient(clientId, Instant.now())
+                    .first()
+            }.getOrNull()
+            val prefill = existingFollowUp
+                ?.scheduledAt
+                ?.atZone(BusinessConfig.BUSINESS_TIMEZONE)
+
             _uiState.update {
                 it.copy(
                     isLoading = false,
                     client = client,
                     interaction = interaction,
+                    existingFollowUp = existingFollowUp,
+                    followUpDate = prefill?.toLocalDate(),
+                    followUpTime = prefill?.toLocalTime(),
                     // Prefilled outcome wins over the placeholder stored in the
                     // interaction itself, which in turn wins over a recovered
                     // insight. NO_SELECTED is stripped so an unclassified

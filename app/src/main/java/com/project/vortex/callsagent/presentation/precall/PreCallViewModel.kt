@@ -134,6 +134,14 @@ class PreCallViewModel @AssistedInject constructor(
             when (result) {
                 is com.project.vortex.callsagent.domain.result.OperationResult.Success -> {
                     val changed = result.value == toStatus
+                    if (changed) {
+                        // Pull fresh server state now (refreshAgenda included)
+                        // so the follow-ups the backend just cancelled (BE-04)
+                        // reconcile without waiting for the periodic sync.
+                        // The local cascade already hid them; this converges
+                        // the mirrors.
+                        syncScheduler.triggerImmediateSync()
+                    }
                     _snackbar.send(
                         com.project.vortex.callsagent.presentation.common.SnackbarMessage(
                             textRes = if (changed) {

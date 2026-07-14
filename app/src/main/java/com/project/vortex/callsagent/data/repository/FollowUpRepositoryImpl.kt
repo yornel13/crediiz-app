@@ -71,6 +71,11 @@ class FollowUpRepositoryImpl @Inject constructor(
         dao.markPendingCompletedForClient(clientId, asOf)
     }
 
+    override suspend fun cancelActiveForClientLocally(clientId: String): Int =
+        withContext(Dispatchers.IO) {
+            dao.cancelActiveForClient(clientId)
+        }
+
     override suspend fun pendingCreationSync(): List<FollowUp> = withContext(Dispatchers.IO) {
         dao.findBySyncStatus(SyncStatus.PENDING).map { it.toDomain() }
     }

@@ -31,10 +31,14 @@ val CallOutcome.advanceTargetStatus: ClientStatus?
  * subtracting the outcomes that make no sense for the client's CURRENT
  * position in the monotonic funnel:
  *
- *  - a funnel advance whose target level is `<=` the client's level — re-doing
- *    a rung the client already passed is an idempotent no-op (offering
- *    "Interested" to an already-INTERESTED client, or "Scheduled" to a CITED
- *    one);
+ *  - a funnel advance whose target level is STRICTLY BELOW the client's level
+ *    — re-doing a rung the client already passed is an idempotent no-op
+ *    (offering "Interested" to a CITED client);
+ *  - a SAME-level advance that does not sustain the follow-up cadence (SOLD
+ *    on a CONVERTED client). INTERESTED and SCHEDULED stay visible at their
+ *    own rung as re-confirmations ("Continúa interesado" / "Continúa citado"):
+ *    they are NOT no-ops because they refresh the next scheduled contact
+ *    (see [schedulesFollowUp] and [FollowUpCadencePolicy]);
  *  - `NOT_INTERESTED` once the client advanced past PENDING — the high-water-
  *    mark model cannot downgrade, so offering it would imply an impossible
  *    move (product decision: hide it rather than record a no-effect outcome).
@@ -62,7 +66,12 @@ object OutcomeVisibilityPolicy {
 
         val filtered = allowed.filterNot { outcome ->
             val advanceLevel = outcome.advanceTargetStatus?.funnelLevel
-            val redundantAdvance = advanceLevel != null && advanceLevel <= level
+            // Below the client's rung → always a passed, redundant advance.
+            // AT the client's rung → hidden only when it can't act as a
+            // re-confirmation (SOLD is terminal; INTERESTED/SCHEDULED refresh
+            // the follow-up cadence, so they remain offerable).
+            val redundantAdvance = advanceLevel != null &&
+                (advanceLevel < level || (advanceLevel == level && !outcome.schedulesFollowUp))
             val impossibleDowngrade =
                 outcome == CallOutcome.NOT_INTERESTED && level > 0
             redundantAdvance || impossibleDowngrade

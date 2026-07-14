@@ -393,6 +393,10 @@
     <string name="enum_outcome_no_selected">Answered, unclassified</string>
     <string name="enum_outcome_interested">Interested</string>
     <string name="enum_outcome_scheduled">Scheduled</string>
+    <!-- Contextual re-confirmation labels: shown instead of the two above
+         when the client is already on that rung (see CallOutcome.selectorLabel). -->
+    <string name="enum_outcome_still_interested">Still interested</string>
+    <string name="enum_outcome_still_scheduled">Still scheduled</string>
     <string name="enum_outcome_sold">Sold</string>
     <string name="enum_outcome_not_interested">Not interested</string>
     <string name="enum_outcome_do_not_call">Do Not Disturb</string>

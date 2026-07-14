@@ -44,9 +44,11 @@ class OutcomeVisibilityPolicyTest {
     }
 
     @Test
-    fun interested_answered_hides_interested_and_not_interested() {
+    fun interested_answered_keeps_interested_as_reconfirmation_hides_not_interested() {
         val result = visible(answered, ClientStatus.INTERESTED)
-        assertFalse(CallOutcome.INTERESTED in result)
+        // Same-level INTERESTED survives: it re-confirms the rung and
+        // refreshes the follow-up cadence ("Continúa interesado").
+        assertTrue(CallOutcome.INTERESTED in result)
         assertFalse(CallOutcome.NOT_INTERESTED in result)
         assertTrue(CallOutcome.SCHEDULED in result)
         assertTrue(CallOutcome.SOLD in result)
@@ -56,12 +58,12 @@ class OutcomeVisibilityPolicyTest {
     }
 
     @Test
-    fun cited_answered_hides_interested_scheduled_and_not_interested() {
+    fun cited_answered_keeps_scheduled_as_reconfirmation_hides_lower_advances() {
         val result = visible(answered, ClientStatus.CITED)
+        // Below the rung → hidden; at the rung → visible ("Continúa citado").
         assertFalse(CallOutcome.INTERESTED in result)
-        assertFalse(CallOutcome.SCHEDULED in result)
+        assertTrue(CallOutcome.SCHEDULED in result)
         assertFalse(CallOutcome.NOT_INTERESTED in result)
-        // Only SOLD survives among the advances — the next reachable rung.
         assertTrue(CallOutcome.SOLD in result)
     }
 
@@ -70,6 +72,8 @@ class OutcomeVisibilityPolicyTest {
         val result = visible(answered, ClientStatus.CONVERTED)
         assertFalse(CallOutcome.INTERESTED in result)
         assertFalse(CallOutcome.SCHEDULED in result)
+        // SOLD is terminal — no follow-up cadence to refresh, so it does NOT
+        // survive at its own rung (unlike INTERESTED/SCHEDULED).
         assertFalse(CallOutcome.SOLD in result)
         assertFalse(CallOutcome.NOT_INTERESTED in result)
         // Never empties: hard reasons + voicemail remain.
@@ -119,5 +123,14 @@ class OutcomeVisibilityPolicyTest {
         assertEquals(null, CallOutcome.NOT_INTERESTED.advanceTargetStatus)
         assertEquals(null, CallOutcome.DO_NOT_CALL.advanceTargetStatus)
         assertEquals(null, CallOutcome.NO_ANSWER.advanceTargetStatus)
+    }
+
+    @Test
+    fun schedules_follow_up_is_the_canonical_cadence_set() {
+        // Exactly INTERESTED and SCHEDULED sustain the follow-up cadence;
+        // both the visibility filter and PostCall's mandatory date/time
+        // requirement key off this predicate.
+        val cadence = CallOutcome.values().filter { it.schedulesFollowUp }
+        assertEquals(listOf(CallOutcome.INTERESTED, CallOutcome.SCHEDULED), cadence)
     }
 }

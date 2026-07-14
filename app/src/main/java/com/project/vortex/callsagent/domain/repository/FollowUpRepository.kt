@@ -42,6 +42,22 @@ interface FollowUpRepository {
      */
     suspend fun markPendingForClientCompleted(clientId: String, asOf: Instant): Int
 
+    /**
+     * LOCAL-ONLY cancellation of every still-active (PENDING/EXPIRED)
+     * follow-up of [clientId]. Mirrors backend behavior the server performs
+     * on its own — the BE-04 status cascade and `create`'s "latest schedule
+     * wins" reschedule — so the agenda converges immediately instead of
+     * waiting for the next pull. CANCELLED rows are sync-inert: the push
+     * contract only carries creations and completions.
+     *
+     * PostCall's reschedule path MUST run [markPendingForClientCompleted]
+     * first, so past-due rows earn their COMPLETED (+ completion push)
+     * before the sweep cancels what remains.
+     *
+     * @return number of rows transitioned to CANCELLED.
+     */
+    suspend fun cancelActiveForClientLocally(clientId: String): Int
+
     suspend fun pendingCreationSync(): List<FollowUp>
     suspend fun pendingCompletionSync(): List<FollowUp>
 

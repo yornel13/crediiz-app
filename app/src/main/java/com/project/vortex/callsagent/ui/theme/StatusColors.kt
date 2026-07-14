@@ -117,6 +117,24 @@ fun CallOutcome.label(): String = when (this) {
     CallOutcome.NO_SELECTED -> stringResource(R.string.enum_outcome_no_selected)
 }
 
+/**
+ * Label for an outcome button in the PostCall selectors, contextual to the
+ * client's current status: when the outcome would re-confirm the rung the
+ * client is already on (INTERESTED on an INTERESTED client, SCHEDULED on a
+ * CITED one) the button reads as a continuation — "Continúa interesado" /
+ * "Continúa citado" — instead of a first-time advance. Every other
+ * combination falls back to [label].
+ */
+@Composable
+@ReadOnlyComposable
+fun CallOutcome.selectorLabel(clientStatus: ClientStatus?): String = when {
+    this == CallOutcome.INTERESTED && clientStatus == ClientStatus.INTERESTED ->
+        stringResource(R.string.enum_outcome_still_interested)
+    this == CallOutcome.SCHEDULED && clientStatus == ClientStatus.CITED ->
+        stringResource(R.string.enum_outcome_still_scheduled)
+    else -> label()
+}
+
 @Composable
 @ReadOnlyComposable
 fun RemovalReason.label(): String = when (this) {

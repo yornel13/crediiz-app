@@ -230,6 +230,7 @@ private class FakeFollowUpDao : FollowUpDao {
 
     // ── Unused by this suite — fail loud if a future change leans on them ─
 
+    override suspend fun cancelActiveForClient(clientId: String): Int = error("not stubbed")
     override suspend fun insert(followUp: FollowUpEntity) = error("not stubbed")
     override suspend fun upsertAll(followUps: List<FollowUpEntity>) = error("not stubbed")
     override fun observeActiveAgenda(): Flow<List<FollowUpEntity>> = error("not stubbed")

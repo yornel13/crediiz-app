@@ -44,16 +44,41 @@ interface FollowUpDao {
      * the agenda bucketing (Vencidos / Programados / Pendientes) is decided in
      * the ViewModel by re-evaluating against Panama time. COMPLETED/CANCELLED
      * are excluded — they're done.
+     *
+     * Terminal clients are excluded HERE, not just server-side: the backend
+     * cancels follow-ups when a client leaves the funnel (BE-04), but the
+     * local mirror of that cancellation only lands on the next agenda pull.
+     * Filtering on `c.status` makes a just-removed (desistido) client vanish
+     * from the agenda the instant its client row is upserted — offline, no
+     * pull needed. REMOVED/CONVERTED stay visible in Recientes by design;
+     * the agenda is exactly the surface where they must NOT show.
      */
     @Query(
         """
         SELECT f.* FROM follow_ups f
         INNER JOIN clients c ON c.id = f.clientId
         WHERE f.status IN ('PENDING', 'EXPIRED')
+          AND c.status NOT IN ('REMOVED', 'CONVERTED')
         ORDER BY f.scheduledAt ASC
         """,
     )
     fun observeActiveAgenda(): Flow<List<FollowUpEntity>>
+
+    /**
+     * Local mirror of the backend's BE-04 cascade ("cancel pending
+     * follow-ups when the client lands on any status ≠ INTERESTED",
+     * clients.service.changeStatus). Called by the status-change write
+     * path so the agenda converges immediately instead of waiting for the
+     * next `/follow-ups/agenda` pull. Idempotent; rows the server also
+     * cancelled simply stop coming back in the snapshot.
+     */
+    @Query(
+        """
+        UPDATE follow_ups SET status = 'CANCELLED'
+        WHERE clientId = :clientId AND status IN ('PENDING', 'EXPIRED')
+        """,
+    )
+    suspend fun cancelActiveForClient(clientId: String): Int
 
     @Query("SELECT * FROM follow_ups WHERE mobileSyncId = :id")
     suspend fun findById(id: String): FollowUpEntity?

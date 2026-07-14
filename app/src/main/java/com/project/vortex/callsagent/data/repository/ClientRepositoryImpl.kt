@@ -5,6 +5,7 @@ import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.common.enums.RemovalReason
 import com.project.vortex.callsagent.data.local.db.ClientDao
+import com.project.vortex.callsagent.data.local.db.FollowUpDao
 import com.project.vortex.callsagent.data.local.db.LocalAgentStatusChangeDao
 import com.project.vortex.callsagent.data.local.entity.LocalAgentStatusChangeEntity
 import com.project.vortex.callsagent.data.mapper.toDomain
@@ -44,6 +45,7 @@ class ClientRepositoryImpl @Inject constructor(
     private val api: ClientsApi,
     private val dao: ClientDao,
     private val statusChangeDao: LocalAgentStatusChangeDao,
+    private val followUpDao: FollowUpDao,
     private val errorMapper: ErrorMapper,
 ) : ClientRepository {
 
@@ -159,6 +161,15 @@ class ClientRepositoryImpl @Inject constructor(
                 agentCallAttempts = existing?.agentCallAttempts ?: 0,
             )
             dao.upsert(listOf(entity))
+
+            // Mirror the backend's BE-04 cascade locally: the server just
+            // cancelled every pending follow-up for this client (any
+            // resulting status ≠ INTERESTED does — see changeStatus in
+            // calls-core). Without this, the local PENDING/EXPIRED rows
+            // linger in the agenda until the next /follow-ups/agenda pull.
+            if (entity.status != ClientStatus.INTERESTED) {
+                followUpDao.cancelActiveForClient(clientId)
+            }
 
             // Record the action for the Recientes feed only when it
             // actually moved the client (a no-op shouldn't show up there).

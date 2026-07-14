@@ -84,8 +84,8 @@ import com.project.vortex.callsagent.ui.components.StatusPill
 import com.project.vortex.callsagent.ui.theme.PillShape
 import com.project.vortex.callsagent.ui.theme.icon
 import com.project.vortex.callsagent.ui.theme.isAnswered
-import com.project.vortex.callsagent.ui.theme.label
 import com.project.vortex.callsagent.ui.theme.palette
+import com.project.vortex.callsagent.ui.theme.selectorLabel
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -449,7 +449,7 @@ private fun CompactOutcomeSelector(
                 FilterChip(
                     selected = state.selectedOutcome == outcome,
                     onClick = { onSelect(outcome) },
-                    label = { Text(outcome.label()) },
+                    label = { Text(outcome.selectorLabel(state.client?.status)) },
                     leadingIcon = {
                         Icon(
                             imageVector = outcome.icon(),
@@ -470,13 +470,11 @@ private fun CompactOutcomeSelector(
                 )
             }
         }
-        // Follow-up form appears inline ONLY when the agent picks
-        // INTERESTED — preserves the original OutcomeSelector behaviour.
-        // No interest-level selector: the backend derives the client
-        // state from the outcome alone.
-        if (state.selectedOutcome == CallOutcome.INTERESTED &&
-            state.showFollowUpForm
-        ) {
+        // Follow-up form appears inline when the agent picks an outcome
+        // that schedules the next contact (INTERESTED / SCHEDULED, first
+        // time or re-confirmation). No interest-level selector: the
+        // backend derives the client state from the outcome alone.
+        if (state.showFollowUpForm) {
             FollowUpForm(
                 state = state,
                 onDateChange = onDateChange,
@@ -510,14 +508,16 @@ private fun OutcomeSelector(
                 answered.forEach { outcome ->
                     OutcomeRow(
                         outcome = outcome,
+                        label = outcome.selectorLabel(state.client?.status),
                         selected = state.selectedOutcome == outcome,
                         onSelect = { onSelect(outcome) },
                     )
-                    // When INTERESTED is picked, expand the follow-up
-                    // date/time form inline under the row so the agent
-                    // doesn't scroll. No interest-level selector — the
-                    // backend derives the client state from the outcome.
-                    if (outcome == CallOutcome.INTERESTED && state.showFollowUpForm) {
+                    // When a scheduling outcome (INTERESTED / SCHEDULED) is
+                    // picked, expand the follow-up date/time form inline
+                    // under its row so the agent doesn't scroll. No
+                    // interest-level selector — the backend derives the
+                    // client state from the outcome.
+                    if (outcome == state.selectedOutcome && state.showFollowUpForm) {
                         FollowUpForm(
                             state = state,
                             onDateChange = onDateChange,
@@ -533,6 +533,7 @@ private fun OutcomeSelector(
                 notAnswered.forEach { outcome ->
                     OutcomeRow(
                         outcome = outcome,
+                        label = outcome.selectorLabel(state.client?.status),
                         selected = state.selectedOutcome == outcome,
                         onSelect = { onSelect(outcome) },
                     )
@@ -556,6 +557,7 @@ private fun OutcomeSectionHeader(text: String) {
 @Composable
 private fun OutcomeRow(
     outcome: CallOutcome,
+    label: String,
     selected: Boolean,
     onSelect: () -> Unit,
 ) {
@@ -597,7 +599,7 @@ private fun OutcomeRow(
             }
             Spacer(Modifier.width(12.dp))
             Text(
-                text = outcome.label(),
+                text = label,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
                 color = if (selected) palette.onContainer else MaterialTheme.colorScheme.onSurface,

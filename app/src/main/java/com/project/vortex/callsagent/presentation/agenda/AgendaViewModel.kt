@@ -11,6 +11,7 @@ import com.project.vortex.callsagent.domain.model.FollowUp
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
 import com.project.vortex.callsagent.domain.repository.NoteRepository
+import com.project.vortex.callsagent.domain.result.OperationResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -118,12 +119,19 @@ class AgendaViewModel @Inject constructor(
         freeFormReason: String?,
     ) {
         viewModelScope.launch {
-            clientRepository.agentStatusChange(
+            val result = clientRepository.agentStatusChange(
                 clientId = clientId,
                 toStatus = ClientStatus.REMOVED,
                 removalReason = removalReason,
                 reason = freeFormReason,
             )
+            // The repository already cancelled the client's local follow-ups
+            // (BE-04 mirror) and the agenda flows re-emit on their own; this
+            // pull reconciles the server-side cancellations right away
+            // instead of on the next periodic sync.
+            if (result is OperationResult.Success) {
+                refresh()
+            }
         }
     }
 

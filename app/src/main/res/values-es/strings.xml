@@ -390,6 +390,10 @@
     <string name="enum_outcome_no_selected">Contestada sin clasificar</string>
     <string name="enum_outcome_interested">Interesado</string>
     <string name="enum_outcome_scheduled">Citó</string>
+    <!-- Contextual re-confirmation labels: shown instead of the two above
+         when the client is already on that rung (see CallOutcome.selectorLabel). -->
+    <string name="enum_outcome_still_interested">Continúa interesado</string>
+    <string name="enum_outcome_still_scheduled">Continúa citado</string>
     <string name="enum_outcome_sold">Firmó</string>
     <string name="enum_outcome_not_interested">No le interesa</string>
     <string name="enum_outcome_do_not_call">No Molestar</string>

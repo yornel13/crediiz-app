@@ -3,12 +3,15 @@ package com.project.vortex.callsagent.data.repository
 import com.project.vortex.callsagent.common.enums.CallOutcome
 import com.project.vortex.callsagent.common.enums.ClientStatus
 import com.project.vortex.callsagent.common.enums.RemovalReason
+import com.project.vortex.callsagent.common.enums.SyncStatus
 import com.project.vortex.callsagent.common.telemetry.TelemetryLogger
 import com.project.vortex.callsagent.data.error.ErrorMapper
 import com.project.vortex.callsagent.data.local.db.ClientAttemptCount
 import com.project.vortex.callsagent.data.local.db.ClientDao
+import com.project.vortex.callsagent.data.local.db.FollowUpDao
 import com.project.vortex.callsagent.data.local.db.LocalAgentStatusChangeDao
 import com.project.vortex.callsagent.data.local.entity.ClientEntity
+import com.project.vortex.callsagent.data.local.entity.FollowUpEntity
 import com.project.vortex.callsagent.data.local.entity.LocalAgentStatusChangeEntity
 import com.project.vortex.callsagent.data.remote.api.ClientsApi
 import com.project.vortex.callsagent.data.remote.dto.AgentStatusChangeDto
@@ -55,10 +58,11 @@ class ClientRepositoryAgentStatusChangeTest {
 
     private val dao = FakeClientDao()
     private val statusChangeDao = FakeLocalAgentStatusChangeDao()
+    private val followUpDao = FakeFollowUpDao()
     private val api = FakeClientsApi()
 
     private val repo: ClientRepositoryImpl
-        get() = ClientRepositoryImpl(api, dao, statusChangeDao, mapper)
+        get() = ClientRepositoryImpl(api, dao, statusChangeDao, followUpDao, mapper)
 
     @Test
     fun `CLIENT_REASON_REQUIRED problem+json maps to ReasonRequired and writes nothing`() = runBlocking {
@@ -170,6 +174,42 @@ class ClientRepositoryAgentStatusChangeTest {
         assertEquals(ClientStatus.PENDING, row.fromStatus)
         assertEquals(ClientStatus.REMOVED, row.toStatus)
         assertEquals("WhatsApp opt-out", row.reason)
+    }
+
+    @Test
+    fun `moving to REMOVED cascades a local follow-up cancellation (BE-04 mirror)`() = runBlocking {
+        dao.existing = clientEntity(ClientStatus.INTERESTED)
+        api.nextAgentStatusChangeError = null // success
+
+        val result = repo.agentStatusChange(
+            clientId = CLIENT_ID,
+            toStatus = ClientStatus.REMOVED,
+            removalReason = RemovalReason.NOT_INTERESTED,
+            reason = "desiste",
+        )
+
+        assertTrue(result is OperationResult.Success)
+        // The server cancelled the client's follow-ups; the local mirror
+        // must do the same so the agenda converges without waiting a pull.
+        assertEquals(listOf(CLIENT_ID), followUpDao.cancelledFor)
+    }
+
+    @Test
+    fun `moving to INTERESTED does not cancel follow-ups`() = runBlocking {
+        dao.existing = clientEntity(ClientStatus.PENDING)
+        api.nextAgentStatusChangeError = null // success
+
+        val result = repo.agentStatusChange(
+            clientId = CLIENT_ID,
+            toStatus = ClientStatus.INTERESTED,
+            removalReason = null,
+            reason = null,
+        )
+
+        assertTrue(result is OperationResult.Success)
+        // INTERESTED is the one status where live follow-ups make sense —
+        // the backend keeps them, so the local mirror must too.
+        assertTrue(followUpDao.cancelledFor.isEmpty())
     }
 
     // ─── Fixtures ───────────────────────────────────────────────────────────
@@ -334,6 +374,40 @@ class ClientRepositoryAgentStatusChangeTest {
         override fun observeRecent(since: Instant): Flow<List<LocalAgentStatusChangeEntity>> =
             flowOf(emptyList())
         override suspend fun deleteAll() { inserted.clear() }
+    }
+
+    /** Records BE-04-mirror cancellations; everything else is unused here. */
+    private class FakeFollowUpDao : FollowUpDao {
+        val cancelledFor = mutableListOf<String>()
+
+        override suspend fun cancelActiveForClient(clientId: String): Int {
+            cancelledFor += clientId
+            return 1
+        }
+
+        override suspend fun insert(followUp: FollowUpEntity) = error("not used")
+        override suspend fun upsertAll(followUps: List<FollowUpEntity>) = error("not used")
+        override fun observeActiveAgenda(): Flow<List<FollowUpEntity>> = flowOf(emptyList())
+        override suspend fun findById(id: String): FollowUpEntity? = error("not used")
+        override fun observeNextPendingForClient(
+            clientId: String,
+            now: Instant,
+        ): Flow<FollowUpEntity?> = flowOf(null)
+        override suspend fun findBySyncStatus(status: SyncStatus): List<FollowUpEntity> =
+            error("not used")
+        override suspend fun findPendingCompletions(status: SyncStatus): List<FollowUpEntity> =
+            error("not used")
+        override suspend fun countPending(status: SyncStatus): Int = error("not used")
+        override fun observeCountPending(status: SyncStatus): Flow<Int> = flowOf(0)
+        override suspend fun markSyncStatus(ids: List<String>, status: SyncStatus) =
+            error("not used")
+        override suspend fun markCompletionSyncStatus(ids: List<String>, status: SyncStatus) =
+            error("not used")
+        override suspend fun markCompletedLocally(id: String, completedAt: Instant) =
+            error("not used")
+        override suspend fun markPendingCompletedForClient(clientId: String, asOf: Instant): Int =
+            error("not used")
+        override suspend fun deletePending() = error("not used")
     }
 
     private fun buildHttpException(code: Int, body: String): HttpException {
