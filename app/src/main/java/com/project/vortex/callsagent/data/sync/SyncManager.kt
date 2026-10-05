@@ -8,6 +8,7 @@ import com.project.vortex.callsagent.data.mapper.toSyncDto
 import com.project.vortex.callsagent.data.remote.api.SyncApi
 import com.project.vortex.callsagent.data.remote.dto.SyncCompletedCategoryResult
 import com.project.vortex.callsagent.data.remote.dto.SyncCategoryResult
+import com.project.vortex.callsagent.data.remote.dto.SyncItemResult
 import com.project.vortex.callsagent.data.remote.dto.SyncRequest
 import com.project.vortex.callsagent.domain.repository.ClientRepository
 import com.project.vortex.callsagent.domain.repository.FollowUpRepository
@@ -129,48 +130,75 @@ class SyncManager @Inject constructor(
             return SyncResult.Success(0, 0, 0, 0, 0)
         }
 
-        val request = SyncRequest(
-            interactions = interactions.map { it.toSyncDto() }.takeIf { it.isNotEmpty() },
-            notes = notes.map { it.toSyncDto() }.takeIf { it.isNotEmpty() },
-            followUps = newFollowUps.map { it.toSyncDto() }.takeIf { it.isNotEmpty() },
-            completedFollowUps = completedFollowUps
-                .mapNotNull { it.toCompletedSyncDto() }
-                .takeIf { it.isNotEmpty() },
-        )
+        // Push in bounded batches (see [SyncItemPolicy]): one oversized
+        // request fails as a whole (413 / timeout) and would freeze the
+        // outbox forever. Each batch commits its own results, so a failure
+        // midway keeps the progress already made. Interactions go first so
+        // notes/follow-ups pushed after them can resolve
+        // `interactionMobileSyncId` server-side.
+        val batches = buildList {
+            interactions.chunked(SyncItemPolicy.BATCH_SIZE).forEach { chunk ->
+                add(SyncRequest(interactions = chunk.map { it.toSyncDto() }))
+            }
+            notes.chunked(SyncItemPolicy.BATCH_SIZE).forEach { chunk ->
+                add(SyncRequest(notes = chunk.map { it.toSyncDto() }))
+            }
+            newFollowUps.chunked(SyncItemPolicy.BATCH_SIZE).forEach { chunk ->
+                add(SyncRequest(followUps = chunk.map { it.toSyncDto() }))
+            }
+            completedFollowUps.mapNotNull { it.toCompletedSyncDto() }
+                .chunked(SyncItemPolicy.BATCH_SIZE)
+                .forEach { chunk -> add(SyncRequest(completedFollowUps = chunk)) }
+        }
 
-        // Re-check at the last responsible moment: a login could have landed
-        // between collecting the PENDING rows above (they are in-memory
-        // copies — the identity-keyed wipe cannot recall them) and this
-        // push. The identity must be EXACTLY the one the rows were
-        // collected under: a completed A→B login yields a consistent B/B
-        // pair, so only the pinned comparison catches it. Aborting leaves
-        // every row PENDING — safe for a same-agent retry. Residual window
-        // (login completing between this line and the interceptor reading
-        // the token) is micro-seconds; accepted and documented.
-        if (identityAllowsPush() != authorizedAgent) return SyncResult.Idle
+        var syncedInteractions = 0
+        var syncedNotes = 0
+        var syncedFollowUps = 0
+        var syncedCompletions = 0
+        var duplicates = 0
 
-        val envelope = syncApi.sync(request)
-        val response = envelope.data
+        for (request in batches) {
+            // Re-check at the last responsible moment: a login could have landed
+            // between collecting the PENDING rows above (they are in-memory
+            // copies — the identity-keyed wipe cannot recall them) and this
+            // push. The identity must be EXACTLY the one the rows were
+            // collected under: a completed A→B login yields a consistent B/B
+            // pair, so only the pinned comparison catches it. Aborting leaves
+            // every remaining row PENDING — safe for a same-agent retry.
+            // Residual window (login completing between this line and the
+            // interceptor reading the token) is micro-seconds; accepted and
+            // documented.
+            if (identityAllowsPush() != authorizedAgent) return SyncResult.Idle
 
-        // Reconcile server response → mark SYNCED the ones that succeeded or were duplicates.
-        val (interactionIds, interactionDups) = extractSyncedAndDuplicateIds(response.interactions)
-        val (noteIds, noteDups) = extractSyncedAndDuplicateIds(response.notes)
-        val (followUpIds, followUpDups) = extractSyncedAndDuplicateIds(response.followUps)
-        val completionIds = extractUpdatedIds(response.completedFollowUps)
+            val response = syncApi.sync(request).data
 
-        interactionRepo.markSynced(interactionIds)
-        noteRepo.markSynced(noteIds)
-        followUpRepo.markCreationSynced(followUpIds)
-        followUpRepo.markCompletionSynced(completionIds)
+            // Reconcile server response → mark SYNCED the ones that succeeded,
+            // were duplicates, or can never succeed (see [SyncItemPolicy]).
+            val (interactionIds, interactionDups) = extractSyncedAndDuplicateIds(response.interactions)
+            val (noteIds, noteDups) = extractSyncedAndDuplicateIds(response.notes)
+            val (followUpIds, followUpDups) = extractSyncedAndDuplicateIds(response.followUps)
+            val completionIds = extractUpdatedIds(response.completedFollowUps)
+
+            interactionRepo.markSynced(interactionIds)
+            noteRepo.markSynced(noteIds)
+            followUpRepo.markCreationSynced(followUpIds)
+            followUpRepo.markCompletionSynced(completionIds)
+
+            syncedInteractions += response.interactions.syncedCount
+            syncedNotes += response.notes.syncedCount
+            syncedFollowUps += response.followUps.syncedCount
+            syncedCompletions += response.completedFollowUps.updatedCount
+            duplicates += interactionDups + noteDups + followUpDups
+        }
 
         refreshServerState()
 
         return SyncResult.Success(
-            syncedInteractions = response.interactions.syncedCount,
-            syncedNotes = response.notes.syncedCount,
-            syncedFollowUps = response.followUps.syncedCount,
-            syncedCompletions = response.completedFollowUps.updatedCount,
-            duplicates = interactionDups + noteDups + followUpDups,
+            syncedInteractions = syncedInteractions,
+            syncedNotes = syncedNotes,
+            syncedFollowUps = syncedFollowUps,
+            syncedCompletions = syncedCompletions,
+            duplicates = duplicates,
         )
     }
 
@@ -217,15 +245,26 @@ class SyncManager @Inject constructor(
         // new payload (e.g. a re-classified outcome from PostCall). It MUST be
         // treated as synced, otherwise the corrected row stays PENDING and
         // re-uploads forever. "duplicate" = backend already had it and made no
-        // change; also terminal for this push.
+        // change; also terminal for this push. A permanent "error" (e.g. the
+        // client was deleted server-side) is terminal too — re-pushing it
+        // forever only bloats every later request.
         val synced = result.results
-            .filter { it.status == "created" || it.status == "duplicate" || it.status == "updated" }
+            .filter {
+                it.status == "created" || it.status == "duplicate" || it.status == "updated" ||
+                    isDroppable(it)
+            }
             .map { it.mobileSyncId }
         return synced to result.duplicateCount
     }
 
     private fun extractUpdatedIds(result: SyncCompletedCategoryResult): List<String> =
         result.results
-            .filter { it.status == "updated" }
+            .filter { it.status == "updated" || isDroppable(it) }
             .map { it.mobileSyncId }
+
+    private fun isDroppable(item: SyncItemResult): Boolean {
+        val drop = item.status == "error" && SyncItemPolicy.isPermanentFailure(item.error)
+        if (drop) Log.w(TAG, "Dropping unsyncable ${item.mobileSyncId} from outbox: ${item.error}")
+        return drop
+    }
 }
